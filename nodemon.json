@@ -1,0 +1,6 @@
+{
+  "watch": ["src", ".env", ".babelrc"],
+  "ext": "js,json,env",
+  "ignore": ["src/**/*.spec.js"],
+  "exec": "npm start"
+}

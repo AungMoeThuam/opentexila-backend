@@ -1,92 +1,94 @@
 # OpenTexila backend
 
-Minimal NestJS backend written in JavaScript. Generated with the installed Nest CLI 12.0.10 and simplified to an empty root module.
+NestJS in **JavaScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation and a development-only sample classroom API are implemented. Authentication, attendance APIs and scheduled attendance processing are still to be built.
 
-## Requirements
+## Start locally
 
-- Node.js 22.15.1 or newer (verified locally with 22.15.1).
-- npm.
-
-Babel 7 transforms JavaScript imports and Nest decorators for Node.js. There is no TypeScript source or compilation step. Build with the npm scripts below; this scaffold does not use `nest build` or `nest start`.
-
-## Setup
-
-Run from this directory:
+Requires Node.js 22.15.1+, npm and Docker with Compose.
 
 ```sh
 npm ci
 cp .env.example .env
+# Set DB_PASSWORD and DB_ROOT_PASSWORD to local development passwords.
+npm run db:up
+npm run db:migrate
+# Optional: set SEED_PASSWORD in .env (12+ characters, demo-only).
+npm run db:seed
 npm run start:dev
 ```
 
-The server binds to `127.0.0.1:3000` by default. `.env` is optional; the run scripts load it when present. Set `HOST` and `PORT` to change the listening address. Use `HOST=0.0.0.0` only when access from other devices is intended.
+Do not overwrite an existing `.env`. Docker and the application read the same DB settings. MySQL binds only to localhost. Database storage persists in the Compose volume; `db:stop` does not delete it. Keep the server/session database timezone at UTC; the Compose service configures this.
+
+The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=development`, try `GET /api/v1/examples/classrooms` and `GET /api/v1/examples/classrooms/:id`; see the [sample API guide](docs/api/examples.md). Application startup requires a reachable database. Migrations run explicitly, never automatically at startup. Build/source/schema changes do not silently alter tables.
+
+## Team starting points
+
+- [Database design](docs/database-design.md): tables, fields, schedule model and integrity rules.
+- [Using the database in APIs](docs/database-development.md): repositories, JavaScript dependency injection, transactions and migration workflow.
+- [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
+- [API overview](docs/api/README.md), [auth](docs/api/auth.md), [attendance](docs/api/attendance.md): planned contracts.
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm start` | Build the source and start the server. |
-| `npm run start:dev` | Rebuild and restart when source or configuration changes. |
-| `npm run build` | Compile JavaScript from `src/` into `dist/`. |
-| `npm run start:prod` | Run an existing build; run `npm run build` first. |
-| `npm run format` | Format JavaScript source and root JSON configuration. |
-| `npm run format:check` | Check formatting without changing files. |
+| Command                | Purpose                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run db:up`        | Start local MySQL and wait for health.                                                                                                                             |
+| `npm run db:stop`      | Stop local MySQL while preserving data.                                                                                                                            |
+| `npm run db:migrate`   | Build and apply pending versioned migrations.                                                                                                                      |
+| `npm run db:status`    | Build and list applied/pending migrations.                                                                                                                         |
+| `npm run db:revert`    | Revert the last migration. **The initial rollback deletes all application tables and data; use only on disposable databases.**                                     |
+| `npm run db:seed`      | Add fictional local development fixtures without resetting existing demo accounts.                                                                                 |
+| `npm run test:db`      | Build, create an isolated MySQL container, test migration/constraints/seeds/Nest DI, then remove only that container. Requires Docker; pulls mysql:8.4 if missing. |
+| `npm run start:dev`    | Rebuild/restart the backend on source changes.                                                                                                                     |
+| `npm start`            | Build and start the backend.                                                                                                                                       |
+| `npm run start:prod`   | Run an existing compiled build.                                                                                                                                    |
+| `npm run build`        | Compile JavaScript with Babel 7.                                                                                                                                   |
+| `npm run format:check` | Check source, migrations, seeds, tests and JSON formatting.                                                                                                        |
 
-## Structure
+## Database structure
+
+### Verification status
+
+`npm test` builds the backend and checks configuration validation, TypeORM metadata, seed safety guards and sample API behavior without a live database. Sample API tests start a temporary localhost HTTP server with a fake repository and verify routing, dependency injection, validation, pagination, response fields, errors and development-only registration.
+
+Live migration verification is still pending: the local Docker engine failed with a storage I/O error while starting the disposable MySQL test container. No application database migration has been applied here. Restore Docker/storage health, then run `npm run test:db` before relying on the migration, followed by local setup above.
+
+### Files
 
 ```text
-backend/
-  src/
-    main.js               # Bootstrap, environment settings and API prefix
-    app.module.js         # Empty root module
-    auth/                 # Current focus: invitations, activation and sessions
-    attendance/           # Current focus: sessions, location check-in and history
-    users/                # Deferred: account management
-    classrooms/           # Deferred: classes and enrolment
-    announcements/        # Deferred
-    resources/            # Deferred
-    assignments/          # Deferred
-    dashboard/            # Deferred
-    common/               # Reserved for shared utilities, guards and validation
-    config/               # Reserved for application configuration
-    database/             # Reserved for database integration
-  database/
-    migrations/           # Reserved for migrations
-    seeds/                # Reserved for seed data
-  test/                   # Reserved for tests
-  docs/
-    api/
-      README.md           # API overview and shared conventions
-      auth.md             # Planned auth endpoints
-      attendance.md       # Planned attendance endpoints
-  .env.example
-  .babelrc
-  nest-cli.json
-  nodemon.json
-  package.json
-  package-lock.json
+src/database/
+  database.constants.js       # DATABASE injection token
+  database.module.js          # Async DataSource provider and shutdown cleanup
+  database-options.js         # Environment validation; synchronize:false
+  data-source.js              # Same DataSource for Nest and migration CLI
+  entities/
+    user.schema.js
+    invitation.schema.js
+    classroom.schema.js
+    enrolment.schema.js
+    meeting.schema.js
+    attendance-session.schema.js
+    attendance-record.schema.js
+    columns.js
+    index.js
+database/
+  migrations/                 # Immutable, versioned CommonJS JavaScript migrations
+  seeds/demo.js               # Local demo fixtures
+test/database.integration.test.js
 ```
 
-The API prefix is `/api/v1`. No controllers or routes are implemented yet, so requests to `/` and `/api/v1` return Nest's default HTTP 404 response. This is expected for the empty scaffold.
+Seven domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table. Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
-All planned top-level backend feature folders now exist. They contain only `.gitkeep` placeholders; no feature module, controller, service, schema or database code has been generated, and `AppModule` remains empty. No test runner or deployment integration is configured yet.
+Auth/attendance feature folders remain available for controllers, services, runtime request validation and guards. No TypeScript is used. In plain JavaScript, dependencies require explicit injection tokens; see the database development guide.
 
-## API documentation
+## Seed fixtures
 
-See the [API overview](docs/api/README.md), [authentication reference](docs/api/auth.md) and [attendance reference](docs/api/attendance.md). All endpoints are currently labelled planned. These documents belong to the backend repository and can be linked from the separate frontend repository.
+The seed creates an admin, lecturer, two enrolled students, one non-member student, one invited student, a demo class, two scheduled meetings and a completed history fixture. Emails are printed; passwords and hashes are not. All active demo accounts initially use the supplied `SEED_PASSWORD`, hashed with Argon2id. Reruns do not reset existing passwords or override member roles.
 
-## Current implementation focus
+The class uses **synthetic coordinates (0,0)** and example radius/accuracy values. It is for API development, not a real campus attendance configuration. Default meeting start is 01:00 UTC (09:00 Kuala Lumpur) today. Set `SEED_MEETING_START=2026-10-27T01:00:00.000Z` for repeatable fixtures; rerunning with a different date adds that day's schedule. The seed does not implement live attendance or invitation delivery.
 
-Only **auth** and **attendance** are selected for the next implementation phase:
+## Current attendance direction
 
-| Area | Planned responsibility |
-| --- | --- |
-| `src/auth/` | Institution-managed invitations, account activation, login/logout, session restoration and access checks. |
-| `src/attendance/` | Full-class attendance sessions, location/code validation, Present/Late/Absent rules and attendance history. |
-| `src/common/`, `src/config/`, `src/database/` | Shared support for these features when implementation begins. |
+Attendance follows scheduled class meetings automatically. Students enter a class and check in with location. There is no session code or manual lecturer opening action. The schema supports this flow; scheduling, roster materialisation, check-in validation and closure still require API/service implementation.
 
-The other feature folders are reserved for later work. Attendance still needs user identities, class locations, lecturer assignments and enrolment records; the minimum supporting data and access rules must be provided when implementing attendance. Creating the folders does not implement those dependencies.
-
-Controllers, services, runtime validation schemas and data-access files will be introduced as needed during coding, rather than generated now.
-
-The package manifest temporarily overrides the Express adapter's Multer dependency to 2.5.0 to address advisory GHSA-q7qp-rjg7-q26m. Remove the override when Nest includes a patched version. File upload features are not implemented.
+The existing Multer override remains in place. No deployment integration or authentication/session middleware has been added.

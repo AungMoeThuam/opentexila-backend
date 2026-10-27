@@ -1,0 +1,32 @@
+name: opentexila
+
+# Local MySQL for development only. Values come from backend/.env (see .env.example).
+services:
+  db:
+    image: mysql:8.4
+    container_name: opentexila-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_NAME:-opentexila}
+      MYSQL_USER: ${DB_USER:-opentexila}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: UTC
+    # Bound to localhost only. Store UTC (see docs/database-design.md section 3).
+    ports:
+      - '127.0.0.1:${DB_PORT:-3306}:3306'
+    command:
+      - --default-time-zone=+00:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - opentexila_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  opentexila_mysql_data:

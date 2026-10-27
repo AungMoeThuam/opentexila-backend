@@ -1,7 +1,7 @@
 {
   "name": "opentexila-backend",
   "version": "0.0.1",
-  "description": "OpenTexila classroom management API \u2014 initial JavaScript scaffold.",
+  "description": "OpenTexila classroom management API — initial JavaScript scaffold.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -13,15 +13,26 @@
     "start": "node --env-file-if-exists=.env dist/main.js",
     "start:dev": "nodemon",
     "start:prod": "node --env-file-if-exists=.env dist/main.js",
-    "format": "prettier --write \"src/**/*.js\" \"*.json\"",
-    "format:check": "prettier --check \"src/**/*.js\" \"*.json\""
+    "db:up": "docker compose up -d --wait db",
+    "db:stop": "docker compose stop db",
+    "db:migrate": "npm run build && node --env-file-if-exists=.env node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
+    "db:status": "npm run build && node --env-file-if-exists=.env node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
+    "db:revert": "npm run build && node --env-file-if-exists=.env node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
+    "db:seed": "npm run build && node --env-file-if-exists=.env database/seeds/demo.js",
+    "test:db": "npm run build && node --test test/database.integration.test.js",
+    "test": "npm run build && node --test test/database.unit.test.js test/examples.test.js",
+    "format": "prettier --write \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\""
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
+    "argon2": "^0.45.1",
+    "mysql2": "^3.24.6",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@babel/cli": "^7.28.0",

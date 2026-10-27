@@ -1,0 +1,1 @@
+export const DATABASE = 'OPENTEXILA_DATABASE';

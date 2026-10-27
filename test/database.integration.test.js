@@ -84,22 +84,42 @@ test(
       }
       assert.ok(ready, 'Disposable MySQL did not become ready');
       ds = await new DataSource(databaseOptions(env)).initialize();
+      const tableNames = async () =>
+        (await ds.query('SHOW TABLES'))
+          .map((row) => Object.values(row)[0])
+          .sort();
+      // TypeORM creates metadata storage for our generated columns. Both
+      // infrastructure tables survive rollback of the application migration.
+      const infrastructureTables = ['schema_migrations', 'typeorm_metadata'];
+      let migrationsReady = false;
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
           assert.equal((await ds.runMigrations()).length, 1);
           assert.equal((await ds.runMigrations()).length, 0);
           await ds.undoLastMigration();
-          const tables = await ds.query('SHOW TABLES');
-          assert.deepEqual(
-            tables.map((row) => Object.values(row)[0]),
-            ['schema_migrations'],
-          );
+          assert.deepEqual(await tableNames(), infrastructureTables);
           assert.equal((await ds.runMigrations()).length, 1);
-          assert.equal((await ds.query('SHOW TABLES')).length, 9);
+          assert.deepEqual(
+            await tableNames(),
+            [
+              ...infrastructureTables,
+              'users',
+              'account_invitations',
+              'classrooms',
+              'enrolments',
+              'class_meetings',
+              'attendance_sessions',
+              'attendance_records',
+              'auth_sessions',
+            ].sort(),
+          );
+          migrationsReady = true;
         },
       );
+      if (!migrationsReady) return;
       let fixtures;
+      let fixturesReady = false;
       await t.test(
         'seeds are repeatable and private password fields stay hidden',
         async () => {
@@ -126,8 +146,10 @@ test(
             .getRepository('ClassMeeting')
             .findOneBy({ id: fixtures.meeting_ids[1] });
           assert.equal(meeting.starts_at.toISOString(), env.SEED_MEETING_START);
+          fixturesReady = true;
         },
       );
+      if (!fixturesReady) return;
       async function rejectsInTransaction(work, errno) {
         const runner = ds.createQueryRunner();
         await runner.connect();
@@ -234,7 +256,9 @@ test(
               token_hash: 'a'.repeat(64),
               expires_at: new Date(Date.now() + 3600000),
             };
-            const invitation = await invitations.save(record);
+            // save() adds the generated ID to its input. Keep the template
+            // ID-free so subsequent saves insert new invitations, not updates.
+            const invitation = await invitations.save({ ...record });
             assert.equal(
               (await invitations.findOneBy({ id: invitation.id })).token_hash,
               undefined,
@@ -245,6 +269,10 @@ test(
             );
             await invitations.update(invitation.id, { revoked_at: new Date() });
             await invitations.save({ ...record, token_hash: 'b'.repeat(64) });
+            assert.equal(
+              await invitations.countBy({ user_id: record.user_id }),
+              2,
+            );
           } finally {
             await runner.rollbackTransaction();
             await runner.release();

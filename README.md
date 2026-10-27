@@ -51,7 +51,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 
 `npm test` builds the backend and checks configuration validation, TypeORM metadata, seed safety guards and sample API behavior without a live database. Sample API tests start a temporary localhost HTTP server with a fake repository and verify routing, dependency injection, validation, pagination, response fields, errors and development-only registration.
 
-Live migration verification is still pending: the local Docker engine failed with a storage I/O error while starting the disposable MySQL test container. No application database migration has been applied here. Restore Docker/storage health, then run `npm run test:db` before relying on the migration, followed by local setup above.
+Live MySQL 8.4 verification now passes: `npm run test:db` checks migration application, rollback/reapplication, repeatable seeds, constraints, UTC values and Nest connection cleanup in a disposable container. The earlier Docker storage issue no longer blocks this test. This does not apply migrations to your application database; follow the local setup above for that.
 
 ### Files
 
@@ -77,7 +77,7 @@ database/
 test/database.integration.test.js
 ```
 
-Seven domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table. Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
+Seven domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` and `typeorm_metadata` bookkeeping tables. The latter is created because the schemas use generated columns. Both bookkeeping tables remain after rolling back the application migration. Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
 Auth/attendance feature folders remain available for controllers, services, runtime request validation and guards. No TypeScript is used. In plain JavaScript, dependencies require explicit injection tokens; see the database development guide.
 

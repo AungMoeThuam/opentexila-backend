@@ -81,4 +81,4 @@ The controller delegates to the service. The service injects `DATABASE` and obta
 
 For real features, follow this layout in the relevant feature folder and add account, role and membership checks before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
 
-Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. Live database verification still depends on restoring Docker and running `npm run test:db`.
+Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies migrations, seeds, constraints and connection lifecycle; it does not exercise these HTTP routes against MySQL.

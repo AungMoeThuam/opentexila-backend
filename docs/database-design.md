@@ -2,7 +2,7 @@
 
 **Version 2 · 27 October 2026 · Implemented schema foundation.**
 
-MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migrations. This replaces the earlier review draft: scheduled meetings are now in scope; session codes and lecturer-operated opening are removed. The initial migration is `database/migrations/1793059200000-InitialSchema.js`. No HTTP endpoints or attendance worker are implemented.
+MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migrations. This replaces the earlier review draft: scheduled meetings are now in scope; session codes and lecturer-operated opening are removed. The initial migration is `database/migrations/1793059200000-InitialSchema.js`. The development-only [sample classroom API](api/examples.md) is implemented. Authentication, enrolment and attendance endpoints, and the attendance worker, remain unimplemented.
 
 ## Relationships and naming
 
@@ -15,7 +15,7 @@ MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migratio
 - `auth_sessions` holds browser login sessions; it is unrelated to attendance sessions.
 - Single institution; no tenant ID or institutions table.
 
-Properties and database columns use **snake_case**. Repository entity names are `User`, `AccountInvitation`, `Classroom`, `Enrolment`, `ClassMeeting`, `AttendanceSession`, and `AttendanceRecord`. The corresponding schemas are in `src/database/entities/`.
+Persisted scalar properties and database columns use **snake_case**; relation accessors such as `cancelledBy` may use camelCase. Repository entity names are `User`, `AccountInvitation`, `Classroom`, `Enrolment`, `ClassMeeting`, `AttendanceSession`, and `AttendanceRecord`. The corresponding schemas are in `src/database/entities/`.
 
 ## Common columns
 
@@ -156,8 +156,8 @@ Cancelled sessions never count in attendance totals. For completed noncancelled 
 
 ## Implementation boundary
 
-Implemented: database connection, seven EntitySchemas, eight tables plus migration ledger, reversible initial migration, guarded local seeds and integration tests.
+Implemented: database connection, seven EntitySchemas, eight application tables plus `schema_migrations` and `typeorm_metadata` bookkeeping tables, reversible initial migration, guarded local seeds, database tests, two development-only sample API routes, and the shared Docker stack. Both bookkeeping tables remain after the initial migration is reverted.
 
-Still required: auth/session/CSRF middleware, request schemas, guards, safe response DTOs, scheduling and due-session services, geolocation checks, roster/closure/cancellation transactions, API endpoints and real-device tests.
+Still required: auth/session/CSRF middleware, request schemas, guards, safe response DTOs, scheduling and due-session services, geolocation checks, roster/closure/cancellation transactions, production feature API endpoints and real-device tests. Enrolment endpoint contracts and write permissions still need agreement; the schema alone does not decide whether students may enrol themselves.
 
 See [database development](database-development.md) for setup and repository usage. Backend API docs are updated for this flow; older root architecture sections describing manual opening or codes are superseded by this schema decision.

@@ -4,13 +4,15 @@ Implemented in JavaScript as a reference for teammates. These read-only routes u
 
 ## Try it
 
-Follow the backend README to configure `.env`, start MySQL, run migrations and optionally seed demo data, then run `npm run start:dev`.
+Run `npm run stack:up` from the backend to start MySQL, apply migrations and start both applications. Alternatively, follow the [README host workflow](../../README.md#start-locally-without-application-containers) to run NestJS outside Docker. Demo seeding is optional in either workflow; an unseeded database returns an empty list. Do not start a second host API on the stack’s API port.
 
 ```sh
 curl 'http://127.0.0.1:3000/api/v1/examples/classrooms?page=1&limit=20'
 # Replace 1 with an ID returned by the list; seed IDs are not guaranteed.
 curl 'http://127.0.0.1:3000/api/v1/examples/classrooms/1'
 ```
+
+The shared-stack frontend proxy also exposes these paths at `http://localhost:5173/api/v1/examples/classrooms` (default ports).
 
 No authentication headers or request bodies are required for these development examples. No write routes are provided.
 

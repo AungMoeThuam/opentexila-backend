@@ -6,7 +6,7 @@ Clone the backend repository, then run from its root:
 npm run stack:up
 ```
 
-Requires Git, Node.js 22.15.1+ (including npm), and running Docker Desktop with Compose 2.17+ (`dockerfile_inline` support). Host `npm ci` is unnecessary for this command; dependencies are installed inside Linux containers. The first build needs internet access. Authenticate Git with GitHub first if the frontend repository is private.
+Requires Git, Node.js 22.15.1+ (including npm), and running Docker Desktop with Compose 2.17+ (`dockerfile_inline` support). Host `npm ci` is unnecessary for this command; dependencies are installed inside Linux containers. Host tests, formatting and optional seeding still require `npm ci`; see the [team guide](TEAM_GUIDE.md#6-before-you-push). The first build needs internet access. Authenticate Git with GitHub first if the frontend repository is private.
 
 The command:
 

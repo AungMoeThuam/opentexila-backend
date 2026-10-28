@@ -40,7 +40,7 @@ Coordinates are illustrative. Identity comes from the authenticated session; nev
 
 ## Required rules
 
-- Require a pending record in the frozen scheduled-start roster and an active authenticated student.
+- Require a record in the frozen scheduled-start roster and an active authenticated student. A new acceptance requires Pending; an already successful check-in returns its original result without changing its timestamp.
 - Check opens_at <= server_time < closes_at using server time after acquiring the transaction lock.
 - On/before late_after is Present; afterwards is Late. The late threshold does not close check-in.
 - Validate finite coordinate bounds, reading freshness and accuracy. Use the snapshot venue, not client acceptance settings.

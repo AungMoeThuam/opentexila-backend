@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **JavaScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation and a development-only sample classroom API are implemented. Authentication, attendance APIs and scheduled attendance processing are still to be built.
+NestJS in **JavaScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation and a development-only sample classroom API are implemented. Authentication and enrolment APIs, attendance APIs and scheduled attendance processing are still to be built.
 
 ## Start the whole stack
 
@@ -18,12 +18,12 @@ Requires Node.js 22.15.1+, npm and Docker with Compose.
 
 ```sh
 npm ci
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 # Set DB_PASSWORD and DB_ROOT_PASSWORD to local development passwords.
 npm run db:up
 npm run db:migrate
-# Optional: set SEED_PASSWORD in .env (12+ characters, demo-only).
-npm run db:seed
+# Optional: set SEED_PASSWORD in .env (12+ characters, demo-only), then:
+# npm run db:seed
 npm run start:dev
 ```
 
@@ -33,6 +33,8 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 
 ## Team starting points
 
+- [Team guide](docs/TEAM_GUIDE.md): daily workflow, API implementation and PR checklist.
+- [Shared Docker stack](docs/DOCKER.md): one-command startup, configuration and troubleshooting.
 - [Database design](docs/database-design.md): tables, fields, schedule model and integrity rules.
 - [Using the database in APIs](docs/database-development.md): repositories, JavaScript dependency injection, transactions and migration workflow.
 - [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
@@ -42,6 +44,9 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 
 | Command                | Purpose                                                                                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run stack:up`     | Fetch a missing frontend checkout, build/start the shared stack and apply pending migrations.                                                                      |
+| `npm run stack:logs`   | Follow all shared-stack service logs.                                                                                                                              |
+| `npm run stack:down`   | Stop/remove shared-stack containers and network while preserving the database volume.                                                                              |
 | `npm run db:up`        | Start local MySQL and wait for health.                                                                                                                             |
 | `npm run db:stop`      | Stop local MySQL while preserving data.                                                                                                                            |
 | `npm run db:migrate`   | Build and apply pending versioned migrations.                                                                                                                      |
@@ -59,9 +64,9 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 
 ### Verification status
 
-`npm test` builds the backend and checks configuration validation, TypeORM metadata, seed safety guards and sample API behavior without a live database. Sample API tests start a temporary localhost HTTP server with a fake repository and verify routing, dependency injection, validation, pagination, response fields, errors and development-only registration.
+`npm test` builds the backend and checks configuration validation, TypeORM metadata, seed safety guards, sample API behavior and stack launcher behavior without a live database. Launcher tests require Git and create temporary local repositories; HTTP tests require localhost listening access. Run host tests after `npm ci`, even if application startup uses Docker. Sample API tests start a temporary localhost HTTP server with a fake repository and verify routing, dependency injection, validation, pagination, response fields, errors and development-only registration.
 
-Live MySQL 8.4 verification now passes: `npm run test:db` checks migration application, rollback/reapplication, repeatable seeds, constraints, UTC values and Nest connection cleanup in a disposable container. The earlier Docker storage issue no longer blocks this test. This does not apply migrations to your application database; follow the local setup above for that.
+Live MySQL 8.4 verification now passes: `npm run test:db` checks migration application, rollback/reapplication, repeatable seeds, constraints, UTC values and Nest connection cleanup in a disposable container. This does not apply migrations to your application database; follow the local setup above for that.
 
 ### Files
 

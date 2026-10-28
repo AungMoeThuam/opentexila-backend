@@ -2,7 +2,17 @@
 
 NestJS in **JavaScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation and a development-only sample classroom API are implemented. Authentication, attendance APIs and scheduled attendance processing are still to be built.
 
-## Start locally
+## Start the whole stack
+
+With Git, Node.js 22.15.1+ and Docker Desktop running, clone this backend and run:
+
+```sh
+npm run stack:up
+```
+
+This fetches the frontend into `../frontend` if missing, preserves existing checkouts and `.env`, and starts MySQL, migrations, the NestJS API and Vue with hot reload. Open <http://localhost:5173>. No host `npm ci` is required for this workflow. See the [shared Docker guide](docs/DOCKER.md) for configuration, mock UI mode and stopping the stack.
+
+## Start locally without application containers
 
 Requires Node.js 22.15.1+, npm and Docker with Compose.
 
@@ -19,7 +29,7 @@ npm run start:dev
 
 Do not overwrite an existing `.env`. Docker and the application read the same DB settings. MySQL binds only to localhost. Database storage persists in the Compose volume; `db:stop` does not delete it. Keep the server/session database timezone at UTC; the Compose service configures this.
 
-The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=development`, try `GET /api/v1/examples/classrooms` and `GET /api/v1/examples/classrooms/:id`; see the [sample API guide](docs/api/examples.md). Application startup requires a reachable database. Migrations run explicitly, never automatically at startup. Build/source/schema changes do not silently alter tables.
+The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=development`, try `GET /api/v1/examples/classrooms` and `GET /api/v1/examples/classrooms/:id`; see the [sample API guide](docs/api/examples.md). Application startup requires a reachable database. The application never runs migrations itself; the shared Docker stack runs them in a separate prerequisite container. In this host workflow, run `npm run db:migrate` explicitly. Build/source/schema changes do not silently synchronize tables.
 
 ## Team starting points
 
@@ -91,4 +101,4 @@ The class uses **synthetic coordinates (0,0)** and example radius/accuracy value
 
 Attendance follows scheduled class meetings automatically. Students enter a class and check in with location. There is no session code or manual lecturer opening action. The schema supports this flow; scheduling, roster materialisation, check-in validation and closure still require API/service implementation.
 
-The existing Multer override remains in place. No deployment integration or authentication/session middleware has been added.
+The existing Multer override remains in place. Docker supports local development; authentication/session middleware and production deployment configuration remain to be implemented.

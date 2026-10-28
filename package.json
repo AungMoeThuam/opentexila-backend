@@ -13,6 +13,9 @@
     "start": "node --env-file-if-exists=.env dist/main.js",
     "start:dev": "nodemon",
     "start:prod": "node --env-file-if-exists=.env dist/main.js",
+    "stack:up": "node scripts/stack.js up",
+    "stack:down": "node scripts/stack.js down",
+    "stack:logs": "node scripts/stack.js logs",
     "db:up": "docker compose up -d --wait db",
     "db:stop": "docker compose stop db",
     "db:migrate": "npm run build && node --env-file-if-exists=.env node_modules/typeorm/cli.js migration:run -d dist/database/data-source.js",
@@ -20,7 +23,7 @@
     "db:revert": "npm run build && node --env-file-if-exists=.env node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "db:seed": "npm run build && node --env-file-if-exists=.env database/seeds/demo.js",
     "test:db": "npm run build && node --test test/database.integration.test.js",
-    "test": "npm run build && node --test test/database.unit.test.js test/examples.test.js",
+    "test": "npm run build && node --test test/database.unit.test.js test/examples.test.js test/stack.test.js",
     "format": "prettier --write \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\""
   },

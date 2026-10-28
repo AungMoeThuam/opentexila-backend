@@ -1,6 +1,22 @@
 name: opentexila
 
-# Local MySQL for development only. Values come from backend/.env (see .env.example).
+# Shared development stack. Run npm run stack:up to fetch a missing frontend first.
+x-backend-build: &backend-build
+  context: .
+  target: development
+
+x-backend-environment: &backend-environment
+  NODE_ENV: development
+  HOST: 0.0.0.0
+  PORT: 3000
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_NAME: ${DB_NAME:-opentexila}
+  DB_USER: ${DB_USER:-opentexila}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+  INSTITUTION_TIMEZONE: ${INSTITUTION_TIMEZONE:-Asia/Kuala_Lumpur}
+  TZ: UTC
+
 services:
   db:
     image: mysql:8.4
@@ -22,11 +38,96 @@ services:
     volumes:
       - opentexila_mysql_data:/var/lib/mysql
     healthcheck:
-      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      test:
+        [
+          'CMD-SHELL',
+          'mysql -h 127.0.0.1 -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1',
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 20s
+
+  migrate:
+    build: *backend-build
+    environment: *backend-environment
+    command:
+      [
+        'node',
+        'node_modules/typeorm/cli.js',
+        'migration:run',
+        '-d',
+        'dist/database/data-source.js',
+      ]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    build: *backend-build
+    environment: *backend-environment
+    ports:
+      - '127.0.0.1:${BACKEND_PORT:-3000}:3000'
+    volumes:
+      - ./src:/app/src:ro
+      - ./database:/app/database:ro
+      - ./.babelrc:/app/.babelrc:ro
+      - ./nodemon.json:/app/nodemon.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Nest starts listening only after its database provider has initialized.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "const net = require('node:net'); const s = net.connect(3000, '127.0.0.1', () => { s.end(); process.exit(0); }); s.setTimeout(2000, () => process.exit(1)); s.on('error', () => process.exit(1));",
+        ]
+      interval: 5s
+      timeout: 3s
+      start_period: 20s
+      retries: 20
+
+  frontend:
+    build:
+      context: ${FRONTEND_DIR:-../frontend}
+      # Owned here so a fresh frontend clone does not need its own Docker setup.
+      # Copy only build inputs: never bake local .env files or Git history in.
+      dockerfile_inline: |
+        FROM node:22-alpine
+        WORKDIR /app
+        RUN chown node:node /app
+        USER node
+        COPY --chown=node:node package.json package-lock.json ./
+        RUN npm ci --no-audit --no-fund && npm cache clean --force
+        COPY --chown=node:node src ./src
+        COPY --chown=node:node public ./public
+        COPY --chown=node:node index.html vite.config.js ./
+        EXPOSE 5173
+        CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    environment:
+      VITE_API_BASE_URL: /api/v1
+      VITE_ENABLE_MOCK_AUTH: ${FRONTEND_MOCK_AUTH:-false}
+      API_PROXY_TARGET: http://backend:3000
+    ports:
+      - '127.0.0.1:${FRONTEND_DEV_PORT:-5173}:5173'
+    volumes:
+      - ${FRONTEND_DIR:-../frontend}/src:/app/src:ro
+      - ${FRONTEND_DIR:-../frontend}/public:/app/public:ro
+      - ${FRONTEND_DIR:-../frontend}/index.html:/app/index.html:ro
+      - ${FRONTEND_DIR:-../frontend}/vite.config.js:/app/vite.config.js:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:5173/']
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 20
 
 volumes:
   opentexila_mysql_data:

@@ -1,13 +1,17 @@
 # OpenTexila database design
 
-**Version 2 · 27 October 2026 · Implemented schema foundation.**
+**Version 3 · 28 October 2026 · Course and section schema.**
 
-MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migrations. This replaces the earlier review draft: scheduled meetings are now in scope; session codes and lecturer-operated opening are removed. The initial migration is `database/migrations/1793059200000-InitialSchema.js`. The development-only [sample classroom API](api/examples.md) is implemented. Authentication, enrolment and attendance endpoints, and the attendance worker, remain unimplemented.
+See the [database ER diagram](database-erd.md) for a visual map of the implemented tables and relationships.
+
+MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migrations. This replaces the earlier review draft: scheduled meetings are now in scope; session codes and lecturer-operated opening are removed. The initial migration is `database/migrations/1793059200000-InitialSchema.js`; `1793145600000-CourseSections.js` adds courses and separate sections. This document describes the schema after both migrations, not the migration status of any particular database. The development-only [sample classroom API](api/examples.md) is implemented. Authentication, enrolment and attendance endpoints, and the attendance worker, remain unimplemented.
 
 ## Relationships and naming
 
 - A user has role `student`, `teacher` or `admin`; show teacher as Lecturer.
-- A classroom means an academic class/group, not a physical room inventory.
+- A course stores one shared course code/name.
+- A classroom means one course section in one academic term, not a physical room inventory.
+- Each classroom references exactly one course; a course can have many sections across terms.
 - A classroom has one assigned lecturer, many enrolment intervals, and many scheduled class meetings.
 - Each meeting has at most one automatically materialised attendance session.
 - Each session has at most one attendance record per eligible student.
@@ -15,13 +19,13 @@ MySQL **8.4**, TypeORM **0.3**, plain JavaScript EntitySchema, explicit migratio
 - `auth_sessions` holds browser login sessions; it is unrelated to attendance sessions.
 - Single institution; no tenant ID or institutions table.
 
-Persisted scalar properties and database columns use **snake_case**; relation accessors such as `cancelledBy` may use camelCase. Repository entity names are `User`, `AccountInvitation`, `Classroom`, `Enrolment`, `ClassMeeting`, `AttendanceSession`, and `AttendanceRecord`. The corresponding schemas are in `src/database/entities/`.
+Persisted scalar properties and database columns use **snake_case**; relation accessors such as `cancelledBy` may use camelCase. Repository entity names are `User`, `AccountInvitation`, `Course`, `Classroom`, `Enrolment`, `ClassMeeting`, `AttendanceSession`, and `AttendanceRecord`. The corresponding schemas are in `src/database/entities/`.
 
 ## Common columns
 
-All seven domain tables have auto-increment `id INT UNSIGNED`, `created_at DATETIME(3)` and `updated_at DATETIME(3)`. Audit timestamps default to the database clock; updated_at changes on writes. Keep database server/session timezone UTC; the driver uses `timezone: 'Z'`. Return dates as ISO 8601 UTC.
+All eight domain tables have auto-increment `id INT UNSIGNED`, `created_at DATETIME(3)` and `updated_at DATETIME(3)`. Audit timestamps default to the database clock; updated_at changes on writes. Keep database server/session timezone UTC; the driver uses `timezone: 'Z'`. Return dates as ISO 8601 UTC.
 
-Relationships use foreign keys with RESTRICT deletion/update, not cascading removal of academic history. Deactivate users, withdraw memberships and cancel/archive domain records. Names support utf8mb4. Email comparisons are case-insensitive and accent-sensitive; normalized lowercase storage is required. Institutional IDs and class codes use ASCII binary comparison and uppercase storage.
+Relationships use foreign keys with RESTRICT deletion/update, not cascading removal of academic history. Deactivate users, withdraw memberships and cancel/archive domain records. Names support utf8mb4. Email comparisons are case-insensitive and accent-sensitive; normalized lowercase storage is required. Institutional IDs, course codes and section labels use ASCII binary comparison and uppercase storage.
 
 ### users
 
@@ -50,20 +54,35 @@ Active accounts require a nonempty password hash and activation timestamp. Incre
 
 The generated unique key prevents two outstanding invitations for one user, even concurrently. Expired unused tokens still occupy that slot: revoke them inside the resend transaction before inserting a replacement. Validity also requires current server time before expiry and an eligible invited account. Store only a digest of a high-entropy token; never return token hashes.
 
-### classrooms
+### courses
 
-| Field                     | Type / rule                                          |
-| ------------------------- | ---------------------------------------------------- |
-| code                      | uppercase trimmed ASCII varchar(30)                  |
-| name, subject             | varchar(150)                                         |
-| term                      | varchar(50); unique together with code               |
-| teacher_id                | required user FK                                     |
-| room_label                | varchar(100)                                         |
-| latitude / longitude      | decimal(9,6), within -90..90 / -180..180             |
-| radius_m / max_accuracy_m | positive decimal(10,2); accuracy threshold <= radius |
-| archived_at               | nullable datetime(3)                                 |
+| Field | Type / rule                                          |
+| ----- | ---------------------------------------------------- |
+| code  | unique uppercase trimmed ASCII varchar(30), nonempty |
+| name  | varchar(150), nonblank                               |
 
-An active lecturer assignment is a service rule. Defaults describe the venue for upcoming sessions; session creation snapshots them. Production location thresholds need testing at the venue.
+One course can be offered as multiple sections and in different terms. For example, course `COS30043` can have Section A and Section B in `2026-S2`. Course administration APIs remain to be implemented.
+
+### classrooms — course sections
+
+| Field                     | Type / rule                                                    |
+| ------------------------- | -------------------------------------------------------------- |
+| course_id                 | required `courses.id` FK                                       |
+| section                   | uppercase trimmed ASCII varchar(30), nonempty                  |
+| term                      | varchar(50); academic period, e.g. `2026-S2`                   |
+| teacher_id                | required user FK                                               |
+| room_label                | varchar(100)                                                   |
+| latitude / longitude      | decimal(9,6), within -90..90 / -180..180                       |
+| radius_m / max_accuracy_m | positive decimal(10,2); accuracy threshold <= radius           |
+| archived_at               | nullable datetime(3)                                           |
+| code                      | nullable legacy ASCII varchar(30); hidden from default selects |
+| name, subject             | nullable legacy varchar(150); hidden from default selects      |
+
+Unique `(course_id, term, section)` prevents duplicate section offerings. A section label can be reused for a different course or term. The database does not enforce a term format or provide a separate academic-terms table.
+
+The legacy fields preserve old values for guarded rollback and are not the source of truth for new features. New class rows can leave them null. Use `classroom.course.code`, `classroom.course.name` and `classroom.section` instead. The sample API explicitly loads the course relation. The old `(code, term)` unique key has been removed.
+
+An active lecturer assignment is a service rule. Each section has its own lecturer, room, enrolments and meetings. Defaults describe its venue for upcoming sessions; session creation snapshots them. Production location thresholds need testing at the venue.
 
 ### enrolments
 
@@ -74,7 +93,7 @@ An active lecturer assignment is a service rule. Defaults describe the venue for
 | withdrawn_at             | nullable datetime(3), strictly later than enrolled_at             |
 | active_student_id        | read-only generated column; student_id while withdrawn_at is NULL |
 
-Unique `(classroom_id, active_student_id)` permits one current membership and multiple historical intervals. The service must reject overlapping historical intervals and validate the student's role/account. Lock the classroom before enrolment changes. Do not backdate edits in v1.
+Unique `(classroom_id, active_student_id)` permits one current membership per section and multiple historical intervals. It does not prevent a student joining two sections of the same course/term; that policy still needs agreement and service enforcement. The service must reject overlapping historical intervals and validate the student's role/account. Lock the classroom before enrolment changes. Do not backdate edits in v1.
 
 Membership at time t: `enrolled_at <= t AND (withdrawn_at IS NULL OR t < withdrawn_at)`. Snapshot eligibility at the **scheduled start**, even if a worker materialises the session later. Once records exist, membership changes affect future meetings only; current account inactivity still blocks check-in.
 
@@ -131,7 +150,7 @@ Use maintained express-session middleware and its store, not custom session gene
 
 ## Indexes and integrity
 
-The migration and EntitySchemas define unique identity fields, outstanding invitations, active membership, class code/term, class/start, meeting/session and session/student. List/query indexes cover role/status, invitation expiry, teacher/classes, student memberships, due meetings, sessions due for closing, student history and roster status.
+The migration and EntitySchemas define unique identity fields, outstanding invitations, active membership, course code, course/term/section, class/start, meeting/session and session/student. List/query indexes cover role/status, invitation expiry, teacher/classes, student memberships, due meetings, sessions due for closing, student history and roster status.
 
 Database CHECKs cover identity normalization, account activation, token lifecycle/shape, membership interval ordering, meeting windows/cancellation, coordinates/thresholds, session lifecycle, and attendance evidence completeness. MySQL DDL is the authority for these CHECKs; do not use TypeORM synchronize or schema auto-generation to replace them.
 
@@ -156,8 +175,14 @@ Cancelled sessions never count in attendance totals. For completed noncancelled 
 
 ## Implementation boundary
 
-Implemented: database connection, seven EntitySchemas, eight application tables plus `schema_migrations` and `typeorm_metadata` bookkeeping tables, reversible initial migration, guarded local seeds, database tests, two development-only sample API routes, and the shared Docker stack. Both bookkeeping tables remain after the initial migration is reverted.
+Implemented: database connection, eight EntitySchemas, nine application tables plus `schema_migrations` and `typeorm_metadata` bookkeeping tables, reversible initial migration and guarded course/section migration, guarded local seeds, database tests, two development-only sample API routes, and the shared Docker stack. Both bookkeeping tables remain after the initial migration is reverted.
 
 Still required: auth/session/CSRF middleware, request schemas, guards, safe response DTOs, scheduling and due-session services, geolocation checks, roster/closure/cancellation transactions, production feature API endpoints and real-device tests. Enrolment endpoint contracts and write permissions still need agreement; the schema alone does not decide whether students may enrol themselves.
 
 See [database development](database-development.md) for setup and repository usage. Backend API docs are updated for this flow; older root architecture sections describing manual opening or codes are superseded by this schema decision.
+
+## Course/section migration and retained data
+
+The new migration preserves classroom IDs, enrolments, meetings and attendance history. It maps only the known `COS30043-DEMO` / `DEMO` fixture with subject `Interface Design and Development` to course `COS30043`, section `DEMO`, term `DEMO`. Other legacy rows trigger an error before schema changes; arbitrary hyphenated codes are not parsed.
+
+Original classroom display fields remain in the nullable legacy columns, and the backfill preserves classroom audit timestamps. Rollback is permitted only for an empty new model or the unchanged mapped legacy fixture. It refuses when reverting could discard new courses/sections, including fresh seed rows without legacy values. A later cleanup migration can remove these columns after rollback needs are reviewed. See the [checkpoint and upgrade procedure](course-section-migration-plan.md#migration-operation-and-rollback-limits).

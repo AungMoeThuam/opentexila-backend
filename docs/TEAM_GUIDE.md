@@ -39,7 +39,7 @@ npm ci
 npm run db:seed
 ```
 
-The seed creates an admin, a lecturer, two enrolled students, one non-member student and one invited student. Only active accounts receive a password. It also creates one class, two scheduled meetings and a completed attendance history fixture. Emails are printed; passwords are not. Rerunning does not reset existing passwords. Location coordinates are synthetic, and no usable invitation token or live check-in is created.
+The seed creates an admin, a lecturer, two enrolled students, one non-member student and one invited student. Only active accounts receive a password. It also creates course `COS30043`, one section `DEMO` in term `DEMO`, two scheduled meetings and a completed attendance history fixture. Emails are printed; passwords are not. Rerunning does not reset existing passwords. Location coordinates are synthetic, and no usable invitation token or live check-in is created.
 
 To run NestJS on the host instead of in Docker, follow [the alternative README workflow](../README.md#start-locally-without-application-containers). Avoid running both API processes on the same port.
 
@@ -68,6 +68,8 @@ docs/api/                 # API contract per feature
 ```
 
 Several feature folders, including `src/auth/` and `src/attendance/`, are placeholders with `.gitkeep`. `src/enrolments/` has not been created yet; create it when implementing that feature. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.js`, auth guards).
+
+Course code/name belong to `courses`. A classroom is one course section in a term; use `course_id`, `section` and `term`. Do not use the retained legacy classroom `code`, `name` or `subject` fields for new features. See the [database design](database-design.md#classrooms--course-sections) and [sample response](api/examples.md#get-examplesclassrooms).
 
 ## 4. Adding an API endpoint
 
@@ -104,6 +106,8 @@ The project uses plain JavaScript with Babel, not TypeScript. Dependencies are i
 - **Writes use a transaction** when several rows must change together. Use only the `manager` from the callback inside it. See [database-development.md](database-development.md#transactions).
 
 ## 5. Changing the database
+
+The existing course/section migration has an explicit legacy-data mapping and guarded rollback. Before first upgrading an existing database, stop writers and read the [migration procedure](course-section-migration-plan.md#migration-operation-and-rollback-limits); `stack:up` applies pending migrations automatically.
 
 Do this only when your feature needs a new table or column.
 

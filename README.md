@@ -36,6 +36,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 - [Team guide](docs/TEAM_GUIDE.md): daily workflow, API implementation and PR checklist.
 - [Shared Docker stack](docs/DOCKER.md): one-command startup, configuration and troubleshooting.
 - [Database design](docs/database-design.md): tables, fields, schedule model and integrity rules.
+- [Database ER diagram](docs/database-erd.md): tables, keys, cardinalities and composite uniqueness.
 - [Using the database in APIs](docs/database-development.md): repositories, JavaScript dependency injection, transactions and migration workflow.
 - [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
 - [API overview](docs/api/README.md), [auth](docs/api/auth.md), [attendance](docs/api/attendance.md): planned contracts.
@@ -79,6 +80,7 @@ src/database/
   entities/
     user.schema.js
     invitation.schema.js
+    course.schema.js
     classroom.schema.js
     enrolment.schema.js
     meeting.schema.js
@@ -92,15 +94,23 @@ database/
 test/database.integration.test.js
 ```
 
-Seven domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` and `typeorm_metadata` bookkeeping tables. The latter is created because the schemas use generated columns. Both bookkeeping tables remain after rolling back the application migration. Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
+Eight domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` and `typeorm_metadata` bookkeeping tables. The latter is created because the schemas use generated columns. Both bookkeeping tables remain after reverting both application migrations. The course/section rollback is guarded against losing newly created data; see the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
 Auth/attendance feature folders remain available for controllers, services, runtime request validation and guards. No TypeScript is used. In plain JavaScript, dependencies require explicit injection tokens; see the database development guide.
 
 ## Seed fixtures
 
-The seed creates an admin, lecturer, two enrolled students, one non-member student, one invited student, a demo class, two scheduled meetings and a completed history fixture. Emails are printed; passwords and hashes are not. All active demo accounts initially use the supplied `SEED_PASSWORD`, hashed with Argon2id. Reruns do not reset existing passwords or override member roles.
+The seed creates an admin, lecturer, two enrolled students, one non-member student, one invited student, course `COS30043`, a demo class with section `DEMO` and term `DEMO`, two scheduled meetings and a completed history fixture. Emails are printed; passwords and hashes are not. All active demo accounts initially use the supplied `SEED_PASSWORD`, hashed with Argon2id. Reruns do not reset existing passwords or override member roles.
 
 The class uses **synthetic coordinates (0,0)** and example radius/accuracy values. It is for API development, not a real campus attendance configuration. Default meeting start is 01:00 UTC (09:00 Kuala Lumpur) today. Set `SEED_MEETING_START=2026-10-27T01:00:00.000Z` for repeatable fixtures; rerunning with a different date adds that day's schedule. The seed does not implement live attendance or invitation delivery.
+
+## Course and section model
+
+`courses` stores the shared course code and name. Each `classrooms` row is one section of that course in a term, with its own lecturer, venue and schedule. `(course_id, term, section)` is unique. Enrolments and meetings still reference the classroom ID.
+
+Apply both versioned migrations before using the updated code. The course/section migration maps the known demo fixture and rejects other legacy classes until their mapping is agreed. The old classroom `code`, `name` and `subject` fields remain nullable, hidden legacy fields for guarded rollback; new code uses the course relation and section. The sample API returns nested `course: { id, code, name }` plus `section`.
+
+Stop application writers before upgrading an existing database; see the [migration checkpoint](docs/course-section-migration-plan.md). The repository's migrations have been tested in disposable MySQL; that does not mean an existing local database has already been migrated.
 
 ## Current attendance direction
 

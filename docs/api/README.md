@@ -12,6 +12,8 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 Enrolment contracts are not documented yet. Agree their paths, payloads and write permissions before implementation; student self-enrolment remains undecided. The schema supports membership intervals, but does not choose that policy. The sample classroom routes are not the production enrolment API.
 
+A classroom now represents one course section in a term. Course identity and name live in `courses`; membership and meetings reference `classroom_id`. The implemented sample returns nested `course` details and a separate `section`; see [its response contract](examples.md#get-examplesclassrooms). Course/section administration endpoints remain future work.
+
 ## Base URL
 
 Local development: `http://127.0.0.1:3000/api/v1` with the default host and port. For the shared Docker stack, the browser uses `/api/v1` through `http://localhost:5173`; Vite proxies to the API. `BACKEND_PORT` and `FRONTEND_DEV_PORT` can change those host ports; see [Docker configuration](../DOCKER.md#configuration). The deployed URL is not decided yet. Paths in the feature documents are relative to `/api/v1`.

@@ -95,16 +95,18 @@ test(
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
-          assert.equal((await ds.runMigrations()).length, 1);
+          assert.equal((await ds.runMigrations()).length, 2);
           assert.equal((await ds.runMigrations()).length, 0);
           await ds.undoLastMigration();
+          await ds.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds.runMigrations()).length, 1);
+          assert.equal((await ds.runMigrations()).length, 2);
           assert.deepEqual(
             await tableNames(),
             [
               ...infrastructureTables,
               'users',
+              'courses',
               'account_invitations',
               'classrooms',
               'enrolments',
@@ -118,6 +120,100 @@ test(
         },
       );
       if (!migrationsReady) return;
+      await t.test(
+        'legacy upgrade preserves IDs, audit values and attendance; unknown mappings fail before DDL',
+        async () => {
+          await ds.undoLastMigration(); // Work with the original schema using raw SQL.
+          await ds.query(
+            "INSERT INTO users(id,name,email,institution_member_id,role) VALUES (91,'Admin','legacy.admin@example.test','LEGACY-ADMIN','admin'), (92,'Teacher','legacy.teacher@example.test','LEGACY-TEACHER','teacher'), (93,'Student','legacy.student@example.test','LEGACY-STUDENT','student')",
+          );
+          await ds.query(
+            "INSERT INTO classrooms(id,code,name,subject,term,teacher_id,room_label,latitude,longitude,radius_m,max_accuracy_m,created_at,updated_at) VALUES (71,'COS30043-DEMO','Original display name','Interface Design and Development','DEMO',92,'B-204',0,0,100,30,'2026-01-01','2026-01-02')",
+          );
+          await ds.query(
+            "INSERT INTO enrolments(id,classroom_id,student_id,enrolled_at) VALUES (81,71,93,'2026-10-01')",
+          );
+          await ds.query(
+            "INSERT INTO class_meetings(id,classroom_id,starts_at,late_after,ends_at,created_by) VALUES (101,71,'2026-10-27 01:00:00','2026-10-27 01:15:00','2026-10-27 03:00:00',91)",
+          );
+          await ds.query(
+            "INSERT INTO attendance_sessions(id,meeting_id,opens_at,late_after,closes_at,closed_at,state,room_label,latitude,longitude,radius_m,max_accuracy_m) VALUES (111,101,'2026-10-27 01:00:00','2026-10-27 01:15:00','2026-10-27 03:00:00','2026-10-27 03:00:00','closed','B-204',0,0,100,30)",
+          );
+          await ds.query(
+            "INSERT INTO attendance_records(id,session_id,student_id,status,checked_in_at,distance_m,accuracy_m,location_validated_at) VALUES (121,111,93,'present','2026-10-27 01:05:00',5,10,'2026-10-27 01:05:00')",
+          );
+          const tables = [
+            'users',
+            'classrooms',
+            'enrolments',
+            'class_meetings',
+            'attendance_sessions',
+            'attendance_records',
+          ];
+          const before = Object.fromEntries(
+            await Promise.all(
+              tables.map(async (table) => [
+                table,
+                await ds.query(`SELECT * FROM ${table} ORDER BY id`),
+              ]),
+            ),
+          );
+          assert.equal((await ds.runMigrations()).length, 1);
+          for (const table of tables) {
+            const columns = Object.keys(before[table][0])
+              .map((key) => '`' + key + '`')
+              .join(',');
+            assert.deepEqual(
+              await ds.query(`SELECT ${columns} FROM ${table} ORDER BY id`),
+              before[table],
+              table,
+            );
+          }
+          const classroom = await ds
+            .getRepository('Classroom')
+            .findOne({ where: { id: 71 }, relations: { course: true } });
+          assert.equal(classroom.section, 'DEMO');
+          assert.equal(classroom.course.code, 'COS30043');
+          assert.equal(
+            classroom.course.name,
+            'Interface Design and Development',
+          );
+          assert.equal(classroom.name, undefined);
+          const {
+            ClassroomsExampleService,
+          } = require('../dist/examples/classrooms-example.service');
+          const response = await new ClassroomsExampleService(ds).findOne(71);
+          assert.deepEqual(response.data.course, {
+            id: classroom.course.id,
+            code: 'COS30043',
+            name: 'Interface Design and Development',
+          });
+          assert.equal(response.data.section, 'DEMO');
+          assert.equal(response.data.subject, undefined);
+          await ds.undoLastMigration();
+          assert.deepEqual(
+            await ds.query('SELECT * FROM classrooms ORDER BY id'),
+            before.classrooms,
+          );
+          await ds.query("UPDATE classrooms SET code='UNMAPPED-A' WHERE id=71");
+          const preflightTables = await tableNames();
+          await assert.rejects(
+            () => ds.runMigrations(),
+            /mapping required for classroom IDs: 71/,
+          );
+          assert.deepEqual(await tableNames(), preflightTables);
+          assert.equal(
+            (await ds.query('SELECT code FROM classrooms WHERE id=71'))[0].code,
+            'UNMAPPED-A',
+          );
+          await ds.query(
+            "UPDATE classrooms SET code='COS30043-DEMO' WHERE id=71",
+          );
+          // Clear only this disposable database by reverting the initial migration.
+          await ds.undoLastMigration();
+          assert.equal((await ds.runMigrations()).length, 2);
+        },
+      );
       let fixtures;
       let fixturesReady = false;
       await t.test(
@@ -126,6 +222,8 @@ test(
           fixtures = await seedDemo(ds, env);
           await seedDemo(ds, env);
           assert.equal(await ds.getRepository('User').count(), 6);
+          assert.equal(await ds.getRepository('Course').count(), 1);
+          assert.equal(await ds.getRepository('Classroom').count(), 1);
           assert.equal(await ds.getRepository('ClassMeeting').count(), 2);
           assert.equal(await ds.getRepository('AttendanceRecord').count(), 2);
           const user = await ds
@@ -164,6 +262,92 @@ test(
           await runner.release();
         }
       }
+      await t.test(
+        'course codes, section uniqueness and references are enforced',
+        async () => {
+          await rejectsInTransaction(
+            (r) =>
+              r.query(
+                "INSERT INTO courses(code,name) VALUES ('COS30043','Duplicate')",
+              ),
+            1062,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query(
+                "INSERT INTO courses(code,name) VALUES ('lower','Invalid')",
+              ),
+            3819,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query("INSERT INTO courses(code,name) VALUES ('EMPTY','   ')"),
+            3819,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query("UPDATE classrooms SET section='a' WHERE id=?", [
+                fixtures.classroom_id,
+              ]),
+            3819,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query("UPDATE classrooms SET section='' WHERE id=?", [
+                fixtures.classroom_id,
+              ]),
+            3819,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query('UPDATE classrooms SET course_id=4294967295 WHERE id=?', [
+                fixtures.classroom_id,
+              ]),
+            1452,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query('DELETE FROM courses WHERE id=?', [fixtures.course_id]),
+            1451,
+          );
+          const runner = ds.createQueryRunner();
+          await runner.connect();
+          await runner.startTransaction();
+          try {
+            const repo = runner.manager.getRepository('Classroom');
+            const original = await repo.findOneBy({
+              id: fixtures.classroom_id,
+            });
+            await assert.rejects(
+              () => repo.save({ ...original, id: undefined }),
+              (e) => e.driverError.errno === 1062,
+            );
+            await repo.save({ ...original, id: undefined, section: 'B' });
+            await repo.save({ ...original, id: undefined, term: '2027-S1' });
+            assert.equal(await repo.count(), 3);
+            const {
+              ClassroomsExampleService,
+            } = require('../dist/examples/classrooms-example.service');
+            const list = await new ClassroomsExampleService(
+              runner.manager,
+            ).list(1, 20);
+            assert.equal(list.meta.total, 3);
+            assert.ok(list.data.every((row) => row.course.code === 'COS30043'));
+            assert.ok(list.data.some((row) => row.section === 'B'));
+          } finally {
+            await runner.rollbackTransaction();
+            await runner.release();
+          }
+          // New-model seed rows have no legacy data: rollback must refuse before DDL.
+          const before = await tableNames();
+          await assert.rejects(
+            () => ds.undoLastMigration(),
+            /Rollback would discard/,
+          );
+          assert.deepEqual(await tableNames(), before);
+          assert.equal((await ds.runMigrations()).length, 0);
+        },
+      );
       await t.test(
         'invalid accounts, normalization and foreign keys are rejected',
         async () => {

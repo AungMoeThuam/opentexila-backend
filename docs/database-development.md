@@ -34,7 +34,7 @@ export class UsersService {
 Inject(DATABASE)(UsersService, undefined, 0);
 ```
 
-Register the service in its feature module. Imports here are examples for a file in src/users/. All seven schema objects are exported by `src/database/entities/index.js`. String entity names also work, e.g. `getRepository('ClassMeeting')`.
+Register the service in its feature module. Imports here are examples for a file in src/users/. All eight schema objects are exported by `src/database/entities/index.js`. String entity names also work, e.g. `getRepository('ClassMeeting')`.
 
 Passwords/token hashes default to `select: false`. The login service must explicitly addSelect the password hash for verification, then return an allowlisted profile. Never return raw entities or SELECT * results directly as HTTP responses.
 
@@ -49,6 +49,14 @@ const user = await database
 ```
 
 Argon2 is installed for demo passwords and available to the auth implementation. The seed uses Argon2id with memoryCost 19456 KiB, timeCost 2, parallelism 1; production password policy and rate limiting still need implementation.
+
+## Course and section queries
+
+Use `CourseSchema` / repository `Course` for shared course `code` and `name`. Create a classroom with `course_id`, `section`, `term`, lecturer and venue fields. `section` must be nonempty, uppercase and trimmed; `(course_id, term, section)` is unique. The legacy classroom `code`, `name` and `subject` fields are nullable, excluded from default selects, and retained only for migration compatibility. Do not write new feature data into them.
+
+Explicitly load the `course` relation when its details are needed. See the sample service's selected fields and response mapper: its API returns `course: { id, code, name }` alongside `section`, `term` and `room_label`. Keep enrolments and meetings linked to `classroom_id` so they identify the correct section and term.
+
+Before applying the course/section migration to an existing database, stop writers and review the [mapping and guarded rollback limits](course-section-migration-plan.md#migration-operation-and-rollback-limits). Unknown legacy classes must be mapped explicitly. The full migration suite verifies both fresh installation and legacy history preservation.
 
 ## Transactions
 
@@ -76,7 +84,7 @@ Dates are JavaScript Date objects representing UTC. Accept explicit timezone-bea
 
 - Auth: User, AccountInvitation and adapter-owned auth_sessions.
 - Attendance: ClassMeeting, AttendanceSession and AttendanceRecord.
-- Supporting data: Classroom and Enrolment; seeds unblock early API work.
+- Supporting data: Course, Classroom (one section/term) and Enrolment; seeds unblock early API work.
 - Each member works in their feature module, imports the shared schemas and proposes database changes in a separate reviewed migration.
 - Do not edit an already-shared/applied migration. Add a new timestamped CommonJS JavaScript migration under database/migrations; update the related EntitySchema and docs in the same PR.
 - Use explicit SQL for MySQL CHECKs and generated-column uniqueness. Do not rely on schema generation to preserve these constraints.

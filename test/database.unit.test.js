@@ -40,7 +40,7 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
   const ds = new DataSource(databaseOptions(env));
   // Build metadata only: no connection, SQL or external database.
   await ds.buildMetadatas();
-  assert.equal(ds.entityMetadatas.length, 7);
+  assert.equal(ds.entityMetadatas.length, 8);
   for (const entity of ds.entityMetadatas) {
     assert.equal(
       new Set(entity.columns.map((c) => c.databaseName)).size,
@@ -55,6 +55,20 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
   const column = (name, field) =>
     ds.getMetadata(name).columns.find((c) => c.propertyName === field);
   assert.equal(column('User', 'password_hash').isSelect, false);
+  assert.equal(column('Classroom', 'course_id').isNullable, false);
+  assert.equal(column('Classroom', 'section').isNullable, false);
+  for (const name of ['code', 'name', 'subject'])
+    assert.equal(column('Classroom', name).isSelect, false);
+  assert.ok(
+    ds
+      .getMetadata('Classroom')
+      .indices.some(
+        (i) =>
+          i.isUnique &&
+          i.columns.map((c) => c.propertyName).join() ===
+            'course_id,term,section',
+      ),
+  );
   assert.equal(column('AccountInvitation', 'token_hash').isSelect, false);
   assert.equal(column('Enrolment', 'active_student_id').isInsert, false);
   assert.equal(

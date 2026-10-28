@@ -1,3 +1,4 @@
+import { CourseSchema } from './course.schema';
 import { UserSchema } from './user.schema';
 import { InvitationSchema } from './invitation.schema';
 import { ClassroomSchema } from './classroom.schema';
@@ -7,6 +8,7 @@ import { AttendanceSessionSchema } from './attendance-session.schema';
 import { AttendanceRecordSchema } from './attendance-record.schema';
 
 export {
+  CourseSchema,
   UserSchema,
   InvitationSchema,
   ClassroomSchema,
@@ -16,6 +18,7 @@ export {
   AttendanceRecordSchema,
 };
 export const entities = [
+  CourseSchema,
   UserSchema,
   InvitationSchema,
   ClassroomSchema,

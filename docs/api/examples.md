@@ -34,9 +34,12 @@ Example `200 OK` (fictional values):
   "data": [
     {
       "id": 1,
-      "code": "COS30043-DEMO",
-      "name": "Interface Design and Development",
-      "subject": "COS30043",
+      "section": "DEMO",
+      "course": {
+        "id": 1,
+        "code": "COS30043",
+        "name": "Interface Design and Development"
+      },
       "term": "DEMO",
       "room_label": "Demo room"
     }
@@ -51,7 +54,9 @@ An empty database returns `data: []`, `total: 0`, `totalPages: 0`. A page beyond
 
 Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing or archived classroom returns `404 Not Found`.
 
-Only `id`, `code`, `name`, `subject`, `term` and `room_label` are returned. Coordinates, geofence configuration, teacher information and other entity fields are excluded.
+Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Legacy classroom `code`, `name`, and `subject`, coordinates, geofence configuration, teacher information and other entity fields are excluded.
+
+This replaces the earlier flat classroom payload. Clients should use `course.code` and `course.name`, and display the separate `section`. Apply `1793145600000-CourseSections.js` before running this API. See the [migration checkpoint](../course-section-migration-plan.md) for the known demo mapping and upgrade precautions.
 
 ## Errors
 
@@ -83,4 +88,4 @@ The controller delegates to the service. The service injects `DATABASE` and obta
 
 For real features, follow this layout in the relevant feature folder and add account, role and membership checks before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
 
-Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies migrations, seeds, constraints and connection lifecycle; it does not exercise these HTTP routes against MySQL.
+Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies fresh/legacy migrations, seeds, constraints, connection lifecycle and sample service queries with real course joins. HTTP routing is tested separately with fake repositories.

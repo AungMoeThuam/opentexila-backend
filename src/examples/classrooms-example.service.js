@@ -5,18 +5,25 @@ import { ClassroomSchema } from '../database/entities/classroom.schema';
 
 const publicFields = {
   id: true,
-  code: true,
-  name: true,
-  subject: true,
+  section: true,
+  course: { id: true, code: true, name: true },
   term: true,
   room_label: true,
 };
 
 // Explicit response mapping keeps future entity fields out of API responses.
 function toResponse(classroom) {
-  return Object.fromEntries(
-    Object.keys(publicFields).map((field) => [field, classroom[field]]),
-  );
+  return {
+    id: classroom.id,
+    section: classroom.section,
+    term: classroom.term,
+    room_label: classroom.room_label,
+    course: {
+      id: classroom.course.id,
+      code: classroom.course.code,
+      name: classroom.course.name,
+    },
+  };
 }
 
 @Injectable()
@@ -29,6 +36,7 @@ export class ClassroomsExampleService {
     const [classrooms, total] = await this.classrooms.findAndCount({
       where: { archived_at: IsNull() },
       select: publicFields,
+      relations: { course: true },
       order: { id: 'ASC' },
       skip: (page - 1) * limit,
       take: limit,
@@ -44,6 +52,7 @@ export class ClassroomsExampleService {
     const classroom = await this.classrooms.findOne({
       where: { id, archived_at: IsNull() },
       select: publicFields,
+      relations: { course: true },
     });
     if (!classroom) throw new NotFoundException('Classroom not found.');
     return { data: toResponse(classroom) };

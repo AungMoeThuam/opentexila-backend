@@ -12,9 +12,8 @@ const {
 
 const fixture = {
   id: 1,
-  code: 'COS30043-DEMO',
-  name: 'Interface Design and Development',
-  subject: 'COS30043',
+  section: 'DEMO',
+  course: { id: 7, code: 'COS30043', name: 'Interface Design and Development' },
   term: 'DEMO',
   room_label: 'Demo room',
 };
@@ -24,7 +23,20 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
   const repository = {
     async findAndCount(options) {
       calls.push(options);
-      return [[{ ...fixture, latitude: '0.000000', teacher_id: 99 }], 21];
+      return [
+        [
+          {
+            ...fixture,
+            code: 'LEGACY',
+            name: 'Legacy name',
+            subject: 'Legacy subject',
+            course: { ...fixture.course, created_at: 'private extra field' },
+            latitude: '0.000000',
+            teacher_id: 99,
+          },
+        ],
+        21,
+      ];
     },
     async findOne(options) {
       calls.push(options);
@@ -68,7 +80,16 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
       assert.equal(calls.at(-1).skip, 0);
       assert.equal(calls.at(-1).take, 20);
       assert.deepEqual(calls.at(-1).order, { id: 'ASC' });
-      assert.deepEqual(Object.keys(calls.at(-1).select), Object.keys(fixture));
+      assert.deepEqual(calls.at(-1).relations, { course: true });
+      assert.deepEqual(calls.at(-1).select.course, {
+        id: true,
+        code: true,
+        name: true,
+      });
+      assert.deepEqual(
+        Object.keys(calls.at(-1).select).sort(),
+        Object.keys(fixture).sort(),
+      );
     },
   );
 

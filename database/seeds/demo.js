@@ -94,17 +94,24 @@ async function seedDemo(dataSource, env = process.env) {
         });
       accounts.push(user);
     }
+    const courses = manager.getRepository('Course');
+    let course = await courses.findOneBy({ code: 'COS30043' });
+    if (!course)
+      course = await courses.save({
+        code: 'COS30043',
+        name: 'Interface Design and Development',
+      });
     const classrooms = manager.getRepository('Classroom');
     let classroom = await classrooms.findOneBy({
-      code: 'COS30043-DEMO',
+      course_id: course.id,
+      section: 'DEMO',
       term: 'DEMO',
     });
     if (!classroom)
       classroom = await classrooms.save({
-        code: 'COS30043-DEMO',
+        course_id: course.id,
+        section: 'DEMO',
         term: 'DEMO',
-        name: 'Interface Design · Demo',
-        subject: 'Interface Design and Development',
         teacher_id: accounts[1].id,
         room_label: 'Demo room (synthetic location)',
         latitude: '0.000000',
@@ -188,6 +195,7 @@ async function seedDemo(dataSource, env = process.env) {
         role,
         status,
       })),
+      course_id: course.id,
       classroom_id: classroom.id,
       meeting_ids: schedule.map((m) => m.id),
     };

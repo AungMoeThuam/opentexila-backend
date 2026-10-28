@@ -22,7 +22,7 @@ Separate source repositories do not require separate hosting origins. If the fro
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Requests       | JSON bodies with `Content-Type: application/json`, where a body is required.                                                                       |
 | Authentication | Server-side sessions using HttpOnly cookies; no bearer-token flow is planned.                                                                      |
-| CSRF           | Fetch a session-bound token before mutations, including login and activation. Token response field and request header name remain to be finalised. |
+| CSRF           | Fetch `data.csrfToken` from `/auth/csrf`; send `X-CSRF-Token` with mutations, including login and activation. See the planned [auth contract](auth.md). |
 | Roles          | `student`, `teacher`, `admin`; display `teacher` as Lecturer in the interface.                                                                     |
 | Dates          | ISO 8601 timestamps with an explicit timezone, stored and returned in UTC.                                                                         |
 | Permissions    | Enforce account status, role, class membership and resource ownership on the server.                                                               |

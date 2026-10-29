@@ -1,5 +1,333 @@
 const argon2 = require('argon2');
 
+const DAY_MS = 86400000;
+const HOUR_MS = 3600000;
+const MINUTE_MS = 60000;
+
+// Order matters for first four entries:
+// [0] admin, [1] Lecturer One, [2] Student One, [3] Student Two.
+const USER_FIXTURES = [
+  { name: 'Admin Demo', email: 'admin.demo@example.com', role: 'admin' },
+  { name: 'Lecturer One', email: 'lecturer.one@example.com', role: 'teacher' },
+  { name: 'Student One', email: 'student.one@example.com', role: 'student' },
+  { name: 'Student Two', email: 'student.two@example.com', role: 'student' },
+  { name: 'Lecturer Two', email: 'lecturer.two@example.com', role: 'teacher' },
+  {
+    name: 'Lecturer Three',
+    email: 'lecturer.three@example.com',
+    role: 'teacher',
+  },
+  {
+    name: 'Lecturer Four',
+    email: 'lecturer.four@example.com',
+    role: 'teacher',
+  },
+  {
+    name: 'Student Three',
+    email: 'student.three@example.com',
+    role: 'student',
+  },
+  { name: 'Student Four', email: 'student.four@example.com', role: 'student' },
+  { name: 'Student Five', email: 'student.five@example.com', role: 'student' },
+  { name: 'Student Six', email: 'student.six@example.com', role: 'student' },
+  {
+    name: 'Student Seven',
+    email: 'student.seven@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Eight',
+    email: 'student.eight@example.com',
+    role: 'student',
+  },
+  { name: 'Student Nine', email: 'student.nine@example.com', role: 'student' },
+  { name: 'Student Ten', email: 'student.ten@example.com', role: 'student' },
+  {
+    name: 'Student Eleven',
+    email: 'student.eleven@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Twelve',
+    email: 'student.twelve@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Thirteen',
+    email: 'student.thirteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Fourteen',
+    email: 'student.fourteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Fifteen',
+    email: 'student.fifteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Sixteen',
+    email: 'student.sixteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Seventeen',
+    email: 'student.seventeen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Eighteen',
+    email: 'student.eighteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Nineteen',
+    email: 'student.nineteen@example.com',
+    role: 'student',
+  },
+  {
+    name: 'Student Twenty',
+    email: 'student.twenty@example.com',
+    role: 'student',
+  },
+  { name: 'Non Member', email: 'nonmember.demo@example.com', role: 'student' },
+];
+
+const COURSE_FIXTURES = [
+  { code: 'COS30043', name: 'Interface Design and Development' },
+  { code: 'COS20007', name: 'Object Oriented Programming' },
+  { code: 'COS10009', name: 'Introduction to Programming' },
+  { code: 'COS20031', name: 'Database Design and Development' },
+  { code: 'COS20019', name: 'Cloud Computing Architecture' },
+];
+
+const CLASS_FIXTURES = [
+  {
+    courseCode: 'COS30043',
+    section: 'A',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.one@example.com',
+    room_label: 'Demo room 1 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 0,
+    cancelledWeeks: [-3],
+    studentEmails: [
+      'student.one@example.com',
+      'student.two@example.com',
+      'student.three@example.com',
+      'student.four@example.com',
+      'student.five@example.com',
+      'student.six@example.com',
+      'student.seven@example.com',
+      'student.eight@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS30043',
+    section: 'B',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.two@example.com',
+    room_label: 'Demo room 2 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 3,
+    cancelledWeeks: [],
+    studentEmails: [
+      'student.nine@example.com',
+      'student.ten@example.com',
+      'student.eleven@example.com',
+      'student.twelve@example.com',
+      'student.thirteen@example.com',
+      'student.fourteen@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS20007',
+    section: 'A',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.two@example.com',
+    room_label: 'Demo room 3 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 6,
+    cancelledWeeks: [],
+    studentEmails: [
+      'student.one@example.com',
+      'student.two@example.com',
+      'student.three@example.com',
+      'student.four@example.com',
+      'student.fifteen@example.com',
+      'student.sixteen@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS20007',
+    section: 'B',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.three@example.com',
+    room_label: 'Demo room 4 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 9,
+    cancelledWeeks: [-3],
+    studentEmails: [
+      'student.five@example.com',
+      'student.six@example.com',
+      'student.seven@example.com',
+      'student.eight@example.com',
+      'student.nine@example.com',
+      'student.ten@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS10009',
+    section: 'A',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.three@example.com',
+    room_label: 'Demo room 5 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 0,
+    cancelledWeeks: [],
+    studentEmails: [
+      'student.eleven@example.com',
+      'student.twelve@example.com',
+      'student.thirteen@example.com',
+      'student.fourteen@example.com',
+      'student.fifteen@example.com',
+      'student.sixteen@example.com',
+      'student.seventeen@example.com',
+      'student.eighteen@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS10009',
+    section: 'B',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.four@example.com',
+    room_label: 'Demo room 6 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 3,
+    cancelledWeeks: [],
+    studentEmails: [
+      'student.seventeen@example.com',
+      'student.eighteen@example.com',
+      'student.nineteen@example.com',
+      'student.twenty@example.com',
+      'student.one@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS20031',
+    section: 'A',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.four@example.com',
+    room_label: 'Demo room 7 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 6,
+    cancelledWeeks: [-3],
+    studentEmails: [
+      'student.one@example.com',
+      'student.two@example.com',
+      'student.nineteen@example.com',
+      'student.twenty@example.com',
+      'student.five@example.com',
+      'student.six@example.com',
+    ],
+  },
+  {
+    courseCode: 'COS20019',
+    section: 'A',
+    term: '2026-S2',
+    teacherEmail: 'lecturer.one@example.com',
+    room_label: 'Demo room 8 (synthetic location)',
+    latitude: '0.000000',
+    longitude: '0.000000',
+    radius_m: '100.00',
+    hourOffset: 9,
+    cancelledWeeks: [],
+    studentEmails: [
+      'student.three@example.com',
+      'student.four@example.com',
+      'student.five@example.com',
+      'student.six@example.com',
+      'student.seven@example.com',
+      'student.eight@example.com',
+      'student.nine@example.com',
+      'student.ten@example.com',
+    ],
+  },
+];
+
+// Weekly sessions relative to startsAt: five past, one today (0), two upcoming.
+const SESSION_WEEK_OFFSETS = [-5, -4, -3, -2, -1, 0, 1, 2];
+
+// Static past-session attendance outcomes per student slot (up to 8 students) for each past week.
+const PAST_WEEK_ATTENDANCE = {
+  '-5': [
+    { status: 'present', checkInMinutes: 3, distance_m: '8.00' },
+    { status: 'present', checkInMinutes: 5, distance_m: '12.00' },
+    { status: 'late', checkInMinutes: 20, distance_m: '18.00' },
+    { status: 'present', checkInMinutes: 4, distance_m: '10.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 6, distance_m: '15.00' },
+    { status: 'present', checkInMinutes: 2, distance_m: '5.00' },
+    { status: 'present', checkInMinutes: 7, distance_m: '22.00' },
+  ],
+  '-4': [
+    { status: 'present', checkInMinutes: 4, distance_m: '9.00' },
+    { status: 'late', checkInMinutes: 19, distance_m: '14.00' },
+    { status: 'present', checkInMinutes: 6, distance_m: '11.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 3, distance_m: '7.00' },
+    { status: 'present', checkInMinutes: 8, distance_m: '19.00' },
+    { status: 'present', checkInMinutes: 5, distance_m: '13.00' },
+    { status: 'late', checkInMinutes: 22, distance_m: '25.00' },
+  ],
+  '-3': [
+    { status: 'present', checkInMinutes: 2, distance_m: '6.00' },
+    { status: 'present', checkInMinutes: 7, distance_m: '16.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 5, distance_m: '10.00' },
+    { status: 'late', checkInMinutes: 18, distance_m: '21.00' },
+    { status: 'present', checkInMinutes: 4, distance_m: '9.00' },
+    { status: 'present', checkInMinutes: 6, distance_m: '14.00' },
+    { status: 'present', checkInMinutes: 3, distance_m: '8.00' },
+  ],
+  '-2': [
+    { status: 'late', checkInMinutes: 21, distance_m: '17.00' },
+    { status: 'present', checkInMinutes: 4, distance_m: '11.00' },
+    { status: 'present', checkInMinutes: 3, distance_m: '7.00' },
+    { status: 'present', checkInMinutes: 6, distance_m: '13.00' },
+    { status: 'present', checkInMinutes: 5, distance_m: '12.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 8, distance_m: '20.00' },
+    { status: 'present', checkInMinutes: 2, distance_m: '5.00' },
+  ],
+  '-1': [
+    { status: 'present', checkInMinutes: 5, distance_m: '5.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 4, distance_m: '9.00' },
+    { status: 'late', checkInMinutes: 20, distance_m: '15.00' },
+    { status: 'present', checkInMinutes: 6, distance_m: '11.00' },
+    { status: 'present', checkInMinutes: 3, distance_m: '8.00' },
+    { status: 'absent' },
+    { status: 'present', checkInMinutes: 7, distance_m: '18.00' },
+  ],
+};
+
 async function seedDemo(dataSource, env = process.env) {
   if (
     env.NODE_ENV !== 'development' ||
@@ -30,77 +358,11 @@ async function seedDemo(dataSource, env = process.env) {
     timeCost: 2,
     parallelism: 1,
   });
-  const DAY = 86400000;
-  const MINUTE = 60000;
-  const words = [
-    'One',
-    'Two',
-    'Three',
-    'Four',
-    'Five',
-    'Six',
-    'Seven',
-    'Eight',
-    'Nine',
-    'Ten',
-    'Eleven',
-    'Twelve',
-    'Thirteen',
-    'Fourteen',
-    'Fifteen',
-    'Sixteen',
-    'Seventeen',
-    'Eighteen',
-    'Nineteen',
-    'Twenty',
-  ];
-  // Order matters: accounts[0] admin, [1] first lecturer, [2] and [3] first two students.
-  const lecturers = [1, 2, 3, 4].map((n) => [
-    `Lecturer ${words[n - 1]}`,
-    `lecturer.${words[n - 1].toLowerCase()}@example.com`,
-    'teacher',
-  ]);
-  const students = words.map((word) => [
-    `Student ${word}`,
-    `student.${word.toLowerCase()}@example.com`,
-    'student',
-  ]);
-  const fixtures = [
-    ['Admin Demo', 'admin.demo@example.com', 'admin'],
-    lecturers[0],
-    students[0],
-    students[1],
-    ...lecturers.slice(1),
-    ...students.slice(2),
-    ['Non Member', 'nonmember.demo@example.com', 'student'],
-  ];
-  // [course code, section, lecturer number, student numbers]
-  const range = (from, to) =>
-    Array.from({ length: to - from + 1 }, (_, i) => from + i);
-  const classPlans = [
-    ['COS30043', 'A', 1, range(1, 8)],
-    ['COS30043', 'B', 2, range(9, 14)],
-    ['COS20007', 'A', 2, [1, 2, 3, 4, 15, 16]],
-    ['COS20007', 'B', 3, range(5, 10)],
-    ['COS10009', 'A', 3, range(11, 18)],
-    ['COS10009', 'B', 4, [17, 18, 19, 20, 1]],
-    ['COS20031', 'A', 4, [1, 2, 19, 20, 5, 6]],
-    ['COS20019', 'A', 1, range(3, 10)],
-  ];
-  const courseNames = {
-    COS30043: 'Interface Design and Development',
-    COS20007: 'Object Oriented Programming',
-    COS10009: 'Introduction to Programming',
-    COS20031: 'Database Design and Development',
-    COS20019: 'Cloud Computing Architecture',
-  };
-  // Weekly sessions relative to the base start: five past, one current, two upcoming.
-  const weekOffsets = [-5, -4, -3, -2, -1, 0, 1, 2];
-  const cancelledOffset = -3;
+
   return dataSource.transaction(async (manager) => {
     const accounts = [];
     const users = manager.getRepository('User');
-    for (const [name, email, role] of fixtures) {
+    for (const { name, email, role } of USER_FIXTURES) {
       let user = await users.findOneBy({ email });
       if (user && user.role !== role)
         throw new Error(
@@ -117,13 +379,11 @@ async function seedDemo(dataSource, env = process.env) {
         });
       accounts.push(user);
     }
-    const byEmail = new Map(accounts.map((u) => [u.email, u]));
-    const lecturer = (n) => byEmail.get(lecturers[n - 1][1]);
-    const student = (n) => byEmail.get(students[n - 1][1]);
+    const userByEmail = new Map(accounts.map((u) => [u.email, u]));
 
     const courses = manager.getRepository('Course');
     const courseByCode = new Map();
-    for (const [code, name] of Object.entries(courseNames)) {
+    for (const { code, name } of COURSE_FIXTURES) {
       courseByCode.set(
         code,
         (await courses.findOneBy({ code })) ??
@@ -139,45 +399,48 @@ async function seedDemo(dataSource, env = process.env) {
     const sessionIds = [];
     let firstClass;
     let firstClassSessions = [];
-    for (const [index, plan] of classPlans.entries()) {
-      const [code, section, lecturerNo, studentNos] = plan;
-      const course = courseByCode.get(code);
-      const term = '2026-S2';
+
+    for (const [index, plan] of CLASS_FIXTURES.entries()) {
+      const course = courseByCode.get(plan.courseCode);
+      const teacher = userByEmail.get(plan.teacherEmail);
       let classroom = await classes.findOneBy({
         course_id: course.id,
-        section,
-        term,
+        section: plan.section,
+        term: plan.term,
       });
       if (!classroom)
         classroom = await classes.save({
           course_id: course.id,
-          section,
-          term,
-          teacher_id: lecturer(lecturerNo).id,
-          room_label: `Demo room ${index + 1} (synthetic location)`,
-          latitude: '0.000000',
-          longitude: '0.000000',
-          radius_m: '100.00',
+          section: plan.section,
+          term: plan.term,
+          teacher_id: teacher.id,
+          room_label: plan.room_label,
+          latitude: plan.latitude,
+          longitude: plan.longitude,
+          radius_m: plan.radius_m,
         });
       classIds.push(classroom.id);
+
       // Keep membership stable on reruns. Never overwrite API work.
-      for (const no of studentNos) {
+      const enrolledStudents = plan.studentEmails.map((email) =>
+        userByEmail.get(email),
+      );
+      for (const student of enrolledStudents) {
         const enrolled = await enrolments.findOneBy({
           class_id: classroom.id,
-          student_id: student(no).id,
+          student_id: student.id,
         });
         if (!enrolled)
           await enrolments.save({
             class_id: classroom.id,
-            student_id: student(no).id,
+            student_id: student.id,
           });
       }
-      const enrolledIds = studentNos.map((no) => student(no).id);
+
       const schedule = [];
-      for (const week of weekOffsets) {
-        // Classes meet at different hours so timetables differ.
+      for (const week of SESSION_WEEK_OFFSETS) {
         const start = new Date(
-          startsAt.getTime() + week * 7 * DAY + (index % 4) * 3 * 3600000,
+          startsAt.getTime() + week * 7 * DAY_MS + plan.hourOffset * HOUR_MS,
         );
         let classSession = await classSessions.findOneBy({
           class_id: classroom.id,
@@ -187,40 +450,38 @@ async function seedDemo(dataSource, env = process.env) {
           classSession = await classSessions.save({
             class_id: classroom.id,
             starts_at: start,
-            late_after: new Date(start.getTime() + 15 * MINUTE),
-            ends_at: new Date(start.getTime() + 2 * 3600000),
-            state:
-              week === cancelledOffset && index % 3 === 0
-                ? 'cancelled'
-                : 'scheduled',
+            late_after: new Date(start.getTime() + 15 * MINUTE_MS),
+            ends_at: new Date(start.getTime() + 2 * HOUR_MS),
+            state: plan.cancelledWeeks.includes(week)
+              ? 'cancelled'
+              : 'scheduled',
           });
-          // Cancelled sessions have no records. Past sessions are finalised;
-          // current and upcoming sessions are pending until check-in is built.
+          // Cancelled sessions have no records. Past sessions use static outcomes;
+          // current and upcoming sessions remain pending.
           if (classSession.state === 'scheduled') {
+            const weekOutcomes = PAST_WEEK_ATTENDANCE[String(week)];
             await records.save(
-              enrolledIds.map((studentId, i) => {
-                if (week >= 0)
+              enrolledStudents.map((student, slot) => {
+                if (!weekOutcomes)
                   return {
                     class_session_id: classSession.id,
-                    student_id: studentId,
+                    student_id: student.id,
                   };
-                const pattern = (i + index + week + 10) % 7;
-                if (pattern === 0)
+                const outcome = weekOutcomes[slot];
+                if (outcome.status === 'absent')
                   return {
                     class_session_id: classSession.id,
-                    student_id: studentId,
+                    student_id: student.id,
                     status: 'absent',
                   };
-                const late = pattern === 1;
                 return {
                   class_session_id: classSession.id,
-                  student_id: studentId,
-                  status: late ? 'late' : 'present',
+                  student_id: student.id,
+                  status: outcome.status,
                   checked_in_at: new Date(
-                    start.getTime() +
-                      (late ? 20 : 2 + ((i + index) % 10)) * MINUTE,
+                    start.getTime() + outcome.checkInMinutes * MINUTE_MS,
                   ),
-                  distance_m: `${2 + ((i * 7 + index) % 40)}.00`,
+                  distance_m: outcome.distance_m,
                 };
               }),
             );
@@ -231,10 +492,11 @@ async function seedDemo(dataSource, env = process.env) {
       }
       if (index === 0) {
         firstClass = classroom;
-        // The week -1 and week 0 sessions: a completed one and the current one.
+        // Week -1 (completed) and week 0 (today).
         firstClassSessions = [schedule[4], schedule[5]];
       }
     }
+
     return {
       accounts: accounts.map(({ id, email, role, status }) => ({
         id,

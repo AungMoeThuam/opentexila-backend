@@ -39,7 +39,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 - [Database ER diagram](docs/database-erd.md): tables, keys, cardinalities and composite uniqueness.
 - [Using the database in APIs](docs/database-development.md): repositories, JavaScript dependency injection, transactions and migration workflow.
 - [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
-- [API overview](docs/api/README.md), [auth](docs/api/auth.md), [attendance](docs/api/attendance.md): planned contracts.
+- [API overview](docs/api/README.md), [auth](docs/api/auth.md), [enrolments](docs/api/enrolments.md), [attendance](docs/api/attendance.md): planned contracts.
 
 ## Commands
 

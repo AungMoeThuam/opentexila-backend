@@ -39,7 +39,7 @@ npm ci
 npm run db:seed
 ```
 
-The seed creates an admin, a lecturer, two enrolled students, one non-member student and one invited student. Only active accounts receive a password. It also creates course `COS30043`, one section `DEMO` in term `DEMO`, two scheduled meetings and a completed attendance history fixture. Emails are printed; passwords are not. Rerunning does not reset existing passwords. Location coordinates are synthetic, and no usable invitation token or live check-in is created.
+The seed creates 26 active accounts with the seed password (1 admin, 4 lecturers, 20 students `student.one@example.com` to `student.twenty@example.com`, and `nonmember.demo@example.com`), 5 courses, 8 classes in term `2026-S2` (two sections for some courses), enrolments, 8 weekly class sessions per class (5 past, 1 current, 2 upcoming, some cancelled) and attendance records: mixed present/late/absent for past sessions and pending for current and upcoming ones. Emails are printed; passwords are not. Rerunning does not reset existing passwords. Location coordinates are synthetic, and no live check-in is created.
 
 To run NestJS on the host instead of in Docker, follow [the alternative README workflow](../README.md#start-locally-without-application-containers). Avoid running both API processes on the same port.
 
@@ -69,7 +69,7 @@ docs/api/                 # API contract per feature
 
 Several feature folders, including `src/auth/` and `src/attendance/`, are placeholders with `.gitkeep`. `src/enrolments/` has not been created yet; create it when implementing that feature. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.js`, auth guards).
 
-Course code/name belong to `courses`. A classroom is one course section in a term; use `course_id`, `section` and `term`. Do not use the retained legacy classroom `code`, `name` or `subject` fields for new features. See the [database design](database-design.md#classrooms--course-sections) and [sample response](api/examples.md#get-examplesclassrooms).
+Course code/name belong to `courses`. A `classes` row is one offering in a term; use `course_id`, `section` and `term`. Classes have no `code`, `name` or `subject` columns; read the related course. See the [database design](database-design.md#classes) and [sample response](api/examples.md#get-examplesclassrooms).
 
 ## 4. Adding an API endpoint
 
@@ -100,14 +100,16 @@ The project uses plain JavaScript with Babel, not TypeScript. Dependencies are i
 
 - **Permissions on the server.** Check account status, role and class membership in the API. Hiding a button in the UI is not enough.
 - **Scope queries before counting.** Filter to what the user may see first, then compute `meta.total`.
-- **Hidden fields.** `password_hash` and token hashes are not selected by default. The login service explicitly selects the password hash for verification. Invitation activation verifies a submitted token against its digest. Neither hash belongs in an API response.
+- **Hidden fields.** `password_hash` is not selected by default. The login service explicitly selects it for verification. It never belongs in an API response.
 - **Dates are UTC.** Accept timestamps with an explicit timezone and convert to UTC. The frontend shows institution time.
 - **Decimal columns arrive as strings.** Convert with `Number()` and check that the value is finite before doing maths.
 - **Writes use a transaction** when several rows must change together. Use only the `manager` from the callback inside it. See [database-development.md](database-development.md#transactions).
 
+The shared entity names are `Class`, `ClassSession` and `AttendanceRecord`. Enrolments and class sessions use `class_id`, and attendance records use `class_session_id`. Do not confuse these with login `auth_sessions`.
+
 ## 5. Changing the database
 
-The existing course/section migration has an explicit legacy-data mapping and guarded rollback. Before first upgrading an existing database, stop writers and read the [migration procedure](course-section-migration-plan.md#migration-operation-and-rollback-limits); `stack:up` applies pending migrations automatically.
+The project now uses one consolidated initial migration. Existing old development databases must be recreated separately; `stack:up` does not reset them. Read the [baseline setup guide](database-refactor-migration.md). The following rules apply to future schema changes after this agreed consolidation.
 
 Do this only when your feature needs a new table or column.
 

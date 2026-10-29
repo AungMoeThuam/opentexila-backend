@@ -79,12 +79,10 @@ src/database/
   data-source.js              # Same DataSource for Nest and migration CLI
   entities/
     user.schema.js
-    invitation.schema.js
     course.schema.js
-    classroom.schema.js
+    class.schema.js
     enrolment.schema.js
-    meeting.schema.js
-    attendance-session.schema.js
+    class-session.schema.js
     attendance-record.schema.js
     columns.js
     index.js
@@ -94,26 +92,26 @@ database/
 test/database.integration.test.js
 ```
 
-Eight domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` and `typeorm_metadata` bookkeeping tables. The latter is created because the schemas use generated columns. Both bookkeeping tables remain after reverting both application migrations. The course/section rollback is guarded against losing newly created data; see the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
+Six domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
 Auth/attendance feature folders remain available for controllers, services, runtime request validation and guards. No TypeScript is used. In plain JavaScript, dependencies require explicit injection tokens; see the database development guide.
 
 ## Seed fixtures
 
-The seed creates an admin, lecturer, two enrolled students, one non-member student, one invited student, course `COS30043`, a demo class with section `DEMO` and term `DEMO`, two scheduled meetings and a completed history fixture. Emails are printed; passwords and hashes are not. All active demo accounts initially use the supplied `SEED_PASSWORD`, hashed with Argon2id. Reruns do not reset existing passwords or override member roles.
+The seed creates 1 admin, 4 lecturers, 20 students (`student.one@example.com` to `student.twenty@example.com`), one non-member student, 5 courses, 8 classes in term `2026-S2`, enrolments, 8 weekly class sessions per class (5 past, 1 current, 2 upcoming; some past ones cancelled) and attendance records (mixed present/late/absent for past sessions, pending for current and upcoming ones). Emails are printed; passwords and hashes are not. All active demo accounts initially use the supplied `SEED_PASSWORD`, hashed with Argon2id. Reruns do not reset existing passwords or override member roles.
 
-The class uses **synthetic coordinates (0,0)** and example radius/accuracy values. It is for API development, not a real campus attendance configuration. Default meeting start is 01:00 UTC (09:00 Kuala Lumpur) today. Set `SEED_MEETING_START=2026-10-27T01:00:00.000Z` for repeatable fixtures; rerunning with a different date adds that day's schedule. The seed does not implement live attendance or invitation delivery.
+The class uses **synthetic coordinates (0,0)** and an example radius. It is for API development, not a real campus attendance configuration. Default meeting start is 01:00 UTC (09:00 Kuala Lumpur) today. Set `SEED_MEETING_START=2026-10-27T01:00:00.000Z` for repeatable fixtures; rerunning with a different date adds that day's schedule. The seed does not implement live attendance.
 
-## Course and section model
+## Course and class model
 
-`courses` stores the shared course code and name. Each `classrooms` row is one section of that course in a term, with its own lecturer, venue and schedule. `(course_id, term, section)` is unique. Enrolments and meetings still reference the classroom ID.
+`courses` stores the shared course code and name. Each `classes` row is one section of that course in a term, with its own lecturer and venue. `(course_id, term, section)` is unique. Enrolments and `class_sessions` reference `class_id`; attendance records reference `class_session_id` and the student.
 
-Apply both versioned migrations before using the updated code. The course/section migration maps the known demo fixture and rejects other legacy classes until their mapping is agreed. The old classroom `code`, `name` and `subject` fields remain nullable, hidden legacy fields for guarded rollback; new code uses the course relation and section. The sample API returns nested `course: { id, code, name }` plus `section`.
+The single initial migration creates this model directly, including ENUMs and constraints. There are no `code`, `name` or `subject` columns on classes. The sample API returns nested `course: { id, code, name }` plus `section`.
 
-Stop application writers before upgrading an existing database; see the [migration checkpoint](docs/course-section-migration-plan.md). The repository's migrations have been tested in disposable MySQL; that does not mean an existing local database has already been migrated.
+Existing development databases need separate recreation because the initial migration has been rewritten. Running `db:migrate` or `stack:up` against old migration history does not upgrade the schema. See the [baseline setup guide](docs/database-refactor-migration.md). This code change does not reset your local data.
 
 ## Current attendance direction
 
-Attendance follows scheduled class meetings automatically. Students enter a class and check in with location. There is no session code or manual lecturer opening action. The schema supports this flow; scheduling, roster materialisation, check-in validation and closure still require API/service implementation.
+Attendance follows `class_sessions` automatically. Timing and cancellation live only on that table. The role, status and state fields use ENUMs as listed in the database design. Students enter a class and check in with location. There is no session code or manual lecturer opening action. The schema supports this flow; scheduling, record creation, check-in validation and closure still require API/service implementation.
 
 The existing Multer override remains in place. Docker supports local development; authentication/session middleware and production deployment configuration remain to be implemented.

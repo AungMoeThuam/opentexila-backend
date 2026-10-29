@@ -16,9 +16,11 @@ The shared-stack frontend proxy also exposes these paths at `http://localhost:51
 
 No authentication headers or request bodies are required for these development examples. No write routes are provided.
 
+The existing `/examples/classrooms` URLs, controller/service filenames and error text are retained for compatibility. The underlying entity is `Class`, stored in `classes`. A URL name does not imply an old database table.
+
 ## GET /examples/classrooms
 
-Returns non-archived classrooms in ascending ID order. Optional query parameters:
+Returns classes in ascending ID order. Optional query parameters:
 
 | Parameter | Default | Allowed values          |
 | --------- | ------- | ----------------------- |
@@ -52,11 +54,11 @@ An empty database returns `data: []`, `total: 0`, `totalPages: 0`. A page beyond
 
 ## GET /examples/classrooms/:id
 
-Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing or archived classroom returns `404 Not Found`.
+Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing classroom returns `404 Not Found`.
 
-Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Legacy classroom `code`, `name`, and `subject`, coordinates, geofence configuration, teacher information and other entity fields are excluded.
+Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Coordinates, geofence configuration, teacher information and other entity fields are excluded. Class rows do not contain course code/name/subject duplicates.
 
-This replaces the earlier flat classroom payload. Clients should use `course.code` and `course.name`, and display the separate `section`. Apply `1793145600000-CourseSections.js` before running this API. See the [migration checkpoint](../course-section-migration-plan.md) for the known demo mapping and upgrade precautions.
+This replaces the earlier flat classroom payload. Clients should use `course.code` and `course.name`, and display the separate `section`. Apply the consolidated initial migration to a fresh database before running this API. Existing old development databases need separate recreation; see the [baseline setup guide](../database-refactor-migration.md).
 
 ## Errors
 
@@ -71,7 +73,7 @@ These examples use Nest's built-in error responses, not the proposed application
 ```
 
 - **400**: invalid pagination or ID.
-- **404**: classroom missing/archived, or sample routes not registered outside development.
+- **404**: classroom missing, or sample routes not registered outside development.
 - **500**: unexpected server/database error; database details are not returned to the client.
 
 ## Pattern to follow
@@ -84,8 +86,8 @@ src/examples/
 test/examples.test.js              # HTTP behavior with a fake repository
 ```
 
-The controller delegates to the service. The service injects `DATABASE` and obtains a repository for `ClassroomSchema`; it does not create another connection. Explicit `Inject`, `Query` and `Param` calls supply decorator metadata in plain JavaScript with Babel. No TypeScript or additional validation library is required for these simple parameters.
+The controller delegates to the service. The service injects `DATABASE` and obtains a repository for `ClassSchema`; it does not create another connection. Explicit `Inject`, `Query` and `Param` calls supply decorator metadata in plain JavaScript with Babel. No TypeScript or additional validation library is required for these simple parameters.
 
 For real features, follow this layout in the relevant feature folder and add account, role and membership checks before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
 
-Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies fresh/legacy migrations, seeds, constraints, connection lifecycle and sample service queries with real course joins. HTTP routing is tested separately with fake repositories.
+Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies fresh baseline installation, populated rollback/reapplication, seeds, constraints, connection lifecycle and sample service queries with real course joins. HTTP routing is tested separately with fake repositories.

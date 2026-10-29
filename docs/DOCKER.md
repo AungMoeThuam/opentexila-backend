@@ -59,10 +59,6 @@ Authentication and attendance APIs are still under development. Real API mode wi
 
 To update an existing frontend checkout, review and pull its changes yourself, then rerun the stack command. The launcher deliberately does not alter any existing checkout's Git state. Commit frontend work in the frontend repository and backend/infrastructure work here.
 
-## Upgrading the course/section schema
-
-`stack:up` applies pending migrations, including `1793145600000-CourseSections.js`. For the first upgrade of an existing database, stop application writers and follow the [migration procedure](course-section-migration-plan.md#migration-operation-and-rollback-limits). The migration preserves the known demo class/history; unknown legacy classroom values require an agreed mapping and are rejected before schema changes. The new code needs both migrations. Its sample API returns nested course details and a separate section.
-
 ## Existing database and optional fixtures
 
 This file retains the `opentexila` project name, `opentexila-db` container name, and `opentexila_mysql_data` volume key used by the original database-only Compose setup. With the default project name, your existing MySQL data is reused. `npm run db:up` and `npm run db:stop` still target just MySQL.
@@ -92,3 +88,7 @@ This is a local development setup. Services publish only on localhost. A deploym
 ## Verification
 
 Verified using a fresh clone from GitHub and a separate disposable MySQL volume: all services became healthy, migrations applied, Vue deep routes loaded, and the Vite proxy reached the real sample API/database. Backend reload and frontend HMR were observed. Stopping and restarting retained a test database marker and reported no pending migrations. The 14 backend/launcher tests passed, including preservation of an existing frontend checkout and `.env`. These checks do not imply unfinished authentication or attendance endpoints are implemented.
+
+## Consolidated database baseline
+
+The migration container applies one initial migration with the final schema. Existing volumes created with the older migration contents must be recreated separately before using this checkout. `stack:up` preserves volumes and does not perform this reset; old migration history can misleadingly report the rewritten baseline as applied. Read the [baseline setup guide](database-refactor-migration.md). No application database has been reset by this change.

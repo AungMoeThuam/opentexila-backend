@@ -7,18 +7,36 @@ This documentation belongs to the backend repository. The separate frontend repo
 ## Feature references
 
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
-- [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
+- [Authentication](auth.md) — admin-created accounts, login, logout, password change and session restoration.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
 
-Enrolment contracts are not documented yet. Agree their paths, payloads and write permissions before implementation; student self-enrolment remains undecided. The schema supports membership intervals, but does not choose that policy. The sample classroom routes are not the production enrolment API.
+Initial enrolment route proposals are listed below; payloads and errors still need agreement before implementation. Initial writes are administrator-only; student self-enrolment remains undecided. The schema stores one enrolment row per student and class and does not choose that policy. The sample classroom routes are not the production enrolment API.
 
-A classroom now represents one course section in a term. Course identity and name live in `courses`; membership and meetings reference `classroom_id`. The implemented sample returns nested `course` details and a separate `section`; see [its response contract](examples.md#get-examplesclassrooms). Course/section administration endpoints remain future work.
+`classes` represents course offerings by section and term. Course identity and name live in `courses`; enrolments and `class_sessions` reference `class_id`. The implemented sample returns nested `course` details and a separate `section`; see [its response contract](examples.md#get-examplesclassrooms). Course/section administration endpoints remain future work.
+
+The sample `/examples/classrooms` URL remains compatible and reads `ClassSchema`. Attendance uses `ClassSession` and `AttendanceRecord`; see [attendance semantics](attendance.md).
 
 ## Base URL
 
 Local development: `http://127.0.0.1:3000/api/v1` with the default host and port. For the shared Docker stack, the browser uses `/api/v1` through `http://localhost:5173`; Vite proxies to the API. `BACKEND_PORT` and `FRONTEND_DEV_PORT` can change those host ports; see [Docker configuration](../DOCKER.md#configuration). The deployed URL is not decided yet. Paths in the feature documents are relative to `/api/v1`.
 
 Separate source repositories do not require separate hosting origins. If the frontend and API use different origins, their credential, CORS, cookie and CSRF settings must be configured together.
+
+## Resource route naming
+
+Use plural kebab-case nouns (`classes`, `class-sessions`), explicit camelCase path/query IDs (`classId`, `classSessionId`, `studentId`) and snake_case JSON FK fields. API resources use `/api/v1`, not `/student`, `/lecturer` or `/admin` prefixes. Reuse endpoints with server-enforced role/resource scoping. `/me` always refers to the authenticated user. The implemented `/examples/classrooms` sample remains unchanged.
+
+### Proposed enrolment endpoints
+
+| Method | Path                                    | Access / purpose                                             |
+| ------ | --------------------------------------- | ------------------------------------------------------------ |
+| GET    | `/classes`                              | Admin class selection; scope other roles if supported        |
+| GET    | `/me/classes`                           | Student's enrolled classes or lecturer's assigned classes    |
+| GET    | `/classes/:classId/enrolments`          | Admin or assigned lecturer reads roster                      |
+| POST   | `/classes/:classId/enrolments`          | Admin adds a student; validate role and duplicate enrolment  |
+| DELETE | `/classes/:classId/enrolments/:studentId` | Admin removes a student from the class                     |
+
+These endpoints are not implemented. Agree pagination, filters, payloads and errors before parallel work. Student pages do not use the full roster endpoint. See [attendance routes](attendance.md#proposed-endpoints) and [authentication contract](auth.md) for the other features.
 
 ## Planned conventions
 
@@ -65,4 +83,4 @@ This error format is not implemented by the current scaffold. The development sa
 
 ## Updating the reference
 
-For each implemented endpoint, document its method, path, access rules, headers, parameters, request body, success response, error responses and validation rules. Mark it implemented only after verification. Keep examples fictional and omit real passwords, session cookies and invitation tokens.
+For each implemented endpoint, document its method, path, access rules, headers, parameters, request body, success response, error responses and validation rules. Mark it implemented only after verification. Keep examples fictional and omit real passwords, session cookies and temporary passwords.

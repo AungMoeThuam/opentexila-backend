@@ -88,30 +88,26 @@ test(
         (await ds.query('SHOW TABLES'))
           .map((row) => Object.values(row)[0])
           .sort();
-      // TypeORM creates metadata storage for our generated columns. Both
-      // infrastructure tables survive rollback of the application migration.
-      const infrastructureTables = ['schema_migrations', 'typeorm_metadata'];
+      // TypeORM's migration history table survives rollback of the application migration.
+      const infrastructureTables = ['schema_migrations'];
       let migrationsReady = false;
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
-          assert.equal((await ds.runMigrations()).length, 2);
+          assert.equal((await ds.runMigrations()).length, 1);
           assert.equal((await ds.runMigrations()).length, 0);
           await ds.undoLastMigration();
-          await ds.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds.runMigrations()).length, 2);
+          assert.equal((await ds.runMigrations()).length, 1);
           assert.deepEqual(
             await tableNames(),
             [
               ...infrastructureTables,
               'users',
               'courses',
-              'account_invitations',
-              'classrooms',
+              'classes',
               'enrolments',
-              'class_meetings',
-              'attendance_sessions',
+              'class_sessions',
               'attendance_records',
               'auth_sessions',
             ].sort(),
@@ -120,100 +116,6 @@ test(
         },
       );
       if (!migrationsReady) return;
-      await t.test(
-        'legacy upgrade preserves IDs, audit values and attendance; unknown mappings fail before DDL',
-        async () => {
-          await ds.undoLastMigration(); // Work with the original schema using raw SQL.
-          await ds.query(
-            "INSERT INTO users(id,name,email,institution_member_id,role) VALUES (91,'Admin','legacy.admin@example.test','LEGACY-ADMIN','admin'), (92,'Teacher','legacy.teacher@example.test','LEGACY-TEACHER','teacher'), (93,'Student','legacy.student@example.test','LEGACY-STUDENT','student')",
-          );
-          await ds.query(
-            "INSERT INTO classrooms(id,code,name,subject,term,teacher_id,room_label,latitude,longitude,radius_m,max_accuracy_m,created_at,updated_at) VALUES (71,'COS30043-DEMO','Original display name','Interface Design and Development','DEMO',92,'B-204',0,0,100,30,'2026-01-01','2026-01-02')",
-          );
-          await ds.query(
-            "INSERT INTO enrolments(id,classroom_id,student_id,enrolled_at) VALUES (81,71,93,'2026-10-01')",
-          );
-          await ds.query(
-            "INSERT INTO class_meetings(id,classroom_id,starts_at,late_after,ends_at,created_by) VALUES (101,71,'2026-10-27 01:00:00','2026-10-27 01:15:00','2026-10-27 03:00:00',91)",
-          );
-          await ds.query(
-            "INSERT INTO attendance_sessions(id,meeting_id,opens_at,late_after,closes_at,closed_at,state,room_label,latitude,longitude,radius_m,max_accuracy_m) VALUES (111,101,'2026-10-27 01:00:00','2026-10-27 01:15:00','2026-10-27 03:00:00','2026-10-27 03:00:00','closed','B-204',0,0,100,30)",
-          );
-          await ds.query(
-            "INSERT INTO attendance_records(id,session_id,student_id,status,checked_in_at,distance_m,accuracy_m,location_validated_at) VALUES (121,111,93,'present','2026-10-27 01:05:00',5,10,'2026-10-27 01:05:00')",
-          );
-          const tables = [
-            'users',
-            'classrooms',
-            'enrolments',
-            'class_meetings',
-            'attendance_sessions',
-            'attendance_records',
-          ];
-          const before = Object.fromEntries(
-            await Promise.all(
-              tables.map(async (table) => [
-                table,
-                await ds.query(`SELECT * FROM ${table} ORDER BY id`),
-              ]),
-            ),
-          );
-          assert.equal((await ds.runMigrations()).length, 1);
-          for (const table of tables) {
-            const columns = Object.keys(before[table][0])
-              .map((key) => '`' + key + '`')
-              .join(',');
-            assert.deepEqual(
-              await ds.query(`SELECT ${columns} FROM ${table} ORDER BY id`),
-              before[table],
-              table,
-            );
-          }
-          const classroom = await ds
-            .getRepository('Classroom')
-            .findOne({ where: { id: 71 }, relations: { course: true } });
-          assert.equal(classroom.section, 'DEMO');
-          assert.equal(classroom.course.code, 'COS30043');
-          assert.equal(
-            classroom.course.name,
-            'Interface Design and Development',
-          );
-          assert.equal(classroom.name, undefined);
-          const {
-            ClassroomsExampleService,
-          } = require('../dist/examples/classrooms-example.service');
-          const response = await new ClassroomsExampleService(ds).findOne(71);
-          assert.deepEqual(response.data.course, {
-            id: classroom.course.id,
-            code: 'COS30043',
-            name: 'Interface Design and Development',
-          });
-          assert.equal(response.data.section, 'DEMO');
-          assert.equal(response.data.subject, undefined);
-          await ds.undoLastMigration();
-          assert.deepEqual(
-            await ds.query('SELECT * FROM classrooms ORDER BY id'),
-            before.classrooms,
-          );
-          await ds.query("UPDATE classrooms SET code='UNMAPPED-A' WHERE id=71");
-          const preflightTables = await tableNames();
-          await assert.rejects(
-            () => ds.runMigrations(),
-            /mapping required for classroom IDs: 71/,
-          );
-          assert.deepEqual(await tableNames(), preflightTables);
-          assert.equal(
-            (await ds.query('SELECT code FROM classrooms WHERE id=71'))[0].code,
-            'UNMAPPED-A',
-          );
-          await ds.query(
-            "UPDATE classrooms SET code='COS30043-DEMO' WHERE id=71",
-          );
-          // Clear only this disposable database by reverting the initial migration.
-          await ds.undoLastMigration();
-          assert.equal((await ds.runMigrations()).length, 2);
-        },
-      );
       let fixtures;
       let fixturesReady = false;
       await t.test(
@@ -221,11 +123,14 @@ test(
         async () => {
           fixtures = await seedDemo(ds, env);
           await seedDemo(ds, env);
-          assert.equal(await ds.getRepository('User').count(), 6);
-          assert.equal(await ds.getRepository('Course').count(), 1);
-          assert.equal(await ds.getRepository('Classroom').count(), 1);
-          assert.equal(await ds.getRepository('ClassMeeting').count(), 2);
-          assert.equal(await ds.getRepository('AttendanceRecord').count(), 2);
+          assert.equal(await ds.getRepository('User').count(), 26);
+          assert.equal(await ds.getRepository('Course').count(), 5);
+          assert.equal(await ds.getRepository('Class').count(), 8);
+          assert.equal(await ds.getRepository('ClassSession').count(), 64);
+          assert.equal(
+            (await ds.getRepository('AttendanceRecord').count()) > 100,
+            true,
+          );
           const user = await ds
             .getRepository('User')
             .findOneBy({ email: 'admin.demo@example.com' });
@@ -241,8 +146,8 @@ test(
             true,
           );
           const meeting = await ds
-            .getRepository('ClassMeeting')
-            .findOneBy({ id: fixtures.meeting_ids[1] });
+            .getRepository('ClassSession')
+            .findOneBy({ id: fixtures.class_session_ids[1] });
           assert.equal(meeting.starts_at.toISOString(), env.SEED_MEETING_START);
           fixturesReady = true;
         },
@@ -263,7 +168,7 @@ test(
         }
       }
       await t.test(
-        'course codes, section uniqueness and references are enforced',
+        'course codes, class uniqueness and references are enforced',
         async () => {
           await rejectsInTransaction(
             (r) =>
@@ -286,22 +191,22 @@ test(
           );
           await rejectsInTransaction(
             (r) =>
-              r.query("UPDATE classrooms SET section='a' WHERE id=?", [
-                fixtures.classroom_id,
+              r.query("UPDATE classes SET section='a' WHERE id=?", [
+                fixtures.class_id,
               ]),
             3819,
           );
           await rejectsInTransaction(
             (r) =>
-              r.query("UPDATE classrooms SET section='' WHERE id=?", [
-                fixtures.classroom_id,
+              r.query("UPDATE classes SET section='' WHERE id=?", [
+                fixtures.class_id,
               ]),
             3819,
           );
           await rejectsInTransaction(
             (r) =>
-              r.query('UPDATE classrooms SET course_id=4294967295 WHERE id=?', [
-                fixtures.classroom_id,
+              r.query('UPDATE classes SET course_id=4294967295 WHERE id=?', [
+                fixtures.class_id,
               ]),
             1452,
           );
@@ -314,38 +219,90 @@ test(
           await runner.connect();
           await runner.startTransaction();
           try {
-            const repo = runner.manager.getRepository('Classroom');
+            const repo = runner.manager.getRepository('Class');
             const original = await repo.findOneBy({
-              id: fixtures.classroom_id,
+              id: fixtures.class_id,
             });
             await assert.rejects(
               () => repo.save({ ...original, id: undefined }),
               (e) => e.driverError.errno === 1062,
             );
-            await repo.save({ ...original, id: undefined, section: 'B' });
+            await repo.save({ ...original, id: undefined, section: 'C' });
             await repo.save({ ...original, id: undefined, term: '2027-S1' });
-            assert.equal(await repo.count(), 3);
+            assert.equal(await repo.count(), 10);
             const {
               ClassroomsExampleService,
             } = require('../dist/examples/classrooms-example.service');
             const list = await new ClassroomsExampleService(
               runner.manager,
             ).list(1, 20);
-            assert.equal(list.meta.total, 3);
-            assert.ok(list.data.every((row) => row.course.code === 'COS30043'));
-            assert.ok(list.data.some((row) => row.section === 'B'));
+            assert.equal(list.meta.total, 10);
+            assert.ok(list.data.some((row) => row.course.code === 'COS30043'));
+            assert.ok(list.data.some((row) => row.section === 'C'));
           } finally {
             await runner.rollbackTransaction();
             await runner.release();
           }
-          // New-model seed rows have no legacy data: rollback must refuse before DDL.
-          const before = await tableNames();
-          await assert.rejects(
-            () => ds.undoLastMigration(),
-            /Rollback would discard/,
-          );
-          assert.deepEqual(await tableNames(), before);
-          assert.equal((await ds.runMigrations()).length, 0);
+        },
+      );
+      await t.test(
+        'ENUM columns and table shapes match the target schema',
+        async () => {
+          for (const [table, column, expected, defaultValue] of [
+            ['users', 'role', "enum('student','teacher','admin')", null],
+            ['users', 'status', "enum('active','inactive')", 'active'],
+            [
+              'class_sessions',
+              'state',
+              "enum('scheduled','cancelled')",
+              'scheduled',
+            ],
+            [
+              'attendance_records',
+              'status',
+              "enum('pending','present','late','absent')",
+              'pending',
+            ],
+          ]) {
+            const [field] = await ds.query(
+              'SELECT COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',
+              [table, column],
+            );
+            assert.equal(field.COLUMN_TYPE, expected);
+            assert.equal(field.IS_NULLABLE, 'NO');
+            assert.equal(field.COLUMN_DEFAULT, defaultValue);
+            await rejectsInTransaction(
+              (r) => r.query(`UPDATE ${table} SET ${column}='unsupported'`),
+              1265,
+            );
+          }
+          for (const [table, key] of [
+            ['enrolments', 'class_id,student_id'],
+            ['attendance_records', 'class_session_id,student_id'],
+          ]) {
+            const primary = await ds.query(
+              `SHOW INDEX FROM ${table} WHERE Key_name='PRIMARY'`,
+            );
+            assert.equal(primary.map((i) => i.Column_name).join(), key);
+          }
+          for (const entity of ds.entityMetadatas) {
+            const columns = await ds.query(
+              `SHOW COLUMNS FROM ${entity.tableName}`,
+            );
+            assert.deepEqual(
+              columns.map((c) => c.Field).sort(),
+              entity.columns.map((c) => c.databaseName).sort(),
+              entity.name,
+            );
+            const indexes = await ds.query(
+              `SHOW INDEX FROM ${entity.tableName}`,
+            );
+            for (const index of entity.indices)
+              assert(
+                indexes.some((i) => i.Key_name === index.name),
+                index.name,
+              );
+          }
         },
       );
       await t.test(
@@ -354,29 +311,36 @@ test(
           await rejectsInTransaction(
             (r) =>
               r.query(
-                "INSERT INTO users(name,email,institution_member_id,role,status) VALUES ('Bad','bad@example.com','BAD','student','active')",
+                "INSERT INTO users(name,email,password_hash,role) VALUES ('Bad','UPPER@example.com','x','student')",
               ),
             3819,
           );
           await rejectsInTransaction(
             (r) =>
               r.query(
-                "INSERT INTO users(name,email,institution_member_id,role) VALUES ('Bad','UPPER@example.com','BAD','student')",
+                "INSERT INTO users(name,email,password_hash,role) VALUES ('Bad','bad@example.com','','student')",
               ),
             3819,
           );
           await rejectsInTransaction(
             (r) =>
               r.query(
-                "INSERT INTO users(name,email,institution_member_id,role) VALUES ('Dup','admin.demo@example.com','OTHER','admin')",
+                "INSERT INTO users(name,email,role) VALUES ('Bad','bad@example.com','student')",
+              ),
+            1364,
+          );
+          await rejectsInTransaction(
+            (r) =>
+              r.query(
+                "INSERT INTO users(name,email,password_hash,role) VALUES ('Dup','admin.demo@example.com','x','admin')",
               ),
             1062,
           );
           await rejectsInTransaction(
             (r) =>
               r.query(
-                'INSERT INTO enrolments(classroom_id,student_id,enrolled_at) VALUES (?,4294967295,UTC_TIMESTAMP(3))',
-                [fixtures.classroom_id],
+                'INSERT INTO enrolments(class_id,student_id) VALUES (?,4294967295)',
+                [fixtures.class_id],
               ),
             1452,
           );
@@ -387,80 +351,28 @@ test(
               ]),
             1451,
           );
+          const user = await ds
+            .getRepository('User')
+            .findOneBy({ email: 'student.one@example.com' });
+          assert.equal(user.must_change_password, false);
         },
       );
       await t.test(
-        'current enrolment is unique but historical intervals remain possible',
+        'an enrolment exists at most once per student and class',
         async () => {
           await rejectsInTransaction(
             (r) =>
               r.query(
-                'INSERT INTO enrolments(classroom_id,student_id,enrolled_at) VALUES (?,?,UTC_TIMESTAMP(3))',
-                [fixtures.classroom_id, fixtures.accounts[2].id],
+                'INSERT INTO enrolments(class_id,student_id) VALUES (?,?)',
+                [fixtures.class_id, fixtures.accounts[2].id],
               ),
             1062,
           );
-          const runner = ds.createQueryRunner();
-          await runner.connect();
-          await runner.startTransaction();
-          try {
-            await runner.query(
-              'UPDATE enrolments SET withdrawn_at=? WHERE student_id=?',
-              ['2026-10-27 00:00:00', fixtures.accounts[2].id],
-            );
-            await runner.manager.getRepository('Enrolment').save({
-              classroom_id: fixtures.classroom_id,
-              student_id: fixtures.accounts[2].id,
-              enrolled_at: new Date('2026-10-28T00:00:00Z'),
-            });
-            assert.equal(
-              await runner.manager
-                .getRepository('Enrolment')
-                .countBy({ student_id: fixtures.accounts[2].id }),
-              2,
-            );
-          } finally {
-            await runner.rollbackTransaction();
-            await runner.release();
-          }
-        },
-      );
-      await t.test(
-        'invitation digest and outstanding-token uniqueness are enforced',
-        async () => {
-          const runner = ds.createQueryRunner();
-          await runner.connect();
-          await runner.startTransaction();
-          try {
-            const invitations =
-              runner.manager.getRepository('AccountInvitation');
-            const record = {
-              user_id: fixtures.accounts[5].id,
-              created_by: fixtures.accounts[0].id,
-              token_hash: 'a'.repeat(64),
-              expires_at: new Date(Date.now() + 3600000),
-            };
-            // save() adds the generated ID to its input. Keep the template
-            // ID-free so subsequent saves insert new invitations, not updates.
-            const invitation = await invitations.save({ ...record });
-            assert.equal(
-              (await invitations.findOneBy({ id: invitation.id })).token_hash,
-              undefined,
-            );
-            await assert.rejects(
-              () => invitations.save({ ...record, token_hash: 'b'.repeat(64) }),
-              (e) => e.driverError.errno === 1062,
-            );
-            await invitations.update(invitation.id, { revoked_at: new Date() });
-            await invitations.save({ ...record, token_hash: 'b'.repeat(64) });
-            assert.equal(
-              await invitations.countBy({ user_id: record.user_id }),
-              2,
-            );
-          } finally {
-            await runner.rollbackTransaction();
-            await runner.release();
-          }
+          await rejectsInTransaction(
+            (r) =>
+              r.query('DELETE FROM classes WHERE id=?', [fixtures.class_id]),
+            1451,
+          );
         },
       );
       await t.test(
@@ -469,8 +381,8 @@ test(
           await rejectsInTransaction(
             (r) =>
               r.query(
-                'UPDATE class_meetings SET ends_at=starts_at WHERE id=?',
-                [fixtures.meeting_ids[1]],
+                'UPDATE class_sessions SET ends_at=starts_at WHERE id=?',
+                [fixtures.class_session_ids[1]],
               ),
             3819,
           );
@@ -484,34 +396,34 @@ test(
           await rejectsInTransaction(
             (r) =>
               r.query(
-                'UPDATE attendance_records SET accuracy_m=-1 WHERE status=?',
+                'UPDATE attendance_records SET distance_m=-1 WHERE status=?',
                 ['present'],
               ),
             3819,
           );
           await rejectsInTransaction(
             (r) =>
-              r.query('UPDATE classrooms SET latitude=100 WHERE id=?', [
-                fixtures.classroom_id,
+              r.query('UPDATE classes SET latitude=100 WHERE id=?', [
+                fixtures.class_id,
               ]),
             3819,
           );
-          const session = await ds
-            .getRepository('AttendanceSession')
-            .findOneBy({ meeting_id: fixtures.meeting_ids[0] });
+          const original = await ds
+            .getRepository('ClassSession')
+            .findOneBy({ id: fixtures.class_session_ids[0] });
           await rejectsInTransaction(
             (r) =>
               r.manager
-                .getRepository('AttendanceSession')
-                .save({ ...session, id: undefined }),
+                .getRepository('ClassSession')
+                .save({ ...original, id: undefined }),
             1062,
           );
           await rejectsInTransaction(
             (r) =>
-              r.manager.getRepository('AttendanceRecord').save({
-                session_id: session.id,
-                student_id: fixtures.accounts[2].id,
-              }),
+              r.query(
+                'INSERT INTO attendance_records(class_session_id,student_id) VALUES (?,?)',
+                [original.id, fixtures.accounts[2].id],
+              ),
             1062,
           );
         },
@@ -528,14 +440,21 @@ test(
           });
           const connection = app.get(DATABASE);
           try {
-            assert.equal(
-              await connection.getRepository('Classroom').count(),
-              1,
-            );
+            assert.equal(await connection.getRepository('Class').count(), 8);
           } finally {
             await app.close();
           }
           assert.equal(connection.isInitialized, false);
+        },
+      );
+      await t.test(
+        'populated baseline rollback and clean reapplication',
+        async () => {
+          await ds.undoLastMigration();
+          assert.deepEqual(await tableNames(), infrastructureTables);
+          assert.equal((await ds.runMigrations()).length, 1);
+          await seedDemo(ds, env);
+          assert.ok((await ds.getRepository('AttendanceRecord').count()) > 100);
         },
       );
     } finally {

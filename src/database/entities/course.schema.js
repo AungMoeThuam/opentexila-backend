@@ -1,5 +1,5 @@
 import { EntitySchema } from 'typeorm';
-import { idColumn, auditColumns } from './columns';
+import { idColumn } from './columns';
 
 export const CourseSchema = new EntitySchema({
   name: 'Course',
@@ -13,7 +13,6 @@ export const CourseSchema = new EntitySchema({
       collation: 'ascii_bin',
     },
     name: { type: 'varchar', length: 150 },
-    ...auditColumns(),
   },
   indices: [{ name: 'uq_courses_code', unique: true, columns: ['code'] }],
 });

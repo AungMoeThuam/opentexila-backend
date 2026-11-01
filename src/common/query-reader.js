@@ -67,6 +67,15 @@ export class QueryReader {
     return value;
   }
 
+  boolean(name, fallback = false) {
+    const value = this.source[name];
+    if (value === undefined || value === null || value === '') return fallback;
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    this.fail(name, `${name} must be either "true" or "false".`);
+    return fallback;
+  }
+
   finish() {
     if (Object.keys(this.fields).length > 0) throw validationError(this.fields);
   }

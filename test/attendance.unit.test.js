@@ -4,13 +4,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  BadRequestException,
   ForbiddenException,
   UnauthorizedException,
   ServiceUnavailableException,
 } = require('@nestjs/common');
 
 const { PATH_METADATA } = require('@nestjs/common/constants');
+const { ApiException } = require('../dist/common/api-exception');
 
 const {
   AttendanceRecordsController: AttendanceController,
@@ -492,7 +492,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('rejects unauthenticated requests with 401', async () => {
     await assert.rejects(
       () => controller.getPersonalAttendanceRecords({}, {}),
-      (error) => error instanceof UnauthorizedException,
+      (error) => error instanceof ApiException && error.getStatus() === 401,
     );
   });
 
@@ -504,7 +504,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
             {},
             { attendanceUser: { id: 2, role } },
           ),
-        (error) => error instanceof ForbiddenException,
+        (error) => error instanceof ApiException && error.getStatus() === 403,
       );
     }
   });
@@ -521,7 +521,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
       await assert.rejects(
         () =>
           controller.getPersonalAttendanceRecords({ page: invalid }, validReq),
-        (error) => error instanceof BadRequestException,
+        (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
   });
@@ -531,7 +531,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
       await assert.rejects(
         () =>
           controller.getPersonalAttendanceRecords({ limit: invalid }, validReq),
-        (error) => error instanceof BadRequestException,
+        (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
   });
@@ -544,7 +544,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
             { classId: invalid },
             validReq,
           ),
-        (error) => error instanceof BadRequestException,
+        (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
   });
@@ -554,7 +554,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
       await assert.rejects(
         () =>
           controller.getPersonalAttendanceRecords({ from: invalid }, validReq),
-        (error) => error instanceof BadRequestException,
+        (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
 
@@ -567,7 +567,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
           },
           validReq,
         ),
-      (error) => error instanceof BadRequestException,
+      (error) => error instanceof ApiException && error.getStatus() === 422,
     );
   });
 
@@ -578,7 +578,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
           { status: 'unknown' },
           validReq,
         ),
-      (error) => error instanceof BadRequestException,
+      (error) => error instanceof ApiException && error.getStatus() === 422,
     );
   });
 
@@ -590,7 +590,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
             { includeCancelled: invalid },
             validReq,
           ),
-        (error) => error instanceof BadRequestException,
+        (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
   });

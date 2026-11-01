@@ -147,6 +147,24 @@ test('QueryReader.oneOf accepts only listed values', () => {
   }
 });
 
+test('QueryReader.boolean parses boolean values and rejects others', () => {
+  assert.equal(new QueryReader({}).boolean('includeCancelled', false), false);
+  assert.equal(
+    new QueryReader({ includeCancelled: 'true' }).boolean('includeCancelled'),
+    true,
+  );
+  assert.equal(
+    new QueryReader({ includeCancelled: 'false' }).boolean('includeCancelled'),
+    false,
+  );
+  const bad = new QueryReader({ includeCancelled: 'yes' });
+  bad.boolean('includeCancelled');
+  assertValidationError(
+    failure(() => bad.finish()),
+    'includeCancelled',
+  );
+});
+
 test('QueryReader.finish reports every bad field in one error', () => {
   const reader = new QueryReader({ page: '0', limit: '101', status: 'x' });
   reader.integer('page', { max: 10000, fallback: 1 });

@@ -9,7 +9,7 @@ export class AttendanceExceptionFilter extends BaseExceptionFilter {
     const request = http.getRequest();
     const path = (request.originalUrl || request.url).split('?')[0];
     if (
-      !/^\/api\/v1\/(me\/class-sessions|class-sessions(?:\/[^/]+(?:\/check-ins)?)?)\/?$/.test(
+      !/^\/api\/v1\/(me\/attendance-records|attendance\/me|me\/class-sessions|class-sessions(?:\/[^/]+(?:\/(check-ins|records))?)?)\/?$/.test(
         path,
       )
     )

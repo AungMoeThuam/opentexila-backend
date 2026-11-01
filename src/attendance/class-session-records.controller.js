@@ -5,16 +5,13 @@ import {
   Param,
   Query,
   Req,
-  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { AttendanceGuard } from './attendance.guard';
-import { ApiExceptionFilter } from '../common/api-exception.filter';
 import { ClassSessionRecordsService } from './class-session-records.service';
 
 @Controller('class-sessions')
 @UseGuards(AttendanceGuard)
-@UseFilters(ApiExceptionFilter)
 export class ClassSessionRecordsController {
   constructor(records) {
     this.records = records;

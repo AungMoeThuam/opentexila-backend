@@ -1,0 +1,173 @@
+require('reflect-metadata');
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  ApiException,
+  validationError,
+  notFound,
+} = require('../dist/common/api-exception');
+const { ApiExceptionFilter } = require('../dist/common/api-exception.filter');
+const { QueryReader, pageMeta } = require('../dist/common/query-reader');
+
+function failure(work) {
+  try {
+    work();
+  } catch (error) {
+    return error;
+  }
+  assert.fail('Expected the work to throw.');
+}
+
+function assertValidationError(error, ...names) {
+  assert.ok(error instanceof ApiException);
+  assert.equal(error.getStatus(), 422);
+  const { code, message, fields } = error.getResponse().error;
+  assert.equal(code, 'VALIDATION_ERROR');
+  assert.equal(message, 'Please correct the highlighted fields.');
+  assert.deepEqual(Object.keys(fields).sort(), names.sort());
+}
+
+test('ApiException helpers build the shared error envelope', () => {
+  const missing = notFound('Class session not found.');
+  assert.equal(missing.getStatus(), 404);
+  assert.deepEqual(missing.getResponse(), {
+    error: {
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'Class session not found.',
+      fields: {},
+    },
+  });
+  const invalid = validationError({ page: 'bad' });
+  assert.equal(invalid.getStatus(), 422);
+  assert.deepEqual(invalid.getResponse().error.fields, { page: 'bad' });
+});
+
+test('ApiExceptionFilter writes the status and the error envelope', () => {
+  const sent = {};
+  const response = {
+    status(code) {
+      sent.status = code;
+      return this;
+    },
+    json(body) {
+      sent.body = body;
+      return this;
+    },
+  };
+  const host = { switchToHttp: () => ({ getResponse: () => response }) };
+  new ApiExceptionFilter().catch(
+    new ApiException(404, 'RESOURCE_NOT_FOUND', 'x'),
+    host,
+  );
+  assert.equal(sent.status, 404);
+  assert.deepEqual(sent.body, {
+    error: { code: 'RESOURCE_NOT_FOUND', message: 'x', fields: {} },
+  });
+});
+
+test('QueryReader.integer applies fallback and accepts valid integers', () => {
+  const options = { max: 10000, fallback: 1 };
+  assert.equal(new QueryReader({}).integer('page', options), 1);
+  const reader = new QueryReader({ page: '3' });
+  assert.equal(reader.integer('page', options), 3);
+  assert.doesNotThrow(() => reader.finish());
+  assert.equal(new QueryReader({}).integer('classId', { max: 9 }), undefined);
+});
+
+test('QueryReader.integer rejects every malformed value', () => {
+  for (const value of ['0', '-1', '1.5', '1e2', '', '10001', ['1', '2']]) {
+    const reader = new QueryReader({ page: value });
+    reader.integer('page', { max: 10000, fallback: 1 });
+    assertValidationError(
+      failure(() => reader.finish()),
+      'page',
+    );
+  }
+});
+
+test('QueryReader.integer enforces required path ids and the id maximum', () => {
+  const options = { max: 4294967295, required: true };
+  for (const source of [
+    {},
+    { classSessionId: '4294967296' },
+    { classSessionId: '1abc' },
+  ]) {
+    const reader = new QueryReader(source);
+    reader.integer('classSessionId', options);
+    assertValidationError(
+      failure(() => reader.finish()),
+      'classSessionId',
+    );
+  }
+  const reader = new QueryReader({ classSessionId: '4294967295' });
+  assert.equal(reader.integer('classSessionId', options), 4294967295);
+  assert.doesNotThrow(() => reader.finish());
+});
+
+test('QueryReader.timestamp needs an explicit timezone', () => {
+  const instant = '2026-10-29T01:00:00.000Z';
+  for (const value of [instant, '2026-10-29T09:00:00+08:00']) {
+    const reader = new QueryReader({ from: value });
+    assert.equal(reader.timestamp('from').toISOString(), instant);
+    assert.doesNotThrow(() => reader.finish());
+  }
+  assert.equal(new QueryReader({}).timestamp('from'), undefined);
+  for (const value of [
+    '2026-10-29T01:00:00',
+    '2026-10-29',
+    'abc',
+    '2026-13-40T00:00:00Z',
+    '2026-02-30T00:00:00Z',
+    '2026-04-31T00:00:00Z',
+    '2026-02-29T00:00:00Z',
+    ['2026-10-29T01:00:00Z', '2026-10-30T01:00:00Z'],
+  ]) {
+    const reader = new QueryReader({ from: value });
+    reader.timestamp('from');
+    assertValidationError(
+      failure(() => reader.finish()),
+      'from',
+    );
+  }
+});
+
+test('QueryReader.oneOf accepts only listed values', () => {
+  const allowed = ['pending', 'present', 'late', 'absent'];
+  const reader = new QueryReader({ status: 'late' });
+  assert.equal(reader.oneOf('status', allowed), 'late');
+  assert.doesNotThrow(() => reader.finish());
+  assert.equal(new QueryReader({}).oneOf('status', allowed), undefined);
+  for (const value of ['LATE', 'x', '', ['late', 'late']]) {
+    const bad = new QueryReader({ status: value });
+    bad.oneOf('status', allowed);
+    assertValidationError(
+      failure(() => bad.finish()),
+      'status',
+    );
+  }
+});
+
+test('QueryReader.finish reports every bad field in one error', () => {
+  const reader = new QueryReader({ page: '0', limit: '101', status: 'x' });
+  reader.integer('page', { max: 10000, fallback: 1 });
+  reader.integer('limit', { max: 100, fallback: 20 });
+  reader.oneOf('status', ['pending']);
+  reader.fail('from', 'from must be earlier than to.');
+  assertValidationError(
+    failure(() => reader.finish()),
+    'page',
+    'limit',
+    'status',
+    'from',
+  );
+});
+
+test('pageMeta computes total pages', () => {
+  assert.deepEqual(pageMeta(2, 5, 21), {
+    page: 2,
+    limit: 5,
+    total: 21,
+    totalPages: 5,
+  });
+  assert.equal(pageMeta(1, 20, 0).totalPages, 0);
+});

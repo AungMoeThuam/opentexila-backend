@@ -21,9 +21,7 @@ import {
   lockClassSession,
   materialiseLockedRoster,
 } from './roster.service';
-
-const iso = (value: Date | string | null | undefined): string | null =>
-  value == null ? null : new Date(value).toISOString();
+import { toIso } from './class-summary';
 
 export function attendanceDto(
   record: AttendanceRecordEntity | null | undefined,
@@ -33,7 +31,7 @@ export function attendanceDto(
         class_session_id: record.class_session_id,
         student_id: record.student_id,
         status: record.status,
-        checked_in_at: iso(record.checked_in_at),
+        checked_in_at: toIso(record.checked_in_at),
         distance_m:
           record.distance_m == null
             ? null
@@ -103,9 +101,9 @@ async function sessionDto(
       lecturer,
       room_label: session.room_label,
     },
-    starts_at: iso(session.starts_at),
-    late_after: iso(session.late_after),
-    ends_at: iso(session.ends_at),
+    starts_at: toIso(session.starts_at),
+    late_after: toIso(session.late_after),
+    ends_at: toIso(session.ends_at),
     state: session.state,
     availability: availability(session, now),
     my_attendance: attendanceDto(record),

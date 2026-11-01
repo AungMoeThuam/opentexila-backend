@@ -9,23 +9,21 @@ export const referenceColumn = (nullable = false) => ({
   unsigned: true,
   nullable,
 });
+// Composite primary key member that is also a foreign key.
+export const keyReferenceColumn = () => ({
+  type: 'int',
+  unsigned: true,
+  primary: true,
+});
 export const dateColumn = (nullable = false) => ({
   type: 'datetime',
   precision: 3,
   nullable,
 });
-export const auditColumns = () => ({
-  created_at: {
-    ...dateColumn(),
-    createDate: true,
-    default: () => 'CURRENT_TIMESTAMP(3)',
-  },
-  updated_at: {
-    ...dateColumn(),
-    updateDate: true,
-    default: () => 'CURRENT_TIMESTAMP(3)',
-    onUpdate: 'CURRENT_TIMESTAMP(3)',
-  },
+export const createdAtColumn = () => ({
+  ...dateColumn(),
+  createDate: true,
+  default: () => 'CURRENT_TIMESTAMP(3)',
 });
 export const relation = (target, column, nullable = false) => ({
   type: 'many-to-one',
@@ -40,5 +38,4 @@ export const locationColumns = () => ({
   latitude: { type: 'decimal', precision: 9, scale: 6 },
   longitude: { type: 'decimal', precision: 9, scale: 6 },
   radius_m: { type: 'decimal', precision: 10, scale: 2 },
-  max_accuracy_m: { type: 'decimal', precision: 10, scale: 2 },
 });

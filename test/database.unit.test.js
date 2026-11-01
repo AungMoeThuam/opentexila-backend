@@ -40,7 +40,7 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
   const ds = new DataSource(databaseOptions(env));
   // Build metadata only: no connection, SQL or external database.
   await ds.buildMetadatas();
-  assert.equal(ds.entityMetadatas.length, 7);
+  assert.equal(ds.entityMetadatas.length, 6);
   for (const entity of ds.entityMetadatas) {
     assert.equal(
       new Set(entity.columns.map((c) => c.databaseName)).size,
@@ -55,24 +55,37 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
   const column = (name, field) =>
     ds.getMetadata(name).columns.find((c) => c.propertyName === field);
   assert.equal(column('User', 'password_hash').isSelect, false);
-  assert.equal(column('AccountInvitation', 'token_hash').isSelect, false);
-  assert.equal(column('Enrolment', 'active_student_id').isInsert, false);
-  assert.equal(
-    column('AccountInvitation', 'outstanding_user_id').isUpdate,
-    false,
-  );
-  assert.equal(column('AttendanceSession', 'code_hash'), undefined);
-  assert.equal(column('AttendanceSession', 'opened_by'), undefined);
-  assert.equal(column('ClassMeeting', 'starts_at').precision, 3);
+  assert.equal(column('Class', 'course_id').isNullable, false);
+  assert.equal(column('Class', 'section').isNullable, false);
+  for (const name of ['code', 'name', 'subject'])
+    assert.equal(column('Class', name), undefined);
   assert.ok(
     ds
-      .getMetadata('AttendanceSession')
+      .getMetadata('Class')
       .indices.some(
         (i) =>
           i.isUnique &&
-          i.columns.map((c) => c.propertyName).join() === 'meeting_id',
+          i.columns.map((c) => c.propertyName).join() ===
+            'course_id,term,section',
       ),
   );
+  assert.equal(column('User', 'password_hash').isNullable, false);
+  assert.equal(column('User', 'institution_member_id'), undefined);
+  assert.equal(column('Enrolment', 'class_id').isPrimary, true);
+  assert.equal(column('Enrolment', 'student_id').isPrimary, true);
+  assert.equal(column('AttendanceRecord', 'class_session_id').isPrimary, true);
+  assert.equal(column('AttendanceRecord', 'student_id').isPrimary, true);
+  assert.equal(column('ClassSession', 'starts_at').precision, 3);
+  for (const name of [
+    'AccountInvitation',
+    'AttendanceRegister',
+    'CourseSection',
+  ])
+    assert.equal(
+      ds.entityMetadatas.some((e) => e.name === name),
+      false,
+      name,
+    );
 });
 
 test('seed rejects production and remote databases before any connection use', async () => {

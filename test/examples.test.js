@@ -6,15 +6,12 @@ const { Module, Global } = require('@nestjs/common');
 const { NestFactory } = require('@nestjs/core');
 const { ExamplesModule } = require('../dist/examples/examples.module');
 const { DATABASE } = require('../dist/database/database.constants');
-const {
-  ClassroomSchema,
-} = require('../dist/database/entities/classroom.schema');
+const { ClassSchema } = require('../dist/database/entities/class.schema');
 
 const fixture = {
   id: 1,
-  code: 'COS30043-DEMO',
-  name: 'Interface Design and Development',
-  subject: 'COS30043',
+  section: 'DEMO',
+  course: { id: 7, code: 'COS30043', name: 'Interface Design and Development' },
   term: 'DEMO',
   room_label: 'Demo room',
 };
@@ -24,7 +21,20 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
   const repository = {
     async findAndCount(options) {
       calls.push(options);
-      return [[{ ...fixture, latitude: '0.000000', teacher_id: 99 }], 21];
+      return [
+        [
+          {
+            ...fixture,
+            code: 'LEGACY',
+            name: 'Legacy name',
+            subject: 'Legacy subject',
+            course: { ...fixture.course, created_at: 'private extra field' },
+            latitude: '0.000000',
+            teacher_id: 99,
+          },
+        ],
+        21,
+      ];
     },
     async findOne(options) {
       calls.push(options);
@@ -39,7 +49,7 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
         provide: DATABASE,
         useValue: {
           getRepository(schema) {
-            assert.equal(schema, ClassroomSchema);
+            assert.equal(schema, ClassSchema);
             return repository;
           },
         },
@@ -55,22 +65,27 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
   await app.listen(0, '127.0.0.1');
   const base = `${await app.getUrl()}/api/v1/examples/classrooms`;
 
-  await t.test(
-    'list defaults, selected fields and active-only filter',
-    async () => {
-      const response = await fetch(base);
-      assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), {
-        data: [fixture],
-        meta: { page: 1, limit: 20, total: 21, totalPages: 2 },
-      });
-      assert.equal(calls.at(-1).where.archived_at.type, 'isNull');
-      assert.equal(calls.at(-1).skip, 0);
-      assert.equal(calls.at(-1).take, 20);
-      assert.deepEqual(calls.at(-1).order, { id: 'ASC' });
-      assert.deepEqual(Object.keys(calls.at(-1).select), Object.keys(fixture));
-    },
-  );
+  await t.test('list defaults and selected fields', async () => {
+    const response = await fetch(base);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      data: [fixture],
+      meta: { page: 1, limit: 20, total: 21, totalPages: 2 },
+    });
+    assert.equal(calls.at(-1).skip, 0);
+    assert.equal(calls.at(-1).take, 20);
+    assert.deepEqual(calls.at(-1).order, { id: 'ASC' });
+    assert.deepEqual(calls.at(-1).relations, { course: true });
+    assert.deepEqual(calls.at(-1).select.course, {
+      id: true,
+      code: true,
+      name: true,
+    });
+    assert.deepEqual(
+      Object.keys(calls.at(-1).select).sort(),
+      Object.keys(fixture).sort(),
+    );
+  });
 
   await t.test('custom pagination is passed to the repository', async () => {
     const response = await fetch(`${base}?page=3&limit=5`);
@@ -111,19 +126,15 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
     },
   );
 
-  await t.test(
-    'single record and missing/archived record handling',
-    async () => {
-      const response = await fetch(`${base}/1`);
-      assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { data: fixture });
-      assert.equal(calls.at(-1).where.id, 1);
-      assert.equal(calls.at(-1).where.archived_at.type, 'isNull');
-      const missing = await fetch(`${base}/999`);
-      assert.equal(missing.status, 404);
-      assert.equal((await missing.json()).message, 'Classroom not found.');
-    },
-  );
+  await t.test('single record and missing record handling', async () => {
+    const response = await fetch(`${base}/1`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { data: fixture });
+    assert.equal(calls.at(-1).where.id, 1);
+    const missing = await fetch(`${base}/999`);
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).message, 'Classroom not found.');
+  });
 
   await t.test('empty lists and unexpected database errors', async () => {
     repository.findAndCount = async () => [[], 0];

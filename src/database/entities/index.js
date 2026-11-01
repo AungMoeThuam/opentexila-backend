@@ -1,26 +1,23 @@
+import { CourseSchema } from './course.schema';
 import { UserSchema } from './user.schema';
-import { InvitationSchema } from './invitation.schema';
-import { ClassroomSchema } from './classroom.schema';
+import { ClassSchema } from './class.schema';
 import { EnrolmentSchema } from './enrolment.schema';
-import { MeetingSchema } from './meeting.schema';
-import { AttendanceSessionSchema } from './attendance-session.schema';
+import { ClassSessionSchema } from './class-session.schema';
 import { AttendanceRecordSchema } from './attendance-record.schema';
 
 export {
+  CourseSchema,
   UserSchema,
-  InvitationSchema,
-  ClassroomSchema,
+  ClassSchema,
   EnrolmentSchema,
-  MeetingSchema,
-  AttendanceSessionSchema,
+  ClassSessionSchema,
   AttendanceRecordSchema,
 };
 export const entities = [
+  CourseSchema,
   UserSchema,
-  InvitationSchema,
-  ClassroomSchema,
+  ClassSchema,
   EnrolmentSchema,
-  MeetingSchema,
-  AttendanceSessionSchema,
+  ClassSessionSchema,
   AttendanceRecordSchema,
 ];

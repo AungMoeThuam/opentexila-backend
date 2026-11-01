@@ -1,8 +1,8 @@
-# OpenTexila API documentation
+# OpenTexila API Documentation
 
-**Status: database foundation and development-only sample API implemented.** The backend connects to MySQL through a shared TypeORM provider. The [sample classroom API](examples.md) provides two working read routes. Authentication and attendance APIs remain planned. Start with the [database design](../database-design.md) and [developer guide](../database-development.md).
+**Status: database foundation and development-only sample API implemented; feature API contracts finalised.** The backend connects to MySQL through a shared TypeORM provider. The [sample classroom API](examples.md) provides two working read routes in development. Authentication, enrolment and attendance APIs are specified in full across the modular feature documents below. Start with the [database design](../database-design.md) and [developer guide](../database-development.md).
 
-This documentation belongs to the backend repository. The separate frontend repository should link to it rather than duplicate the API contract.
+This documentation belongs to the backend repository. The separate frontend repository links to these files rather than duplicating the API contract.
 
 ## Feature references
 
@@ -10,55 +10,152 @@ This documentation belongs to the backend repository. The separate frontend repo
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
 - [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
+- **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
+- **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
+- **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), and the internal finalisation service contract.
+- **[Sample Classroom API](examples.md)** — Implemented development-only list/detail endpoints (`GET /examples/classrooms`, `GET /examples/classrooms/:id`) and a reference controller/service/test pattern for teammates.
+
+## Master endpoint index
+
+All paths below are relative to `/api/v1`.
+
+| Domain | Method | Path | Allowed roles | Purpose | Spec |
+| --- | --- | --- | --- | --- | --- |
+| **Auth** | `GET` | `/auth/csrf` | Guest / Any | Initialise session and return a session-bound CSRF token | [auth.md](auth.md#get-authcsrf) |
+| **Auth** | `POST` | `/auth/login` | Guest | Authenticate an active account and establish a cookie session | [auth.md](auth.md#post-authlogin) |
+| **Auth** | `POST` | `/auth/logout` | Any signed-in | Destroy the current server session and clear cookie | [auth.md](auth.md#post-authlogout) |
+| **Auth** | `GET` | `/auth/me` | Any signed-in | Restore the current user's safe profile and role | [auth.md](auth.md#get-authme) |
+| **Auth** | `POST` | `/auth/change-password` | Any signed-in | Change own password and clear `must_change_password` | [auth.md](auth.md#post-authchange-password) |
+| **Auth** | `POST` | `/admin/users` | `admin` | Create a student/lecturer account with a temporary password | [auth.md](auth.md#post-adminusers) |
+| **Auth** | `POST` | `/admin/users/:id/reset-password` | `admin` | Set a new temporary password and bump `session_version` | [auth.md](auth.md#post-adminusersidreset-password) |
+| **Enrolments** | `GET` | `/classes` | `admin` | List classes with course, section, term, lecturer and room | [enrolments.md](enrolments.md#get-classes) |
+| **Enrolments** | `GET` | `/me/classes` | `student`, `teacher` | List student's enrolled classes or lecturer's assigned classes | [enrolments.md](enrolments.md#get-meclasses) |
+| **Enrolments** | `GET` | `/classes/:classId/enrolments` | `admin`, assigned `teacher` | List enrolled students for a class with class context | [enrolments.md](enrolments.md#get-classesclassidenrolments) |
+| **Enrolments** | `POST` | `/classes/:classId/enrolments` | `admin` | Enrol an active student into a class | [enrolments.md](enrolments.md#post-classesclassidenrolments) |
+| **Enrolments** | `DELETE` | `/classes/:classId/enrolments/:studentId` | `admin` | Remove a student's enrolment from a class | [enrolments.md](enrolments.md#delete-classesclassidenrolmentsstudentid) |
+| **Attendance** | `GET` | `/me/class-sessions` | `student`, `teacher` | List scheduled class sessions for enrolled/assigned classes | [attendance.md](attendance.md#get-meclass-sessions) |
+| **Attendance** | `GET` | `/class-sessions/:classSessionId` | Authorised `student`, `teacher`, `admin` | Class session detail, availability, and student check-in status | [attendance.md](attendance.md#get-class-sessionsclasssessionid) |
+| **Attendance** | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Validate browser geolocation and record `present` or `late` | [attendance.md](attendance.md#post-class-sessionsclasssessionidcheck-ins) |
+| **Attendance** | `GET` | `/class-sessions/:classSessionId/records` | Assigned `teacher`, `admin` | Read-only attendance roster for a class session | [attendance.md](attendance.md#get-class-sessionsclasssessionidrecords) |
+| **Attendance** | `GET` | `/me/attendance-records` | `student` | Personal attendance history across class sessions | [attendance.md](attendance.md#get-meattendance-records) |
+| **Examples** | `GET` | `/examples/classrooms` | Dev-only (`NODE_ENV=development`) | Sample paginated classroom list | [examples.md](examples.md#get-examplesclassrooms) |
+| **Examples** | `GET` | `/examples/classrooms/:id` | Dev-only (`NODE_ENV=development`) | Sample single classroom detail | [examples.md](examples.md#get-examplesclassroomsid) |
 
 ## Base URL
 
-Local development: `http://127.0.0.1:3000/api/v1` with the default host and port. The deployed URL is not decided yet. Paths in the feature documents are relative to `/api/v1`.
+Local development: `http://127.0.0.1:3000/api/v1` with the default host and port. For the shared Docker stack, the browser uses `/api/v1` through `http://localhost:5173`; Vite proxies to the API. `BACKEND_PORT` and `FRONTEND_DEV_PORT` can change those host ports; see [Docker configuration](../DOCKER.md#configuration). Paths in the feature documents are relative to `/api/v1`.
 
 Separate source repositories do not require separate hosting origins. If the frontend and API use different origins, their credential, CORS, cookie and CSRF settings must be configured together.
 
-## Planned conventions
+## Resource route naming
 
-| Area           | Convention                                                                                                                                         |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Requests       | JSON bodies with `Content-Type: application/json`, where a body is required.                                                                       |
-| Authentication | Server-side sessions using HttpOnly cookies; no bearer-token flow is planned.                                                                      |
-| CSRF           | Fetch `data.csrfToken` from `/auth/csrf`; send `X-CSRF-Token` with mutations, including login and activation. See the planned [auth contract](auth.md). |
-| Roles          | `student`, `teacher`, `admin`; display `teacher` as Lecturer in the interface.                                                                     |
-| Dates          | ISO 8601 timestamps with an explicit timezone, stored and returned in UTC.                                                                         |
-| Permissions    | Enforce account status, role, class membership and resource ownership on the server.                                                               |
-| Collections    | Use `data` and pagination `meta`; filter permissions before calculating totals.                                                                    |
+Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`), explicit camelCase path/query IDs (`classId`, `classSessionId`, `studentId`, `courseId`) and snake_case JSON property names (`class_id`, `class_session_id`, `student_id`, `starts_at`). API resources use `/api/v1`, not `/student`, `/lecturer` or `/admin` prefixes (except admin-only account management under `/admin/users`). Reuse endpoints with server-enforced role/resource scoping. `/me` always refers to the authenticated user and never accepts a user/student ID parameter.
 
-Cookie settings and names, exact request schemas, pagination limits and endpoint-specific response fields will be finalised during implementation. Examples in these documents are proposed payloads, not tested contracts.
+## Shared HTTP rules
 
-## Planned status codes
+- **Base path & Content-Type**: `/api/v1`. Send and return JSON; mutations with a body use `Content-Type: application/json`.
+- **Authentication & CSRF**: Authenticate with the shared server-side HttpOnly cookie session (`credentials: 'include'`). Obtain `data.csrfToken` from `GET /auth/csrf` and send `X-CSRF-Token` on all mutations (`POST`, `PATCH`, `DELETE`), including `POST /auth/login`.
+- **Success envelopes**:
+  - Single resource / mutation success (`200 OK` or `201 Created`):
+    ```json
+    {
+      "data": { ... }
+    }
+    ```
+  - Collection success (`200 OK`):
+    ```json
+    {
+      "data": [ ... ],
+      "meta": {
+        "page": 1,
+        "limit": 20,
+        "total": 0,
+        "totalPages": 0
+      }
+    }
+    ```
+    Collection endpoints may also include a documented top-level `context` object (for example, `context.class` on enrolment rosters or `context` on session attendance rosters).
+  - Deletion / logout success (`204 No Content`): Empty response body.
+- **Keys & data types**:
+  - Surrogate IDs (`users.id`, `courses.id`, `classes.id`, `class_sessions.id`) are positive JSON integers.
+  - Composite keys use `(class_id, student_id)` for `enrolments` and `(class_session_id, student_id)` for `attendance_records`.
+  - Dates are ISO 8601 UTC strings (`"2026-10-29T01:00:00.000Z"`); optional timestamps/fields are explicit `null`.
+  - JSON property names use `snake_case` except pagination `totalPages` and `csrfToken`; path and query parameters use `camelCase`.
+- **Pagination**:
+  - `page` defaults to `1` (integer `1`–`10000`).
+  - `limit` defaults to `20` (integer `1`–`100`).
+  - `total` is the authorised, filtered count before pagination; `totalPages = ceil(total / limit)` (`0` when `total` is `0`).
+  - Requesting a `page` beyond `totalPages` returns `data: []` with the real `total` and `totalPages`.
+- **Date range filters**:
+  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`.
+- **Security & privacy**:
+  - Omit `password_hash`, `auth_sessions` payloads, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
+  - Never include SQL queries or stack traces in error responses.
+  - Set `Cache-Control: no-store` on authenticated and CSRF responses.
+  - While `users.must_change_password` is `true`, only `GET /auth/csrf`, `GET /auth/me`, `POST /auth/change-password`, and `POST /auth/logout` are permitted; all other authenticated endpoints return `403 PASSWORD_CHANGE_REQUIRED`.
 
-| Status | Meaning                                           |
-| ------ | ------------------------------------------------- |
-| 200    | Successful read or update.                        |
-| 201    | Resource created.                                 |
-| 204    | Successful operation with no response body.       |
-| 401    | Authentication missing or invalid.                |
-| 403    | Access denied.                                    |
-| 404    | Resource missing or not visible to the requester. |
-| 409    | Conflict with current resource state.             |
-| 422    | Invalid request data.                             |
-| 429    | Request rate limit exceeded.                      |
+## Shared error envelope (all non-2xx responses)
 
-Proposed application error format:
+All feature endpoints return errors in the following envelope (the development-only `/examples/classrooms` routes retain NestJS default errors; see [examples.md](examples.md#errors)):
 
 ```json
 {
   "error": {
-    "code": "LOCATION_INACCURATE",
-    "message": "Your location is not accurate enough. No attendance was recorded. Please try again.",
+    "code": "VALIDATION_ERROR",
+    "message": "Please correct the highlighted fields.",
+    "fields": {
+      "page": "Must be an integer between 1 and 10000."
+    }
+  }
+}
+```
+
+- `code` is a stable uppercase string for frontend branching.
+- `message` is a safe, human-readable summary.
+- `fields` is always a JSON object mapping input field names to a single message string; use `{}` when the error is not tied to a specific input field.
+- Never wrap `error` inside `data` or return HTTP `200` for failures.
+
+### Standard HTTP status and error codes
+
+| HTTP | `error.code` | When |
+| --- | --- | --- |
+| `400` | `BAD_REQUEST` | Malformed JSON body or unreadable request syntax |
+| `401` | `UNAUTHENTICATED` | Missing, expired, or invalidated authentication session |
+| `401` | `INVALID_CREDENTIALS` | Wrong email/password or inactive account on login |
+| `403` | `FORBIDDEN` | Authenticated user's role cannot perform this operation |
+| `403` | `ACCOUNT_INACTIVE` | Authenticated account's `status` is `inactive` (if session not yet cleared) |
+| `403` | `PASSWORD_CHANGE_REQUIRED` | User has `must_change_password = true` and called a non-exempt endpoint |
+| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` header on a mutation |
+| `403` | `NOT_ELIGIBLE` | Student is not in the class session's materialised attendance roster |
+| `404` | `RESOURCE_NOT_FOUND` | Target resource does not exist or is outside the caller's authorised scope |
+| `409` | `EMAIL_ALREADY_EXISTS` | Creating a user with an email that already exists in `users` |
+| `409` | `ENROLMENT_ALREADY_EXISTS` | Student is already enrolled in the target class (`(class_id, student_id)`) |
+| `409` | `CLASS_NOT_STARTED` | Check-in attempted before `class_sessions.starts_at` |
+| `409` | `CLASS_ENDED` | Check-in attempted at or after `class_sessions.ends_at` |
+| `409` | `CLASS_CANCELLED` | Check-in attempted on a class session with `state = 'cancelled'` |
+| `422` | `VALIDATION_ERROR` | Invalid path ID, query parameter, body field, unknown status, or invalid date range |
+| `422` | `STUDENT_NOT_ELIGIBLE` | Target user for enrolment is not an active `student` |
+| `422` | `LOCATION_STALE` | Geolocation `reading_timestamp` fails freshness/future-time policy |
+| `422` | `LOCATION_INACCURATE` | Geolocation `accuracy_m` exceeds the service accuracy threshold |
+| `422` | `OUTSIDE_ALLOWED_AREA` | Geolocation distance exceeds the class session's `radius_m` geofence |
+| `429` | `RATE_LIMITED` | Request rate limit reached (include `Retry-After` response header) |
+| `500` | `INTERNAL_ERROR` | Unexpected server or database failure; generic message with no internal details |
+
+Example `404 Not Found`:
+
+```json
+{
+  "error": {
+    "code": "RESOURCE_NOT_FOUND",
+    "message": "The requested resource was not found.",
     "fields": {}
   }
 }
 ```
 
-This error format is not implemented by the current scaffold.
+## Updating this reference
 
-## Updating the reference
-
-For each implemented endpoint, document its method, path, access rules, headers, parameters, request body, success response, error responses and validation rules. Mark it implemented only after verification. Keep examples fictional and omit real passwords, session cookies and invitation tokens.
+When implementing or updating an endpoint:
+1. Verify that its method, path, role guard, query/body validation, success DTO, and error codes match its feature document ([`auth.md`](auth.md), [`enrolments.md`](enrolments.md), or [`attendance.md`](attendance.md)).
+2. Coordinate any contract adjustments with the paired frontend issue/owner before merging.
+3. Update the status banner in the feature document once the endpoint is merged and verified by automated tests.

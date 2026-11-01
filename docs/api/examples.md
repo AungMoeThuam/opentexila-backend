@@ -4,7 +4,7 @@ Implemented in JavaScript as a reference for teammates. These read-only routes u
 
 ## Try it
 
-Follow the backend README to configure `.env`, start MySQL, run migrations and optionally seed demo data, then run `npm run start:dev`.
+Run `npm run stack:up` from the backend to start MySQL, apply migrations and start both applications. Alternatively, follow the [README host workflow](../../README.md#start-locally-without-application-containers) to run NestJS outside Docker. Demo seeding is optional in either workflow; an unseeded database returns an empty list. Do not start a second host API on the stack’s API port.
 
 ```sh
 curl 'http://127.0.0.1:3000/api/v1/examples/classrooms?page=1&limit=20'
@@ -12,11 +12,15 @@ curl 'http://127.0.0.1:3000/api/v1/examples/classrooms?page=1&limit=20'
 curl 'http://127.0.0.1:3000/api/v1/examples/classrooms/1'
 ```
 
+The shared-stack frontend proxy also exposes these paths at `http://localhost:5173/api/v1/examples/classrooms` (default ports).
+
 No authentication headers or request bodies are required for these development examples. No write routes are provided.
+
+The existing `/examples/classrooms` URLs, controller/service filenames and error text are retained for compatibility. The underlying entity is `Class`, stored in `classes`. A URL name does not imply an old database table.
 
 ## GET /examples/classrooms
 
-Returns non-archived classrooms in ascending ID order. Optional query parameters:
+Returns classes in ascending ID order. Optional query parameters:
 
 | Parameter | Default | Allowed values          |
 | --------- | ------- | ----------------------- |
@@ -32,9 +36,12 @@ Example `200 OK` (fictional values):
   "data": [
     {
       "id": 1,
-      "code": "COS30043-DEMO",
-      "name": "Interface Design and Development",
-      "subject": "COS30043",
+      "section": "DEMO",
+      "course": {
+        "id": 1,
+        "code": "COS30043",
+        "name": "Interface Design and Development"
+      },
       "term": "DEMO",
       "room_label": "Demo room"
     }
@@ -47,9 +54,11 @@ An empty database returns `data: []`, `total: 0`, `totalPages: 0`. A page beyond
 
 ## GET /examples/classrooms/:id
 
-Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing or archived classroom returns `404 Not Found`.
+Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing classroom returns `404 Not Found`.
 
-Only `id`, `code`, `name`, `subject`, `term` and `room_label` are returned. Coordinates, geofence configuration, teacher information and other entity fields are excluded.
+Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Coordinates, geofence configuration, teacher information and other entity fields are excluded. Class rows do not contain course code/name/subject duplicates.
+
+This replaces the earlier flat classroom payload. Clients should use `course.code` and `course.name`, and display the separate `section`. Apply the consolidated initial migration to a fresh database before running this API. Existing old development databases need separate recreation; see the [baseline setup guide](../database-refactor-migration.md).
 
 ## Errors
 
@@ -64,7 +73,7 @@ These examples use Nest's built-in error responses, not the proposed application
 ```
 
 - **400**: invalid pagination or ID.
-- **404**: classroom missing/archived, or sample routes not registered outside development.
+- **404**: classroom missing, or sample routes not registered outside development.
 - **500**: unexpected server/database error; database details are not returned to the client.
 
 ## Pattern to follow
@@ -77,8 +86,8 @@ src/examples/
 test/examples.test.js              # HTTP behavior with a fake repository
 ```
 
-The controller delegates to the service. The service injects `DATABASE` and obtains a repository for `ClassroomSchema`; it does not create another connection. Explicit `Inject`, `Query` and `Param` calls supply decorator metadata in plain JavaScript with Babel. No TypeScript or additional validation library is required for these simple parameters.
+The controller delegates to the service. The service injects `DATABASE` and obtains a repository for `ClassSchema`; it does not create another connection. Explicit `Inject`, `Query` and `Param` calls supply decorator metadata in plain JavaScript with Babel. No TypeScript or additional validation library is required for these simple parameters.
 
 For real features, follow this layout in the relevant feature folder and add account, role and membership checks before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
 
-Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies migrations, seeds, constraints and connection lifecycle; it does not exercise these HTTP routes against MySQL.
+Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies fresh baseline installation, populated rollback/reapplication, seeds, constraints, connection lifecycle and sample service queries with real course joins. HTTP routing is tested separately with fake repositories.

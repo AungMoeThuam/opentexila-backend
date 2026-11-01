@@ -6,6 +6,10 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 ## Feature references
 
+- [Classes API](classes.md) — implemented classes and demo endpoints with pagination, search, and meeting timetable.
+- [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
+- [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
+- [Attendance](attendance.md) — sessions, location check-in and attendance history.
 - **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
 - **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
 - **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), and the internal finalisation service contract.

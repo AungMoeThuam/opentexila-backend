@@ -226,7 +226,10 @@ test('createValidationPipe formats class-validator errors into 422 VALIDATION_ER
       assert.equal(error.getStatus(), 422);
       const body = error.getResponse() as any;
       assert.equal(body.error.code, 'VALIDATION_ERROR');
-      assert.equal(body.error.message, 'Please correct the highlighted fields.');
+      assert.equal(
+        body.error.message,
+        'Please correct the highlighted fields.',
+      );
       assert.equal(
         body.error.fields.page,
         'Must be an integer between 1 and 10000.',
@@ -235,4 +238,3 @@ test('createValidationPipe formats class-validator errors into 422 VALIDATION_ER
     },
   );
 });
-

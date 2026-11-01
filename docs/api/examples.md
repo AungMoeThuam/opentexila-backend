@@ -1,6 +1,6 @@
 # Sample classroom API
 
-Implemented in JavaScript as a reference for teammates. These read-only routes use the real shared TypeORM connection and existing classroom schema. They are registered **only when `NODE_ENV=development`**, because authentication and membership permissions are not implemented yet. Use a local demo database. These are examples, not the production classroom API contract.
+Implemented in TypeScript as a reference for teammates. These read-only routes use the real shared TypeORM connection and existing classroom schema. They are registered **only when `NODE_ENV=development`**, because authentication and membership permissions are not implemented yet. Use a local demo database. These are examples, not the production classroom API contract.
 
 ## Try it
 
@@ -80,14 +80,14 @@ These examples use Nest's built-in error responses, not the proposed application
 
 ```text
 src/examples/
-  examples.module.js               # Register controller and service
-  classrooms-example.controller.js # Routes and runtime input validation
-  classrooms-example.service.js    # Repository queries and response mapping
-test/examples.test.js              # HTTP behavior with a fake repository
+  examples.module.ts               # Register controller and service
+  classrooms-example.controller.ts # Routes and runtime input validation
+  classrooms-example.service.ts    # Repository queries and response mapping
+test/examples.test.ts              # HTTP behavior with a fake repository
 ```
 
-The controller delegates to the service. The service injects `DATABASE` and obtains a repository for `ClassSchema`; it does not create another connection. Explicit `Inject`, `Query` and `Param` calls supply decorator metadata in plain JavaScript with Babel. No TypeScript or additional validation library is required for these simple parameters.
+The controller delegates to the service using NestJS dependency injection. The service injects the shared TypeORM connection and obtains a repository for `ClassSchema`; it does not create another connection. Standard TypeScript decorators (`@Controller`, `@Get`, `@Query`, `@Param`) and parameter properties supply clean injection and routing.
 
-For real features, follow this layout in the relevant feature folder and add account, role and membership checks before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
+For real features, follow this layout in the relevant feature folder and use NestJS guards, `@CurrentUser()`, and class-validator DTOs before exposing data. Scope database queries and pagination totals to authorized records. Agree the production validation/error contract with the frontend; do not simply enable these examples in production.
 
 Run `npm test` for HTTP routing, DI, validation, pagination, response-field filtering, errors and development-only registration checks. The HTTP tests use a fake repository; they do not verify live MySQL queries. The separate `npm run test:db` suite now passes against disposable MySQL 8.4 and verifies fresh baseline installation, populated rollback/reapplication, seeds, constraints, connection lifecycle and sample service queries with real course joins. HTTP routing is tested separately with fake repositories.

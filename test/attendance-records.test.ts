@@ -1,9 +1,9 @@
-require('reflect-metadata');
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { startAttendanceApp } = require('./helpers/attendance-app.ts');
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { startAttendanceApp } from './helpers/attendance-app.ts';
 
-const classSession = (overrides = {}) => ({
+const classSession = (overrides: Record<string, any> = {}) => ({
   id: 30,
   starts_at: new Date('2026-10-29T01:00:00.000Z'),
   late_after: new Date('2026-10-29T01:15:00.000Z'),
@@ -24,7 +24,11 @@ const classSession = (overrides = {}) => ({
   ...overrides,
 });
 
-const record = (studentId, status, checkedIn = null) => ({
+const record = (
+  studentId: number,
+  status: string,
+  checkedIn: Date | null = null,
+) => ({
   class_session_id: 30,
   student_id: studentId,
   status,
@@ -37,19 +41,19 @@ const record = (studentId, status, checkedIn = null) => ({
   },
 });
 
-const sorted = (object) => Object.keys(object).sort();
+const sorted = (object: Record<string, unknown>) => Object.keys(object).sort();
 
 test('lecturer session roster over HTTP', async (t) => {
-  const sessionCalls = [];
-  const recordCalls = [];
-  const ClassSession = {
-    async findOne(options) {
+  const sessionCalls: any[] = [];
+  const recordCalls: any[] = [];
+  const ClassSession: any = {
+    async findOne(options: any) {
       sessionCalls.push(options);
       return classSession();
     },
   };
-  const AttendanceRecord = {
-    async findAndCount(options) {
+  const AttendanceRecord: any = {
+    async findAndCount(options: any) {
       recordCalls.push(options);
       return [
         [
@@ -63,7 +67,7 @@ test('lecturer session roster over HTTP', async (t) => {
   };
   const app = await startAttendanceApp({ ClassSession, AttendanceRecord });
   t.after(() => app.close());
-  const get = (path) => fetch(`${app.base}/class-sessions${path}`);
+  const get = (path: string) => fetch(`${app.base}/class-sessions${path}`);
 
   await t.test(
     'success shape, scoping, ordering and private fields',
@@ -87,7 +91,7 @@ test('lecturer session roster over HTTP', async (t) => {
       ]);
       assert.deepEqual(body.data[0].student, { id: 3, name: 'Student 3' });
       assert.deepEqual(
-        body.data.map((row) => row.checked_in_at),
+        body.data.map((row: any) => row.checked_in_at),
         ['2026-10-29T01:05:00.000Z', null, null],
       );
       assert.deepEqual(sorted(body.context), [
@@ -196,7 +200,7 @@ test('lecturer session roster over HTTP', async (t) => {
     async () => {
       ClassSession.findOne = async () => null;
       const count = recordCalls.length;
-      AttendanceRecord.findAndCount = async (options) => {
+      AttendanceRecord.findAndCount = async (options: any) => {
         recordCalls.push(options);
         return [[], 0];
       };

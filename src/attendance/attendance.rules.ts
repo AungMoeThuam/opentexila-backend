@@ -152,7 +152,7 @@ export function availability(
 
 export function eligibility(
   session: Pick<ClassSessionEntity, 'state' | 'starts_at' | 'ends_at'>,
-  user: AttendanceCaller,
+  user: Pick<AttendanceCaller, 'role'>,
   eligible: boolean,
   record: Pick<AttendanceRecordEntity, 'status'> | null | undefined,
   now: Date,

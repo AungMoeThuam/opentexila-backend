@@ -1,20 +1,18 @@
-require('reflect-metadata');
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { Module, Global } = require('@nestjs/common');
-const { NestFactory } = require('@nestjs/core');
-const { AttendanceModule } = require('../dist/attendance/attendance.module');
-const { AttendanceService } = require('../dist/attendance/attendance.service');
-const { DATABASE } = require('../dist/database/database.constants');
-const rules = require('../dist/attendance/attendance.rules');
-const {
-  materialiseLockedRoster,
-} = require('../dist/attendance/roster.service');
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Module, Global } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { AttendanceModule } from '../dist/attendance/attendance.module.js';
+import { AttendanceService } from '../dist/attendance/attendance.service.js';
+import { DATABASE } from '../dist/database/database.constants.js';
+import * as rules from '../dist/attendance/attendance.rules.js';
+import { materialiseLockedRoster } from '../dist/attendance/roster.service.js';
 
 const start = new Date('2026-11-01T01:00:00Z');
 const late = new Date('2026-11-01T01:15:00Z');
 const end = new Date('2026-11-01T02:00:00Z');
-const session = {
+const session: any = {
   id: 30,
   class_id: 1,
   starts_at: start,
@@ -26,14 +24,14 @@ const session = {
   longitude: '0',
   radius_m: '100',
 };
-const student = { id: 3, role: 'student' };
+const student: rules.AttendanceCaller = { id: 3, role: 'student' };
 const body = {
   latitude: 0,
   longitude: 0,
   accuracy_m: 12,
   reading_timestamp: start.toISOString(),
 };
-const code = (expected) => (error) =>
+const code = (expected: string) => (error: any) =>
   error.getResponse().error.code === expected;
 
 test('strict query, path and reading validation rejects coercion and invalid calendar dates', () => {
@@ -167,7 +165,11 @@ test('geofence and reading policy boundaries', () => {
   const reading = { ...rules.locationBody(body), longitude: 0.001 };
   const radius = rules.distanceMeters(0, 0.001, 0, 0);
   assert.equal(
-    rules.validateLocation(reading, { ...session, radius_m: radius }, start),
+    rules.validateLocation(
+      reading,
+      { ...session, radius_m: String(radius) },
+      start,
+    ),
     radius,
   );
 });
@@ -175,7 +177,7 @@ test('geofence and reading policy boundaries', () => {
 // Small transactional fake: exercises service branching, SQL lock ordering and
 // rollback of failed mutations. Real SQL/concurrency is covered by test:db.
 function databaseFixture(now = start) {
-  const state = {
+  const state: any = {
     session: { ...session },
     enrolled: true,
     record: {
@@ -186,9 +188,9 @@ function databaseFixture(now = start) {
       distance_m: null,
     },
     now,
-    calls: [],
+    calls: [] as Array<{ sql: string; args: any[] }>,
   };
-  const query = async (sql, args = []) => {
+  const query = async (sql: string, args: any[] = []) => {
     state.calls.push({ sql, args });
     if (sql.startsWith('SELECT class_id')) return [{ class_id: 1 }];
     if (sql.startsWith('SELECT * FROM classes'))
@@ -234,9 +236,9 @@ function databaseFixture(now = start) {
     if (sql.startsWith('SELECT s.id')) return [{ id: 30 }];
     throw new Error(`Unexpected test query: ${sql}`);
   };
-  const database = {
+  const database: any = {
     query,
-    async transaction(work) {
+    async transaction(work: (manager: any) => Promise<any>) {
       const before = state.record && { ...state.record };
       try {
         return await work({ query });
@@ -255,7 +257,7 @@ for (const [now, expected] of [
   [new Date(+late + 1), 'late'],
   [new Date(+end - 1), 'late'],
   [end, 'CLASS_ENDED'],
-]) {
+] as const) {
   test(`check-in at ${now.toISOString()} yields ${expected}`, async () => {
     const { service, state } = databaseFixture(now);
     const reading = { ...rules.locationBody(body), reading_timestamp: now };
@@ -272,15 +274,15 @@ for (const [now, expected] of [
         now.toISOString(),
       );
       assert.equal(
-        state.calls.find((c) => c.sql.startsWith('UPDATE')).args.length,
+        state.calls.find((c: any) => c.sql.startsWith('UPDATE')).args.length,
         5,
       );
     }
-    const locks = state.calls.filter((c) => c.sql.includes('FOR UPDATE'));
+    const locks = state.calls.filter((c: any) => c.sql.includes('FOR UPDATE'));
     assert.ok(locks[0].sql.includes('FROM classes'));
     assert.ok(locks[1].sql.includes('FROM class_sessions'));
     assert.ok(
-      state.calls.findIndex((c) => c.sql.startsWith('SELECT UTC')) >
+      state.calls.findIndex((c: any) => c.sql.startsWith('SELECT UTC')) >
         state.calls.indexOf(locks[1]),
     );
   });
@@ -290,10 +292,13 @@ test('location failures leave pending evidence unchanged and permit retry', asyn
     [{ accuracy_m: 101 }, 'LOCATION_INACCURATE'],
     [{ latitude: 1 }, 'OUTSIDE_ALLOWED_AREA'],
     [{ reading_timestamp: new Date(+start - 60001) }, 'LOCATION_STALE'],
-  ]) {
+  ] as const) {
     const { service, state } = databaseFixture();
     await assert.rejects(
-      service.checkIn(student, 30, { ...rules.locationBody(body), ...patch }),
+      service.checkIn(student, 30, {
+        ...rules.locationBody(body),
+        ...(patch as any),
+      }),
       code(expected),
     );
     assert.equal(state.record.status, 'pending');
@@ -362,7 +367,7 @@ test('list queries are scoped, parameterized and ordered with half-open time fil
   });
   assert.deepEqual(result.meta, { page: 2, limit: 5, total: 1, totalPages: 1 });
   assert.equal('check_in' in result.data[0], false);
-  const list = state.calls.find((c) => c.sql.startsWith('SELECT s.id'));
+  const list = state.calls.find((c: any) => c.sql.startsWith('SELECT s.id'));
   assert.match(list.sql, /e.student_id = \?/);
   assert.match(list.sql, /a.student_id = \?/);
   assert.match(list.sql, /s.starts_at >= \?/);
@@ -371,8 +376,8 @@ test('list queries are scoped, parameterized and ordered with half-open time fil
   assert.deepEqual(list.args, [3, 3, 1, start, end, 5, 5]);
 });
 test('materialisation skips future/cancelled sessions and never resets duplicates', async () => {
-  const calls = [];
-  const manager = { query: async (...args) => calls.push(args) };
+  const calls: any[] = [];
+  const manager: any = { query: async (...args: any[]) => calls.push(args) };
   await materialiseLockedRoster(manager, session, new Date(+start - 1));
   await materialiseLockedRoster(
     manager,
@@ -389,8 +394,8 @@ test('materialisation skips future/cancelled sessions and never resets duplicate
 
 test('HTTP routes enforce sessions, CSRF, account state, validation and safe errors', async (t) => {
   const { database } = databaseFixture();
-  let currentSession;
-  let user = {
+  let currentSession: any;
+  let user: any = {
     ...student,
     status: 'active',
     session_version: 0,
@@ -408,15 +413,20 @@ test('HTTP routes enforce sessions, CSRF, account state, validation and safe err
   const app = await NestFactory.create(TestApp, { logger: false });
   t.after(() => app.close());
   // Trusted server-side fixture middleware, only inside this HTTP test.
-  app.use((request, response, next) => {
+  app.use((request: any, _response: any, next: () => void) => {
     request.session = currentSession;
     next();
   });
   app.setGlobalPrefix('api/v1');
   await app.listen(0, '127.0.0.1');
   const base = `${await app.getUrl()}/api/v1`;
-  const send = (path, options = {}) => fetch(`${base}${path}`, options);
-  const expectError = async (response, status, expected) => {
+  const send = (path: string, options: RequestInit = {}) =>
+    fetch(`${base}${path}`, options);
+  const expectError = async (
+    response: Response,
+    status: number,
+    expected: string,
+  ) => {
     assert.equal(response.status, status);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     const payload = await response.json();
@@ -447,7 +457,11 @@ test('HTTP routes enforce sessions, CSRF, account state, validation and safe err
   const get = await send('/class-sessions/30');
   assert.equal(get.status, 200);
   assert.equal((await get.json()).data.check_in.allowed, true);
-  const post = {
+  const post: {
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+  } = {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

@@ -1,24 +1,11 @@
-require('reflect-metadata');
-
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-
-const {
-  ForbiddenException,
-  UnauthorizedException,
-  ServiceUnavailableException,
-} = require('@nestjs/common');
-
-const { PATH_METADATA } = require('@nestjs/common/constants');
-const { ApiException } = require('../dist/common/api-exception');
-
-const {
-  AttendanceRecordsController: AttendanceController,
-} = require('../dist/attendance/me-attendance-records.controller');
-
-const {
-  AttendanceHistoryService: AttendanceService,
-} = require('../dist/attendance/attendance-history.service');
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { PATH_METADATA } from '@nestjs/common/constants.js';
+import { ApiException } from '../dist/common/api-exception.js';
+import { AttendanceRecordsController as AttendanceController } from '../dist/attendance/me-attendance-records.controller.js';
+import { AttendanceHistoryService as AttendanceService } from '../dist/attendance/attendance-history.service.js';
 
 // Test-only fixture. This data is never used by the actual API.
 function makeRecord({
@@ -29,7 +16,7 @@ function makeRecord({
   status = 'present',
   sessionState = 'scheduled',
   startsAt = '2026-10-29T01:00:00.000Z',
-} = {}) {
+}: Record<string, any> = {}) {
   return {
     class_session_id: sessionId,
     student_id: studentId,
@@ -56,8 +43,15 @@ function makeRecord({
   };
 }
 
-function makeFakeDatabase(records = []) {
-  const calls = {
+function makeFakeDatabase(records: any[] = []) {
+  const calls: {
+    joins: Array<{ relation: string; alias: string }>;
+    where: Array<{ sql: string; params: Record<string, any> }>;
+    order: Array<{ field: string; direction: string }>;
+    skip: number | null;
+    take: number | null;
+    repositoryRequested: boolean;
+  } = {
     joins: [],
     where: [],
     order: [],
@@ -66,7 +60,12 @@ function makeFakeDatabase(records = []) {
     repositoryRequested: false,
   };
 
-  const state = {
+  const state: {
+    conditions: Array<{ sql: string; params: Record<string, any> }>;
+    orderFields: Array<{ field: string; direction: string }>;
+    skip: number;
+    take: number;
+  } = {
     conditions: [],
     orderFields: [],
     skip: 0,
@@ -129,47 +128,47 @@ function makeFakeDatabase(records = []) {
   }
 
   const qb = {
-    innerJoinAndSelect(relation, alias) {
+    innerJoinAndSelect(relation: string, alias: string) {
       calls.joins.push({ relation, alias });
       return this;
     },
 
-    leftJoinAndSelect(relation, alias) {
+    leftJoinAndSelect(relation: string, alias: string) {
       calls.joins.push({ relation, alias });
       return this;
     },
 
-    where(sql, params = {}) {
+    where(sql: string, params: Record<string, any> = {}) {
       state.conditions = [{ sql, params }];
       calls.where.push({ sql, params });
       return this;
     },
 
-    andWhere(sql, params = {}) {
+    andWhere(sql: string, params: Record<string, any> = {}) {
       state.conditions.push({ sql, params });
       calls.where.push({ sql, params });
       return this;
     },
 
-    orderBy(field, direction) {
+    orderBy(field: string, direction: string) {
       state.orderFields = [{ field, direction }];
       calls.order.push({ field, direction });
       return this;
     },
 
-    addOrderBy(field, direction) {
+    addOrderBy(field: string, direction: string) {
       state.orderFields.push({ field, direction });
       calls.order.push({ field, direction });
       return this;
     },
 
-    skip(value) {
+    skip(value: number) {
       state.skip = value;
       calls.skip = value;
       return this;
     },
 
-    take(value) {
+    take(value: number) {
       state.take = value;
       calls.take = value;
       return this;
@@ -184,14 +183,14 @@ function makeFakeDatabase(records = []) {
     },
   };
 
-  const database = {
+  const database: any = {
     isInitialized: true,
 
-    getRepository(schema) {
+    getRepository(schema: unknown) {
       calls.repositoryRequested = true;
       assert.ok(schema);
       return {
-        createQueryBuilder(alias) {
+        createQueryBuilder(alias: string) {
           assert.equal(alias, 'ar');
 
           state.conditions = [];
@@ -284,8 +283,8 @@ test('AttendanceService queries real repository interface', async (t) => {
     );
 
     assert.equal(result.data[0].class.course.code, 'COS30043');
-    assert.equal(result.data[0].class.lecturer.name, 'Test Lecturer');
-    assert.equal(result.data[0].class.lecturer.email, undefined);
+    assert.equal(result.data[0].class.lecturer!.name, 'Test Lecturer');
+    assert.equal((result.data[0].class.lecturer as any).email, undefined);
     assert.equal(result.data[0].class.room_label, 'EN402');
     assert.equal(result.data[0].starts_at, '2026-10-29T01:00:00.000Z');
 
@@ -376,7 +375,7 @@ test('AttendanceService queries real repository interface', async (t) => {
 
     assert.ok(
       result.data.every((record) => {
-        const timestamp = new Date(record.starts_at).getTime();
+        const timestamp = new Date(record.starts_at!).getTime();
 
         return timestamp >= from.getTime() && timestamp < to.getTime();
       }),
@@ -446,7 +445,7 @@ test('AttendanceService queries real repository interface', async (t) => {
   });
 
   await t.test('returns 503 when database is unavailable', async () => {
-    const service = new AttendanceService(null);
+    const service = new AttendanceService(null as any);
 
     await assert.rejects(
       () =>
@@ -460,7 +459,7 @@ test('AttendanceService queries real repository interface', async (t) => {
   await t.test(
     'does not silently return mock records on query failure',
     async () => {
-      const database = {
+      const database: any = {
         isInitialized: true,
         getRepository() {
           return {
@@ -491,25 +490,24 @@ test('AttendanceController enforces authentication, authorization, and validatio
 
   await t.test('rejects unauthenticated requests with 401', async () => {
     await assert.rejects(
-      () => controller.getPersonalAttendanceRecords({}, {}),
+      () => controller.getPersonalAttendanceRecords({}, {} as any),
       (error) => error instanceof ApiException && error.getStatus() === 401,
     );
   });
 
   await t.test('rejects teacher and admin with 403', async () => {
-    for (const role of ['teacher', 'admin']) {
+    for (const role of ['teacher', 'admin'] as const) {
       await assert.rejects(
         () =>
-          controller.getPersonalAttendanceRecords(
-            {},
-            { attendanceUser: { id: 2, role } },
-          ),
+          controller.getPersonalAttendanceRecords({}, {
+            attendanceUser: { id: 2, role },
+          } as any),
         (error) => error instanceof ApiException && error.getStatus() === 403,
       );
     }
   });
 
-  const validReq = {
+  const validReq: any = {
     attendanceUser: {
       id: 3,
       role: 'student',

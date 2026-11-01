@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
-**Status: planned contract; database schema (`class_sessions`, `attendance_records`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: student schedule, detail, check-in and roster materialisation implemented on the feature branch; production sign-in requires the separate authentication feature. History, lecturer roster and finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 
@@ -434,3 +434,39 @@ Automatic finalisation is an internal backend service/worker (`feat/attendance-f
   ]
 }
 ```
+
+
+## Implementation and integration notes
+
+`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Teacher schedule scoping is included in the shared list handler; lecturer records remain separate work. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
+
+### Authentication dependency
+
+Production cookie/session middleware and authentication endpoints are not yet implemented. For local feature development, the opt-in [development sign-in adapter](../DEVELOPMENT_AUTH.md) provides real cookie sessions backed by seeded accounts. Attendance fails closed with `401 UNAUTHENTICATED` unless production auth or the explicitly enabled local adapter supplies a valid server-side `request.session`. Identity headers and client-supplied user IDs are never accepted.
+
+The integration contract consumed by `AttendanceGuard` is:
+
+- `session.userId`: positive integer user ID.
+- `session.sessionVersion`: integer matching the current database user's `session_version`.
+- `session.cookie.expires`: future expiry provided by trusted session middleware.
+- `session.csrfToken`: nonempty session-bound token, compared to `X-CSRF-Token` for POST.
+
+The auth owner must populate these fields only after validating the signed cookie and loading its unexpired server-side session. Alternatively, adapt the guard to the shared auth module when that module lands. The guard reloads the user, rejects inactive accounts and mandatory password changes, and sets `Cache-Control: no-store`. HTTP tests inject trusted session fixtures only in the test application; deployed endpoints never use these fixtures.
+
+### Location policy
+
+Readings must be UTC ISO timestamps (ending in `Z`), at most 60 seconds old and at most 5 seconds in the future. Accuracy must be positive and no greater than 100 metres. Haversine distance uses Earth radius 6,371,000 metres; the unrounded distance must be at or within the session radius. Only the accepted distance rounded to two decimals and the database check-in time are persisted. Coordinates and accuracy are neither returned nor logged.
+
+A structurally valid replay of an accepted check-in returns the original record even after the session ends or the reading becomes stale. Cancellation still takes precedence. Invalid body shapes remain `422 VALIDATION_ERROR` even on replay. Failed attempts are never automatically retried.
+
+### Transactions and venue migration
+
+Migration `1793491200000-SessionVenueSnapshot.js` adds non-null room/coordinate/radius snapshots to sessions, backfills existing sessions from their current class venue, and adds coordinate/radius constraints. Historical venues cannot be reconstructed; backfill uses the class venue at migration time. Run migrations before starting the updated application. New session creators must copy all four venue fields when inserting a session; the demo seed now does so. Later class-venue changes do not change a session's check-in area.
+
+`RosterService.materialise(classSessionId)` owns a transaction, locks the class before the class session, samples database time after the locks, and inserts missing pending rows without overwriting existing evidence. It skips future and cancelled sessions. Issue #13 can reuse `lockClassSession`, `databaseNow` and `materialiseLockedRoster` inside its own transaction. All enrolment, session cancellation, and finalisation writers must follow the same class → session lock order. Membership and attendance reads use locking current reads so they do not use an earlier repeatable-read snapshot after waiting on the class lock.
+
+### Verification
+
+`npm test` includes strict input validation, exact time/accuracy/freshness boundaries, geofence math, pending-state preservation, replay behavior, access scoping, safe DTOs and real Nest HTTP tests for authentication/CSRF/error envelopes. `npm run test:db` uses only its owned disposable MySQL container and covers concurrent materialisation/check-ins, venue snapshots, pagination/scoping, location failures and migration backfill/rollback. It never seeds the application database.
+
+The local Docker stack supports authenticated browser-to-API verification with the development adapter enabled. Production login still requires the separate auth implementation.

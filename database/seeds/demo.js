@@ -449,6 +449,10 @@ async function seedDemo(dataSource, env = process.env) {
         if (!classSession) {
           classSession = await classSessions.save({
             class_id: classroom.id,
+            room_label: classroom.room_label,
+            latitude: classroom.latitude,
+            longitude: classroom.longitude,
+            radius_m: classroom.radius_m,
             starts_at: start,
             late_after: new Date(start.getTime() + 15 * MINUTE_MS),
             ends_at: new Date(start.getTime() + 2 * HOUR_MS),

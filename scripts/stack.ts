@@ -1,19 +1,29 @@
-const { spawnSync } = require('node:child_process');
-const { existsSync, readFileSync, writeFileSync } = require('node:fs');
-const { randomBytes } = require('node:crypto');
-const path = require('node:path');
-const { parseEnv } = require('node:util');
+import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import path from 'node:path';
+import { parseEnv } from 'node:util';
 
 const DEFAULT_FRONTEND_REPO = 'https://github.com/AungMoeThuam/opentexila.git';
 
-function run(command, args, options = {}) {
+type RunCommand = (
+  command: string,
+  args: string[],
+  options?: SpawnSyncOptions,
+) => void;
+
+function run(
+  command: string,
+  args: string[],
+  options: SpawnSyncOptions = {},
+): void {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.error) throw result.error;
   if (result.status !== 0)
     throw new Error(`${command} failed (${result.signal || result.status}).`);
 }
 
-function ensureEnvironment(root) {
+export function ensureEnvironment(root: string): boolean {
   const destination = path.join(root, '.env');
   if (existsSync(destination)) return false;
   const template = readFileSync(path.join(root, '.env.example'), 'utf8')
@@ -26,7 +36,11 @@ function ensureEnvironment(root) {
   return true;
 }
 
-function ensureFrontend(frontendPath, repoUrl, runCommand = run) {
+export function ensureFrontend(
+  frontendPath: string,
+  repoUrl: string,
+  runCommand: RunCommand = run,
+): void {
   if (!existsSync(frontendPath)) {
     console.log(`Cloning the frontend into ${frontendPath}...`);
     runCommand('git', ['clone', '--', repoUrl, frontendPath]);
@@ -58,11 +72,12 @@ function ensureFrontend(frontendPath, repoUrl, runCommand = run) {
     );
 }
 
-function main() {
-  const action = process.argv[2] || 'up';
+function main(): void {
+  const action = (process.argv[2] || 'up') as 'up' | 'down' | 'logs';
   if (!['up', 'down', 'logs'].includes(action))
-    throw new Error('Usage: node scripts/stack.js [up|down|logs]');
-  const root = path.resolve(__dirname, '..');
+    throw new Error('Usage: node scripts/stack.ts [up|down|logs]');
+  const currentDir = path.dirname(path.resolve(process.argv[1]));
+  const root = path.resolve(currentDir, '..');
   run('docker', ['compose', 'version']);
   if (action === 'up') {
     run('docker', ['info'], { stdio: 'ignore' });
@@ -70,7 +85,7 @@ function main() {
       console.log('Created backend/.env with random local database passwords.');
   }
   const envPath = path.join(root, '.env');
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...(existsSync(envPath) ? parseEnv(readFileSync(envPath, 'utf8')) : {}),
     ...process.env,
   };
@@ -97,16 +112,19 @@ function main() {
   }
 }
 
-if (require.main === module) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]).endsWith(path.join('scripts', 'stack.ts'))
+) {
   try {
     main();
-  } catch (error) {
-    console.error(`Stack setup failed: ${error.message}`);
+  } catch (error: unknown) {
+    console.error(
+      `Stack setup failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     console.error(
       'See docs/DOCKER.md. Existing checkouts and database volumes are preserved.',
     );
     process.exitCode = 1;
   }
 }
-
-module.exports = { ensureEnvironment, ensureFrontend };

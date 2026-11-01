@@ -7,7 +7,7 @@ const { DataSource } = require('typeorm');
 const mysql = require('mysql2/promise');
 const argon2 = require('argon2');
 const { databaseOptions } = require('../dist/database/database-options');
-const { seedDemo } = require('../database/seeds/demo');
+const { seedDemo } = require('../database/seeds/demo.ts');
 
 // This command owns its container. It never reads .env or connects to the app database.
 test(

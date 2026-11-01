@@ -4,7 +4,7 @@ const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { DataSource } = require('typeorm');
 const { databaseOptions } = require('../dist/database/database-options');
-const { seedDemo } = require('../database/seeds/demo');
+const { seedDemo } = require('../database/seeds/demo.ts');
 
 const env = {
   DB_HOST: '127.0.0.1',
@@ -30,7 +30,7 @@ test('configuration fails before connecting when required values or ports are in
     existsSync(
       path.join(
         path.dirname(options.migrations[0]),
-        '1793059200000-InitialSchema.js',
+        '1793059200000-InitialSchema.ts',
       ),
     ),
   );

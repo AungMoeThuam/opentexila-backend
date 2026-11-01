@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "module": "commonjs",
+    "types": ["node"],
     "declaration": false,
     "removeComments": false,
     "emitDecoratorMetadata": true,
@@ -10,7 +11,6 @@
     "target": "ES2022",
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "incremental": false,
     "skipLibCheck": true,
     "allowJs": false,
@@ -22,6 +22,6 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "database", "scripts"]
+  "include": ["src/**/*", "database/**/*", "scripts/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

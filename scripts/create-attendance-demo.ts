@@ -1,12 +1,16 @@
 // Adds fresh fixtures only; never resets existing sessions or attendance.
-require('reflect-metadata');
-const { DataSource } = require('typeorm');
-const { databaseOptions } = require('../dist/database/database-options');
-const { devAuthEnabled } = require('../dist/dev/dev-auth');
-const {
+import 'reflect-metadata';
+import { DataSource } from 'typeorm';
+import { databaseOptions } from '../dist/database/database-options.js';
+import {
+  ClassSessionSchema,
+  type ClassSessionEntity,
+} from '../dist/database/entities/class-session.schema.js';
+import { devAuthEnabled } from '../dist/dev/dev-auth.js';
+import {
   databaseNow,
   materialiseLockedRoster,
-} = require('../dist/attendance/roster.service');
+} from '../dist/attendance/roster.service.js';
 
 async function main() {
   if (!devAuthEnabled())
@@ -33,9 +37,14 @@ async function main() {
       );
       const now = await databaseNow(manager);
       const minute = 60000;
-      const sessions = [];
+      const sessions: Array<{
+        scenario: string;
+        id: number;
+        late_after: string;
+        ends_at: string;
+      }> = [];
       for (const scenario of ['present', 'late']) {
-        const session = await manager.getRepository('ClassSession').save({
+        const session = (await manager.getRepository(ClassSessionSchema).save({
           class_id: classroom.id,
           starts_at: new Date(
             +now - (scenario === 'present' ? 1 : 30) * minute,
@@ -49,7 +58,7 @@ async function main() {
           latitude: '0.000000',
           longitude: '0.000000',
           radius_m: '100.00',
-        });
+        })) as ClassSessionEntity;
         await materialiseLockedRoster(manager, session, now);
         sessions.push({
           scenario,
@@ -65,7 +74,8 @@ async function main() {
     await database.destroy();
   }
 }
-main().catch((error) => {
-  console.error(error.message);
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

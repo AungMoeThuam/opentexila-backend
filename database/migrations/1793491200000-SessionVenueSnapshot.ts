@@ -1,7 +1,10 @@
+import type { MigrationInterface, QueryRunner } from 'typeorm';
+
 // Upgrade existing databases without rewriting the applied baseline migration.
-module.exports = class SessionVenueSnapshot1793491200000 {
+export class SessionVenueSnapshot1793491200000 implements MigrationInterface {
   name = 'SessionVenueSnapshot1793491200000';
-  async up(runner) {
+
+  async up(runner: QueryRunner): Promise<void> {
     await runner.query(`ALTER TABLE class_sessions
       ADD room_label VARCHAR(100) NULL,
       ADD latitude DECIMAL(9,6) NULL,
@@ -19,9 +22,10 @@ module.exports = class SessionVenueSnapshot1793491200000 {
       ADD CONSTRAINT ck_sessions_longitude CHECK (longitude BETWEEN -180 AND 180),
       ADD CONSTRAINT ck_sessions_radius CHECK (radius_m > 0)`);
   }
-  async down(runner) {
+
+  async down(runner: QueryRunner): Promise<void> {
     await runner.query(`ALTER TABLE class_sessions
       DROP CHECK ck_sessions_latitude, DROP CHECK ck_sessions_longitude, DROP CHECK ck_sessions_radius,
       DROP COLUMN room_label, DROP COLUMN latitude, DROP COLUMN longitude, DROP COLUMN radius_m`);
   }
-};
+}

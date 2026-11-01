@@ -12,7 +12,7 @@ const {
 const os = require('node:os');
 const path = require('node:path');
 const { parseEnv } = require('node:util');
-const { ensureEnvironment, ensureFrontend } = require('../scripts/stack');
+const { ensureEnvironment, ensureFrontend } = require('../scripts/stack.ts');
 
 function temporaryDirectory(t) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'opentexila-stack-test-'));

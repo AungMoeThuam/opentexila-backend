@@ -25,7 +25,7 @@ export function databaseOptions(
     supportBigNumbers: true,
     bigNumberStrings: true,
     entities,
-    migrations: [path.resolve(__dirname, '../../database/migrations/*.js')],
+    migrations: [path.resolve(__dirname, '../../database/migrations/*.ts')],
     migrationsTableName: 'schema_migrations',
     migrationsTransactionMode: 'none',
     synchronize: false,

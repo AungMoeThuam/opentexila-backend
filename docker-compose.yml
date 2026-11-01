@@ -55,6 +55,8 @@ services:
     command:
       [
         'node',
+        '--experimental-strip-types',
+        '--no-warnings',
         'node_modules/typeorm/cli.js',
         'migration:run',
         '-d',
@@ -73,7 +75,8 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./database:/app/database:ro
-      - ./.babelrc:/app/.babelrc:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./tsconfig.build.json:/app/tsconfig.build.json:ro
       - ./nodemon.json:/app/nodemon.json:ro
     depends_on:
       migrate:

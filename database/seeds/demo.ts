@@ -1,12 +1,45 @@
-const argon2 = require('argon2');
+import path from 'node:path';
+import argon2 from 'argon2';
+import type { DataSource } from 'typeorm';
 
 const DAY_MS = 86400000;
 const HOUR_MS = 3600000;
 const MINUTE_MS = 60000;
 
+interface UserFixture {
+  name: string;
+  email: string;
+  role: 'student' | 'teacher' | 'admin';
+}
+
+interface CourseFixture {
+  code: string;
+  name: string;
+}
+
+interface ClassFixture {
+  courseCode: string;
+  section: string;
+  term: string;
+  teacherEmail: string;
+  room_label: string;
+  latitude: string;
+  longitude: string;
+  radius_m: string;
+  hourOffset: number;
+  cancelledWeeks: number[];
+  studentEmails: string[];
+}
+
+interface PastOutcome {
+  status: 'present' | 'late' | 'absent';
+  checkInMinutes?: number;
+  distance_m?: string;
+}
+
 // Order matters for first four entries:
 // [0] admin, [1] Lecturer One, [2] Student One, [3] Student Two.
-const USER_FIXTURES = [
+const USER_FIXTURES: UserFixture[] = [
   { name: 'Admin Demo', email: 'admin.demo@example.com', role: 'admin' },
   { name: 'Lecturer One', email: 'lecturer.one@example.com', role: 'teacher' },
   { name: 'Student One', email: 'student.one@example.com', role: 'student' },
@@ -95,7 +128,7 @@ const USER_FIXTURES = [
   { name: 'Non Member', email: 'nonmember.demo@example.com', role: 'student' },
 ];
 
-const COURSE_FIXTURES = [
+const COURSE_FIXTURES: CourseFixture[] = [
   { code: 'COS30043', name: 'Interface Design and Development' },
   { code: 'COS20007', name: 'Object Oriented Programming' },
   { code: 'COS10009', name: 'Introduction to Programming' },
@@ -103,7 +136,7 @@ const COURSE_FIXTURES = [
   { code: 'COS20019', name: 'Cloud Computing Architecture' },
 ];
 
-const CLASS_FIXTURES = [
+const CLASS_FIXTURES: ClassFixture[] = [
   {
     courseCode: 'COS30043',
     section: 'A',
@@ -275,7 +308,7 @@ const CLASS_FIXTURES = [
 const SESSION_WEEK_OFFSETS = [-5, -4, -3, -2, -1, 0, 1, 2];
 
 // Static past-session attendance outcomes per student slot (up to 8 students) for each past week.
-const PAST_WEEK_ATTENDANCE = {
+const PAST_WEEK_ATTENDANCE: Record<string, PastOutcome[]> = {
   '-5': [
     { status: 'present', checkInMinutes: 3, distance_m: '8.00' },
     { status: 'present', checkInMinutes: 5, distance_m: '12.00' },
@@ -328,10 +361,13 @@ const PAST_WEEK_ATTENDANCE = {
   ],
 };
 
-async function seedDemo(dataSource, env = process.env) {
+export async function seedDemo(
+  dataSource: DataSource,
+  env: NodeJS.ProcessEnv = process.env,
+) {
   if (
     env.NODE_ENV !== 'development' ||
-    !['127.0.0.1', 'localhost'].includes(env.DB_HOST)
+    !['127.0.0.1', 'localhost'].includes(env.DB_HOST ?? '')
   ) {
     throw new Error(
       'Demo seeds require NODE_ENV=development and a local DB_HOST.',
@@ -360,7 +396,7 @@ async function seedDemo(dataSource, env = process.env) {
   });
 
   return dataSource.transaction(async (manager) => {
-    const accounts = [];
+    const accounts: any[] = [];
     const users = manager.getRepository('User');
     for (const { name, email, role } of USER_FIXTURES) {
       let user = await users.findOneBy({ email });
@@ -382,7 +418,7 @@ async function seedDemo(dataSource, env = process.env) {
     const userByEmail = new Map(accounts.map((u) => [u.email, u]));
 
     const courses = manager.getRepository('Course');
-    const courseByCode = new Map();
+    const courseByCode = new Map<string, any>();
     for (const { code, name } of COURSE_FIXTURES) {
       courseByCode.set(
         code,
@@ -395,10 +431,10 @@ async function seedDemo(dataSource, env = process.env) {
     const enrolments = manager.getRepository('Enrolment');
     const classSessions = manager.getRepository('ClassSession');
     const records = manager.getRepository('AttendanceRecord');
-    const classIds = [];
-    const sessionIds = [];
-    let firstClass;
-    let firstClassSessions = [];
+    const classIds: number[] = [];
+    const sessionIds: number[] = [];
+    let firstClass: any;
+    let firstClassSessions: any[] = [];
 
     for (const [index, plan] of CLASS_FIXTURES.entries()) {
       const course = courseByCode.get(plan.courseCode);
@@ -437,7 +473,7 @@ async function seedDemo(dataSource, env = process.env) {
           });
       }
 
-      const schedule = [];
+      const schedule: any[] = [];
       for (const week of SESSION_WEEK_OFFSETS) {
         const start = new Date(
           startsAt.getTime() + week * 7 * DAY_MS + plan.hourOffset * HOUR_MS,
@@ -483,7 +519,7 @@ async function seedDemo(dataSource, env = process.env) {
                   student_id: student.id,
                   status: outcome.status,
                   checked_in_at: new Date(
-                    start.getTime() + outcome.checkInMinutes * MINUTE_MS,
+                    start.getTime() + (outcome.checkInMinutes ?? 0) * MINUTE_MS,
                   ),
                   distance_m: outcome.distance_m,
                 };
@@ -517,9 +553,15 @@ async function seedDemo(dataSource, env = process.env) {
   });
 }
 
-if (require.main === module) {
-  const { AppDataSource } = require('../../dist/database/data-source');
+if (
+  process.argv[1] &&
+  path
+    .resolve(process.argv[1])
+    .endsWith(path.join('database', 'seeds', 'demo.ts'))
+) {
   (async () => {
+    const { AppDataSource } =
+      await import('../../dist/database/data-source.js');
     try {
       await AppDataSource.initialize();
       if (await AppDataSource.showMigrations())
@@ -528,9 +570,11 @@ if (require.main === module) {
     } finally {
       if (AppDataSource.isInitialized) await AppDataSource.destroy();
     }
-  })().catch((error) => {
-    console.error('Seed failed:', error.message);
+  })().catch((error: unknown) => {
+    console.error(
+      'Seed failed:',
+      error instanceof Error ? error.message : String(error),
+    );
     process.exitCode = 1;
   });
 }
-module.exports = { seedDemo };

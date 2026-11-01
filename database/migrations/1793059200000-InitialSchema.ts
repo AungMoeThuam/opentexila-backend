@@ -1,13 +1,15 @@
+import type { MigrationInterface, QueryRunner } from 'typeorm';
+
 // Consolidated development baseline for a fresh MySQL 8.4 database.
 // Existing development databases must be recreated separately. DDL implicitly commits.
 // Do not import current EntitySchemas into historical migrations.
 const engine =
   'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci';
 
-class InitialSchema1793059200000 {
+export class InitialSchema1793059200000 implements MigrationInterface {
   name = 'InitialSchema1793059200000';
 
-  async up(queryRunner) {
+  async up(queryRunner: QueryRunner): Promise<void> {
     const statements = [
       `CREATE TABLE users (
         id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -86,7 +88,7 @@ class InitialSchema1793059200000 {
     for (const sql of statements) await queryRunner.query(sql);
   }
 
-  async down(queryRunner) {
+  async down(queryRunner: QueryRunner): Promise<void> {
     for (const table of [
       'auth_sessions',
       'attendance_records',
@@ -100,5 +102,3 @@ class InitialSchema1793059200000 {
     }
   }
 }
-
-module.exports = { InitialSchema1793059200000 };

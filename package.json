@@ -1,14 +1,14 @@
 {
   "name": "opentexila-backend",
   "version": "0.0.1",
-  "description": "OpenTexila classroom management API — initial JavaScript scaffold.",
+  "description": "OpenTexila classroom management API — TypeScript NestJS backend.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
     "node": ">=22.15.1"
   },
   "scripts": {
-    "build": "babel src --out-dir dist --extensions .js --delete-dir-on-start",
+    "build": "rm -rf dist && tsc",
     "prestart": "npm run build",
     "start": "node --env-file-if-exists=.env dist/main.js",
     "start:dev": "nodemon",
@@ -24,8 +24,8 @@
     "db:seed": "npm run build && node --env-file-if-exists=.env database/seeds/demo.js",
     "test:db": "npm run build && node --test test/database.integration.test.js",
     "test": "npm run build && node --test test/database.unit.test.js test/attendance.unit.test.js test/examples.test.js test/stack.test.js test/attendance.test.js test/dev-auth.test.js test/common.test.js test/attendance-records.test.js",
-    "format": "prettier --write \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
-    "format:check": "prettier --check \"src/**/*.js\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
+    "format": "prettier --write \"src/**/*.{ts,js}\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js}\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
     "db:seed:attendance": "npm run build && node --env-file-if-exists=.env scripts/create-attendance-demo.js"
   },
   "dependencies": {
@@ -39,12 +39,11 @@
     "typeorm": "^0.3.31"
   },
   "devDependencies": {
-    "@babel/cli": "^7.28.0",
-    "@babel/core": "^7.28.0",
-    "@babel/plugin-proposal-decorators": "^7.28.0",
-    "@babel/preset-env": "^7.28.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
     "nodemon": "^3.1.14",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
   },
   "overrides": {
     "@nestjs/platform-express": {

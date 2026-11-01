@@ -1,6 +1,6 @@
 {
-  "watch": ["src", ".env", ".babelrc"],
-  "ext": "js,json,env",
-  "ignore": ["src/**/*.spec.js"],
+  "watch": ["src", ".env", "tsconfig.json"],
+  "ext": "ts,js,json,env",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.spec.js"],
   "exec": "npm start"
 }

@@ -94,11 +94,12 @@ test(
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
-          assert.equal((await ds.runMigrations()).length, 1);
+          assert.equal((await ds.runMigrations()).length, 2);
           assert.equal((await ds.runMigrations()).length, 0);
           await ds.undoLastMigration();
+          await ds.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds.runMigrations()).length, 1);
+          assert.equal((await ds.runMigrations()).length, 2);
           assert.deepEqual(
             await tableNames(),
             [
@@ -153,6 +154,9 @@ test(
         },
       );
       if (!fixturesReady) return;
+      await t.test('attendance SQL and concurrency', async (attendanceTest) => {
+        await require('./attendance.integration')(attendanceTest, ds, fixtures);
+      });
       async function rejectsInTransaction(work, errno) {
         const runner = ds.createQueryRunner();
         await runner.connect();
@@ -598,11 +602,32 @@ test(
         },
       );
       await t.test(
+        'venue migration backfills populated sessions without losing attendance',
+        async () => {
+          const count = await ds.getRepository('AttendanceRecord').count();
+          await ds.undoLastMigration();
+          assert.equal((await ds.runMigrations()).length, 1);
+          const [row] = await ds.query(
+            `SELECT s.room_label, s.latitude, s.longitude, s.radius_m,
+          c.room_label AS class_room, c.latitude AS class_latitude
+          FROM class_sessions s JOIN classes c ON c.id = s.class_id WHERE s.id = ?`,
+            [fixtures.class_session_ids[0]],
+          );
+          assert.equal(row.room_label, row.class_room);
+          assert.equal(row.latitude, row.class_latitude);
+          assert.equal(
+            await ds.getRepository('AttendanceRecord').count(),
+            count,
+          );
+        },
+      );
+      await t.test(
         'populated baseline rollback and clean reapplication',
         async () => {
           await ds.undoLastMigration();
+          await ds.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds.runMigrations()).length, 1);
+          assert.equal((await ds.runMigrations()).length, 2);
           await seedDemo(ds, env);
           assert.ok((await ds.getRepository('AttendanceRecord').count()) > 100);
         },

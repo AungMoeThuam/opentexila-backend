@@ -1,5 +1,11 @@
 import { EntitySchema } from 'typeorm';
-import { idColumn, referenceColumn, dateColumn, relation } from './columns';
+import {
+  idColumn,
+  referenceColumn,
+  dateColumn,
+  relation,
+  locationColumns,
+} from './columns';
 
 // One concrete scheduled occurrence. Recurring timetable generation belongs to a future service.
 export const ClassSessionSchema = new EntitySchema({
@@ -8,6 +14,8 @@ export const ClassSessionSchema = new EntitySchema({
   columns: {
     id: idColumn(),
     class_id: referenceColumn(),
+    room_label: { type: 'varchar', length: 100 },
+    ...locationColumns(),
     starts_at: dateColumn(),
     late_after: dateColumn(),
     ends_at: dateColumn(),

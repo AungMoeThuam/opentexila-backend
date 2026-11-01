@@ -1,42 +1,60 @@
-import { CourseSchema, CourseEntity } from './course.schema';
-import { UserSchema, UserEntity, UserRole, UserStatus } from './user.schema';
-import { ClassSchema, ClassEntity } from './class.schema';
-import { EnrolmentSchema, EnrolmentEntity } from './enrolment.schema';
+import { Course, CourseSchema, CourseEntity } from './course.schema';
 import {
+  User,
+  UserSchema,
+  UserEntity,
+  UserRole,
+  UserStatus,
+} from './user.schema';
+import { Class, ClassSchema, ClassEntity } from './class.schema';
+import {
+  Enrolment,
+  EnrolmentSchema,
+  EnrolmentEntity,
+} from './enrolment.schema';
+import {
+  ClassSession,
   ClassSessionSchema,
   ClassSessionEntity,
   ClassSessionState,
 } from './class-session.schema';
 import {
+  AttendanceRecord,
   AttendanceRecordSchema,
   AttendanceRecordEntity,
   AttendanceStatus,
 } from './attendance-record.schema';
 
 export {
+  Course,
   CourseSchema,
   CourseEntity,
+  User,
   UserSchema,
   UserEntity,
   UserRole,
   UserStatus,
+  Class,
   ClassSchema,
   ClassEntity,
+  Enrolment,
   EnrolmentSchema,
   EnrolmentEntity,
+  ClassSession,
   ClassSessionSchema,
   ClassSessionEntity,
   ClassSessionState,
+  AttendanceRecord,
   AttendanceRecordSchema,
   AttendanceRecordEntity,
   AttendanceStatus,
 };
 
 export const entities = [
-  CourseSchema,
-  UserSchema,
-  ClassSchema,
-  EnrolmentSchema,
-  ClassSessionSchema,
-  AttendanceRecordSchema,
+  Course,
+  User,
+  Class,
+  Enrolment,
+  ClassSession,
+  AttendanceRecord,
 ];

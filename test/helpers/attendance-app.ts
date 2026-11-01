@@ -38,7 +38,9 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
         useValue: {
           getRepository(schema: any) {
             const name =
-              typeof schema === 'string' ? schema : schema.options.name;
+              typeof schema === 'string'
+                ? schema
+                : (schema.options?.name ?? schema.name);
             if (name === 'User') return { findOneBy: async () => state.user };
             const repository = repositories[name];
             assert.ok(repository, `No fake repository for ${name}`);

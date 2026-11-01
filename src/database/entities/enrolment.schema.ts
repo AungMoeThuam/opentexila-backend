@@ -1,25 +1,32 @@
-import { EntitySchema } from 'typeorm';
-import { keyReferenceColumn, relation } from './columns';
-import type { ClassEntity } from './class.schema';
-import type { UserEntity } from './user.schema';
+import { Entity, PrimaryColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Class, type ClassEntity } from './class.schema';
+import { User, type UserEntity } from './user.schema';
 
-export interface EnrolmentEntity {
-  class_id: number;
-  student_id: number;
+@Entity('enrolments')
+@Index('ix_enrolments_student', ['student_id'])
+export class Enrolment {
+  @PrimaryColumn({ type: 'int', unsigned: true })
+  class_id!: number;
+
+  @PrimaryColumn({ type: 'int', unsigned: true })
+  student_id!: number;
+
+  @ManyToOne(() => Class, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'class_id' })
   class?: ClassEntity;
+
+  @ManyToOne(() => User, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'student_id' })
   student?: UserEntity;
 }
 
-export const EnrolmentSchema = new EntitySchema<EnrolmentEntity>({
-  name: 'Enrolment',
-  tableName: 'enrolments',
-  columns: {
-    class_id: keyReferenceColumn(),
-    student_id: keyReferenceColumn(),
-  },
-  relations: {
-    class: relation('Class', 'class_id'),
-    student: relation('User', 'student_id'),
-  },
-  indices: [{ name: 'ix_enrolments_student', columns: ['student_id'] }],
-});
+export type EnrolmentEntity = Enrolment;
+export const EnrolmentSchema = Enrolment;

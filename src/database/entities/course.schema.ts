@@ -1,24 +1,22 @@
-import { EntitySchema } from 'typeorm';
-import { idColumn } from './columns';
+import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
 
-export interface CourseEntity {
-  id: number;
-  code: string;
-  name: string;
+@Entity('courses')
+@Index('uq_courses_code', ['code'], { unique: true })
+export class Course {
+  @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
+  id!: number;
+
+  @Column({
+    type: 'varchar',
+    length: 30,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  code!: string;
+
+  @Column({ type: 'varchar', length: 150 })
+  name!: string;
 }
 
-export const CourseSchema = new EntitySchema<CourseEntity>({
-  name: 'Course',
-  tableName: 'courses',
-  columns: {
-    id: idColumn(),
-    code: {
-      type: 'varchar',
-      length: 30,
-      charset: 'ascii',
-      collation: 'ascii_bin',
-    },
-    name: { type: 'varchar', length: 150 },
-  },
-  indices: [{ name: 'uq_courses_code', unique: true, columns: ['code'] }],
-});
+export type CourseEntity = Course;
+export const CourseSchema = Course;

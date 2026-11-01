@@ -1,55 +1,68 @@
-import { EntitySchema } from 'typeorm';
 import {
-  idColumn,
-  referenceColumn,
-  relation,
-  locationColumns,
-} from './columns';
-import type { CourseEntity } from './course.schema';
-import type { UserEntity } from './user.schema';
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
+import { Course, type CourseEntity } from './course.schema';
+import { User, type UserEntity } from './user.schema';
 
-export interface ClassEntity {
-  id: number;
-  course_id: number;
-  section: string;
-  term: string;
-  teacher_id: number;
-  room_label: string;
-  latitude: string | number;
-  longitude: string | number;
-  radius_m: string | number;
+@Entity('classes')
+@Index('uq_classes_course_term_section', ['course_id', 'term', 'section'], {
+  unique: true,
+})
+@Index('ix_classes_teacher', ['teacher_id'])
+export class Class {
+  @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
+  id!: number;
+
+  @Column({ type: 'int', unsigned: true })
+  course_id!: number;
+
+  @Column({
+    type: 'varchar',
+    length: 30,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  section!: string;
+
+  @Column({ type: 'varchar', length: 50 })
+  term!: string;
+
+  @Column({ type: 'int', unsigned: true })
+  teacher_id!: number;
+
+  @Column({ type: 'varchar', length: 100 })
+  room_label!: string;
+
+  @Column({ type: 'decimal', precision: 9, scale: 6 })
+  latitude!: string | number;
+
+  @Column({ type: 'decimal', precision: 9, scale: 6 })
+  longitude!: string | number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  radius_m!: string | number;
+
+  @ManyToOne(() => User, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'teacher_id' })
   teacher?: UserEntity;
+
+  @ManyToOne(() => Course, {
+    onDelete: 'RESTRICT',
+    onUpdate: 'RESTRICT',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'course_id' })
   course?: CourseEntity;
 }
 
-// One offering of a course: a term, a section and a lecturer.
-export const ClassSchema = new EntitySchema<ClassEntity>({
-  name: 'Class',
-  tableName: 'classes',
-  columns: {
-    id: idColumn(),
-    course_id: referenceColumn(),
-    section: {
-      type: 'varchar',
-      length: 30,
-      charset: 'ascii',
-      collation: 'ascii_bin',
-    },
-    term: { type: 'varchar', length: 50 },
-    teacher_id: referenceColumn(),
-    room_label: { type: 'varchar', length: 100 },
-    ...locationColumns(),
-  },
-  relations: {
-    teacher: relation('User', 'teacher_id'),
-    course: relation('Course', 'course_id'),
-  },
-  indices: [
-    {
-      name: 'uq_classes_course_term_section',
-      unique: true,
-      columns: ['course_id', 'term', 'section'],
-    },
-    { name: 'ix_classes_teacher', columns: ['teacher_id'] },
-  ],
-});
+export type ClassEntity = Class;
+export const ClassSchema = Class;

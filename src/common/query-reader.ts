@@ -1,21 +1,40 @@
-import { validationError } from './api-exception';
+import { ErrorFields, validationError } from './api-exception';
 
 // Date, time, then Z or a numeric offset. A timezone is required.
 const TIMESTAMP =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
+export interface IntegerOption {
+  max: number;
+  fallback?: number;
+  required?: boolean;
+}
+
+export interface PageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 // Reads and checks query or path values. Collect every problem, then call finish().
 export class QueryReader {
-  constructor(source) {
+  private readonly source: Record<string, unknown>;
+  private readonly fields: ErrorFields;
+
+  constructor(source: Record<string, unknown>) {
     this.source = source;
     this.fields = {};
   }
 
-  fail(name, message) {
+  fail(name: string, message: string): void {
     this.fields[name] ??= message;
   }
 
-  integer(name, { max, fallback, required = false }) {
+  integer(
+    name: string,
+    { max, fallback, required = false }: IntegerOption,
+  ): number | undefined {
     const value = this.source[name];
     if (value === undefined) {
       if (required) this.fail(name, `${name} is required.`);
@@ -33,11 +52,11 @@ export class QueryReader {
     return Number(value);
   }
 
-  timestamp(name) {
+  timestamp(name: string): Date | undefined {
     const value = this.source[name];
     if (value === undefined) return undefined;
     const parts = typeof value === 'string' ? TIMESTAMP.exec(value) : null;
-    const date = parts ? new Date(value) : null;
+    const date = parts ? new Date(value as string) : null;
     const [, year, month, day, hour, minute, second = '0'] = parts ?? [];
     if (
       !date ||
@@ -57,17 +76,17 @@ export class QueryReader {
     return date;
   }
 
-  oneOf(name, allowed) {
+  oneOf<T extends string>(name: string, allowed: readonly T[]): T | undefined {
     const value = this.source[name];
     if (value === undefined) return undefined;
-    if (typeof value !== 'string' || !allowed.includes(value)) {
+    if (typeof value !== 'string' || !allowed.includes(value as T)) {
       this.fail(name, `${name} must be one of: ${allowed.join(', ')}.`);
       return undefined;
     }
-    return value;
+    return value as T;
   }
 
-  boolean(name, fallback = false) {
+  boolean(name: string, fallback = false): boolean {
     const value = this.source[name];
     if (value === undefined || value === null || value === '') return fallback;
     if (value === 'true' || value === true) return true;
@@ -76,12 +95,16 @@ export class QueryReader {
     return fallback;
   }
 
-  finish() {
+  finish(): void {
     if (Object.keys(this.fields).length > 0) throw validationError(this.fields);
   }
 }
 
-export const pageMeta = (page, limit, total) => ({
+export const pageMeta = (
+  page: number,
+  limit: number,
+  total: number,
+): PageMeta => ({
   page,
   limit,
   total,

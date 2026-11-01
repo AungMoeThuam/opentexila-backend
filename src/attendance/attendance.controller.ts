@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   HttpCode,
-  Inject,
   Param,
   Post,
   Query,
@@ -12,29 +11,38 @@ import {
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { AttendanceGuard, type AttendanceRequest } from './attendance.guard';
-import { listQuery, locationBody, positiveInteger } from './attendance.rules';
+import { CurrentUser } from './current-user.decorator';
+import {
+  type AttendanceCaller,
+  listQuery,
+  locationBody,
+  positiveInteger,
+} from './attendance.rules';
 
 @Controller()
 @UseGuards(AttendanceGuard)
 export class AttendanceController {
-  readonly attendance: AttendanceService;
-
-  constructor(@Inject(AttendanceService) attendance: AttendanceService) {
-    this.attendance = attendance;
-  }
+  constructor(public readonly attendance: AttendanceService) {}
 
   @Get('me/class-sessions')
-  list(@Req() request: AttendanceRequest, @Query() query: Record<string, any>) {
-    return this.attendance.list(request.attendanceUser!, listQuery(query));
+  list(
+    @Req() request: AttendanceRequest,
+    @Query() query: Record<string, any>,
+    @CurrentUser() user?: AttendanceCaller,
+  ) {
+    const caller = user ?? request?.attendanceUser!;
+    return this.attendance.list(caller, listQuery(query));
   }
 
   @Get('class-sessions/:classSessionId')
   detail(
     @Req() request: AttendanceRequest,
     @Param('classSessionId') id: unknown,
+    @CurrentUser() user?: AttendanceCaller,
   ) {
+    const caller = user ?? request?.attendanceUser!;
     return this.attendance.detail(
-      request.attendanceUser!,
+      caller,
       positiveInteger(id, 'classSessionId'),
     );
   }
@@ -45,9 +53,11 @@ export class AttendanceController {
     @Req() request: AttendanceRequest,
     @Param('classSessionId') id: unknown,
     @Body() body: unknown,
+    @CurrentUser() user?: AttendanceCaller,
   ) {
+    const caller = user ?? request?.attendanceUser!;
     return this.attendance.checkIn(
-      request.attendanceUser!,
+      caller,
       positiveInteger(id, 'classSessionId'),
       locationBody(body),
     );

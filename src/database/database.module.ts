@@ -1,22 +1,39 @@
-import { Global, Module, OnApplicationShutdown } from '@nestjs/common';
-import type { DataSource } from 'typeorm';
-import { AppDataSource } from './data-source';
+import { Global, Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { databaseOptions } from './database-options';
 import { DATABASE } from './database.constants';
+import {
+  UserSchema,
+  CourseSchema,
+  ClassSchema,
+  EnrolmentSchema,
+  ClassSessionSchema,
+  AttendanceRecordSchema,
+} from './entities';
 
 @Global()
 @Module({
+  imports: [
+    TypeOrmModule.forRootAsync({
+      useFactory: () => databaseOptions(process.env),
+    }),
+    TypeOrmModule.forFeature([
+      UserSchema,
+      CourseSchema,
+      ClassSchema,
+      EnrolmentSchema,
+      ClassSessionSchema,
+      AttendanceRecordSchema,
+    ]),
+  ],
   providers: [
-    { provide: DATABASE, useFactory: async () => AppDataSource.initialize() },
     {
-      provide: 'DATABASE_LIFECYCLE',
-      inject: [DATABASE],
-      useFactory: (dataSource: DataSource): OnApplicationShutdown => ({
-        async onApplicationShutdown() {
-          if (dataSource.isInitialized) await dataSource.destroy();
-        },
-      }),
+      provide: DATABASE,
+      inject: [DataSource],
+      useFactory: (dataSource: DataSource) => dataSource,
     },
   ],
-  exports: [DATABASE],
+  exports: [TypeOrmModule, DATABASE],
 })
 export class DatabaseModule {}

@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Controller,
   Get,
-  Inject,
   Param,
   Query,
 } from '@nestjs/common';
@@ -30,10 +29,7 @@ function positiveInteger(
 
 @Controller('examples/classrooms')
 export class ClassroomsExampleController {
-  constructor(
-    @Inject(ClassroomsExampleService)
-    private readonly classrooms: ClassroomsExampleService,
-  ) {}
+  constructor(private readonly classrooms: ClassroomsExampleService) {}
 
   @Get()
   list(@Query() query: Record<string, unknown>) {

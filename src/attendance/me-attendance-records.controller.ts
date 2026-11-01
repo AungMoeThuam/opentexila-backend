@@ -1,9 +1,11 @@
-import { Controller, Get, Inject, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiException } from '../common/api-exception';
 import { QueryReader } from '../common/query-reader';
 import type { AttendanceStatus } from '../database/entities/attendance-record.schema';
 import { AttendanceHistoryService } from './attendance-history.service';
 import { AttendanceGuard, type AttendanceRequest } from './attendance.guard';
+import { CurrentUser } from './current-user.decorator';
+import type { AttendanceCaller } from './attendance.rules';
 
 const STATUSES: readonly AttendanceStatus[] = [
   'pending',
@@ -15,21 +17,15 @@ const STATUSES: readonly AttendanceStatus[] = [
 @Controller(['me/attendance-records', 'attendance/me'])
 @UseGuards(AttendanceGuard)
 export class AttendanceRecordsController {
-  readonly attendanceService: AttendanceHistoryService;
-
-  constructor(
-    @Inject(AttendanceHistoryService)
-    attendanceService: AttendanceHistoryService,
-  ) {
-    this.attendanceService = attendanceService;
-  }
+  constructor(public readonly attendanceService: AttendanceHistoryService) {}
 
   @Get()
   async getPersonalAttendanceRecords(
     @Query() query: Record<string, any>,
     @Req() req: AttendanceRequest,
+    @CurrentUser() user?: AttendanceCaller,
   ) {
-    const effectiveUser = req?.attendanceUser;
+    const effectiveUser = user ?? req?.attendanceUser;
 
     if (!effectiveUser) {
       throw new ApiException(

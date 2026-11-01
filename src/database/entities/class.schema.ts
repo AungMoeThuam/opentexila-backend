@@ -5,9 +5,25 @@ import {
   relation,
   locationColumns,
 } from './columns';
+import type { CourseEntity } from './course.schema';
+import type { UserEntity } from './user.schema';
+
+export interface ClassEntity {
+  id: number;
+  course_id: number;
+  section: string;
+  term: string;
+  teacher_id: number;
+  room_label: string;
+  latitude: string | number;
+  longitude: string | number;
+  radius_m: string | number;
+  teacher?: UserEntity;
+  course?: CourseEntity;
+}
 
 // One offering of a course: a term, a section and a lecturer.
-export const ClassSchema = new EntitySchema({
+export const ClassSchema = new EntitySchema<ClassEntity>({
   name: 'Class',
   tableName: 'classes',
   columns: {

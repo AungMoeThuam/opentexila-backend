@@ -1,7 +1,10 @@
 import path from 'node:path';
+import type { DataSourceOptions } from 'typeorm';
 import { entities } from './entities';
 
-export function databaseOptions(env = process.env) {
+export function databaseOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): DataSourceOptions {
   const port = Number(env.DB_PORT ?? 3306);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error('DB_PORT must be between 1 and 65535.');

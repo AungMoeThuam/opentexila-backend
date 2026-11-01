@@ -1,4 +1,5 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, OnApplicationShutdown } from '@nestjs/common';
+import type { DataSource } from 'typeorm';
 import { AppDataSource } from './data-source';
 import { DATABASE } from './database.constants';
 
@@ -9,7 +10,7 @@ import { DATABASE } from './database.constants';
     {
       provide: 'DATABASE_LIFECYCLE',
       inject: [DATABASE],
-      useFactory: (dataSource) => ({
+      useFactory: (dataSource: DataSource): OnApplicationShutdown => ({
         async onApplicationShutdown() {
           if (dataSource.isInitialized) await dataSource.destroy();
         },

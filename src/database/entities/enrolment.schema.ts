@@ -1,7 +1,16 @@
 import { EntitySchema } from 'typeorm';
 import { keyReferenceColumn, relation } from './columns';
+import type { ClassEntity } from './class.schema';
+import type { UserEntity } from './user.schema';
 
-export const EnrolmentSchema = new EntitySchema({
+export interface EnrolmentEntity {
+  class_id: number;
+  student_id: number;
+  class?: ClassEntity;
+  student?: UserEntity;
+}
+
+export const EnrolmentSchema = new EntitySchema<EnrolmentEntity>({
   name: 'Enrolment',
   tableName: 'enrolments',
   columns: {

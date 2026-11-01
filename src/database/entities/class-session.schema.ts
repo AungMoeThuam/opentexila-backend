@@ -6,9 +6,26 @@ import {
   relation,
   locationColumns,
 } from './columns';
+import type { ClassEntity } from './class.schema';
+
+export type ClassSessionState = 'scheduled' | 'cancelled';
+
+export interface ClassSessionEntity {
+  id: number;
+  class_id: number;
+  room_label: string;
+  latitude: string | number;
+  longitude: string | number;
+  radius_m: string | number;
+  starts_at: Date;
+  late_after: Date;
+  ends_at: Date;
+  state: ClassSessionState;
+  class?: ClassEntity;
+}
 
 // One concrete scheduled occurrence. Recurring timetable generation belongs to a future service.
-export const ClassSessionSchema = new EntitySchema({
+export const ClassSessionSchema = new EntitySchema<ClassSessionEntity>({
   name: 'ClassSession',
   tableName: 'class_sessions',
   columns: {

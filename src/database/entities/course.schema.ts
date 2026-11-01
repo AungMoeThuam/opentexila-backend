@@ -1,7 +1,13 @@
 import { EntitySchema } from 'typeorm';
 import { idColumn } from './columns';
 
-export const CourseSchema = new EntitySchema({
+export interface CourseEntity {
+  id: number;
+  code: string;
+  name: string;
+}
+
+export const CourseSchema = new EntitySchema<CourseEntity>({
   name: 'Course',
   tableName: 'courses',
   columns: {

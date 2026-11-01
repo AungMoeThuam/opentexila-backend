@@ -1,7 +1,22 @@
 import { EntitySchema } from 'typeorm';
 import { idColumn, createdAtColumn } from './columns';
 
-export const UserSchema = new EntitySchema({
+export type UserRole = 'student' | 'teacher' | 'admin';
+export type UserStatus = 'active' | 'inactive';
+
+export interface UserEntity {
+  id: number;
+  name: string;
+  email: string;
+  password_hash?: string;
+  role: UserRole;
+  status: UserStatus;
+  must_change_password: boolean;
+  session_version: number;
+  created_at: Date;
+}
+
+export const UserSchema = new EntitySchema<UserEntity>({
   name: 'User',
   tableName: 'users',
   columns: {

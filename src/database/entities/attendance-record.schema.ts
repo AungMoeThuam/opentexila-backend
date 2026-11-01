@@ -1,7 +1,21 @@
 import { EntitySchema } from 'typeorm';
 import { keyReferenceColumn, dateColumn, relation } from './columns';
+import type { ClassSessionEntity } from './class-session.schema';
+import type { UserEntity } from './user.schema';
 
-export const AttendanceRecordSchema = new EntitySchema({
+export type AttendanceStatus = 'pending' | 'present' | 'late' | 'absent';
+
+export interface AttendanceRecordEntity {
+  class_session_id: number;
+  student_id: number;
+  status: AttendanceStatus;
+  checked_in_at: Date | null;
+  distance_m: string | number | null;
+  classSession?: ClassSessionEntity;
+  student?: UserEntity;
+}
+
+export const AttendanceRecordSchema = new EntitySchema<AttendanceRecordEntity>({
   name: 'AttendanceRecord',
   tableName: 'attendance_records',
   columns: {

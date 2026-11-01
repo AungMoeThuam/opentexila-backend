@@ -41,7 +41,7 @@ test('lecturer session list over HTTP', async (t) => {
       return [[session()], 21];
     },
   };
-  const app = await startAttendanceApp({ ClassSession });
+  const app = await startAttendanceApp({ ClassSession, AttendanceRecord: {} });
   t.after(() => app.close());
   const url = `${app.base}/me/class-sessions`;
   const get = (suffix = '', headers = { 'x-dev-user-id': '2' }) =>

@@ -6,11 +6,10 @@ import {
   Param,
   Post,
   Query,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import { AttendanceGuard, type AttendanceRequest } from './attendance.guard';
+import { AttendanceGuard } from './attendance.guard';
 import { CurrentUser } from './current-user.decorator';
 import {
   type AttendanceCaller,
@@ -26,38 +25,29 @@ export class AttendanceController {
 
   @Get('me/class-sessions')
   list(
-    @Req() request: AttendanceRequest,
+    @CurrentUser() user: AttendanceCaller,
     @Query() query: Record<string, any>,
-    @CurrentUser() user?: AttendanceCaller,
   ) {
-    const caller = user ?? request?.attendanceUser!;
-    return this.attendance.list(caller, listQuery(query));
+    return this.attendance.list(user, listQuery(query));
   }
 
   @Get('class-sessions/:classSessionId')
   detail(
-    @Req() request: AttendanceRequest,
+    @CurrentUser() user: AttendanceCaller,
     @Param('classSessionId') id: unknown,
-    @CurrentUser() user?: AttendanceCaller,
   ) {
-    const caller = user ?? request?.attendanceUser!;
-    return this.attendance.detail(
-      caller,
-      positiveInteger(id, 'classSessionId'),
-    );
+    return this.attendance.detail(user, positiveInteger(id, 'classSessionId'));
   }
 
   @Post('class-sessions/:classSessionId/check-ins')
   @HttpCode(200)
   checkIn(
-    @Req() request: AttendanceRequest,
+    @CurrentUser() user: AttendanceCaller,
     @Param('classSessionId') id: unknown,
     @Body() body: unknown,
-    @CurrentUser() user?: AttendanceCaller,
   ) {
-    const caller = user ?? request?.attendanceUser!;
     return this.attendance.checkIn(
-      caller,
+      user,
       positiveInteger(id, 'classSessionId'),
       locationBody(body),
     );

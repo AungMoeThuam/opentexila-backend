@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { ApiException, validationError } from '../common/api-exception';
 import type {
   AttendanceRecordEntity,
   ClassSessionEntity,
@@ -34,13 +34,11 @@ export function fail(
   message: string,
   fields: Record<string, string> = {},
 ): never {
-  throw new HttpException({ error: { code, message, fields } }, status);
+  throw new ApiException(status, code, message, fields);
 }
 
 export function invalid(field: string, message: string): never {
-  fail(422, 'VALIDATION_ERROR', 'Please correct the highlighted fields.', {
-    [field]: message,
-  });
+  throw validationError({ [field]: message });
 }
 
 export function positiveInteger(

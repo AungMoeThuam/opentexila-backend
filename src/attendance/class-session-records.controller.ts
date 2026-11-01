@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
-import { AttendanceGuard, type AttendanceRequest } from './attendance.guard';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { AttendanceGuard } from './attendance.guard';
 import { ClassSessionRecordsService } from './class-session-records.service';
 import { CurrentUser } from './current-user.decorator';
 import type { AttendanceCaller } from './attendance.rules';
@@ -13,10 +13,8 @@ export class ClassSessionRecordsController {
   list(
     @Param('classSessionId') classSessionId: string,
     @Query() query: Record<string, any>,
-    @Req() request: AttendanceRequest,
-    @CurrentUser() user?: AttendanceCaller,
+    @CurrentUser() user: AttendanceCaller,
   ) {
-    const caller = user ?? request?.attendanceUser;
-    return this.records.list(caller, classSessionId, query);
+    return this.records.list(user, classSessionId, query);
   }
 }

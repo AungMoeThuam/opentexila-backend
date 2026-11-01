@@ -3,6 +3,7 @@
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
 **Status: student schedule, detail, check-in and roster materialisation implemented on the feature branch; production sign-in requires the separate authentication feature. History, lecturer roster and finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: planned contract; database schema (`class_sessions`, `attendance_records`) implemented.** Until real authentication exists, the lecturer routes read the caller id from the temporary request header `X-Dev-User-Id` (no guard, no checks); a missing or invalid header gives `422 VALIDATION_ERROR`. All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 
@@ -67,7 +68,6 @@ Shared handler owned by the check-in workflow (`#10`) and extended with teacher 
       "starts_at": "2026-10-29T01:00:00.000Z",
       "late_after": "2026-10-29T01:15:00.000Z",
       "ends_at": "2026-10-29T03:00:00.000Z",
-      "state": "scheduled",
       "availability": "in_progress",
       "my_attendance": {
         "class_session_id": 30,
@@ -87,7 +87,6 @@ Shared handler owned by the check-in workflow (`#10`) and extended with teacher 
 }
 ```
 
-- `state` is the persisted column (`"scheduled" | "cancelled"`).
 - `availability` is derived from server time: `"cancelled"` when `state = 'cancelled'`; otherwise `"upcoming"` before `starts_at`, `"in_progress"` when `starts_at <= server_now < ends_at`, and `"ended"` when `server_now >= ends_at`.
 - `my_attendance` is `null` for teachers, or `null` for students before a record is materialised. A pending record has `status: "pending"`, `checked_in_at: null`, and `distance_m: null`.
 

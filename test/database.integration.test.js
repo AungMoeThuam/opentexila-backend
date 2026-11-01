@@ -432,6 +432,156 @@ test(
           );
         },
       );
+      await t.test('lecturer attendance routes read real data', async () => {
+        const {
+          MeClassSessionsService,
+        } = require('../dist/attendance/me-class-sessions.service');
+        const {
+          ClassSessionRecordsService,
+        } = require('../dist/attendance/class-session-records.service');
+        const sessions = new MeClassSessionsService(ds);
+        const rosters = new ClassSessionRecordsService(ds);
+        const accountId = (email) =>
+          fixtures.accounts.find((account) => account.email === email).id;
+        const lecturer = { id: accountId('lecturer.one@example.com') };
+        const otherLecturer = { id: accountId('lecturer.two@example.com') };
+        const placeholders = (values) => values.map(() => '?').join(',');
+
+        // List: only the caller's sessions, ordered, with no personal attendance.
+        const mine = await ds.query(
+          `SELECT s.id, s.class_id, s.starts_at FROM class_sessions s
+             JOIN classes c ON c.id = s.class_id
+             WHERE c.teacher_id = ? ORDER BY s.starts_at, s.id`,
+          [lecturer.id],
+        );
+        assert.ok(mine.length > 0 && mine.length <= 100);
+        const listed = await sessions.list(lecturer, { limit: '100' });
+        assert.deepEqual(
+          listed.data.map((item) => item.id),
+          mine.map((row) => row.id),
+        );
+        assert.equal(listed.meta.total, mine.length);
+        assert.ok(listed.data.every((item) => item.my_attendance === null));
+        assert.ok(
+          listed.data.every(
+            (item) => item.class.lecturer.name === 'Lecturer One',
+          ),
+        );
+        assert.ok(
+          listed.data.every(
+            (item) => !('state' in item) && !('latitude' in item.class),
+          ),
+        );
+
+        // Filters: classId and the half-open time range.
+        const classId = mine[0].class_id;
+        const byClass = await sessions.list(lecturer, {
+          classId: String(classId),
+          limit: '100',
+        });
+        assert.deepEqual(
+          byClass.data.map((item) => item.id),
+          mine.filter((row) => row.class_id === classId).map((row) => row.id),
+        );
+        const from = listed.data[1].starts_at;
+        const to = listed.data[3].starts_at;
+        const ranged = await sessions.list(lecturer, {
+          from,
+          to,
+          limit: '100',
+        });
+        assert.deepEqual(
+          ranged.data.map((item) => item.id),
+          listed.data
+            .filter((item) => item.starts_at >= from && item.starts_at < to)
+            .map((item) => item.id),
+        );
+        assert.ok(ranged.data.length > 0);
+        const paged = await sessions.list(lecturer, { page: '2', limit: '3' });
+        assert.deepEqual(
+          paged.data.map((item) => item.id),
+          mine.slice(3, 6).map((row) => row.id),
+        );
+
+        // Another lecturer sees none of these sessions.
+        const others = await sessions.list(otherLecturer, { limit: '100' });
+        const mineIds = new Set(mine.map((row) => row.id));
+        assert.ok(others.data.every((item) => !mineIds.has(item.id)));
+
+        // Roster of a session with records.
+        const [target] = await ds.query(
+          `SELECT class_session_id AS id, COUNT(*) AS n FROM attendance_records
+             WHERE class_session_id IN (${placeholders(mine)})
+             GROUP BY class_session_id HAVING n > 1 ORDER BY id LIMIT 1`,
+          mine.map((row) => row.id),
+        );
+        assert.ok(target, 'the seed should give the lecturer a roster');
+        const roster = await rosters.list(lecturer, String(target.id), {
+          limit: '100',
+        });
+        assert.equal(roster.data.length, Number(target.n));
+        const studentIds = roster.data.map((row) => row.student_id);
+        assert.deepEqual(
+          studentIds,
+          [...studentIds].sort((a, b) => a - b),
+        );
+        for (const row of roster.data) {
+          assert.deepEqual(Object.keys(row.student).sort(), ['id', 'name']);
+          const checkedIn = ['present', 'late'].includes(row.status);
+          assert.equal(
+            typeof row.checked_in_at,
+            checkedIn ? 'string' : 'object',
+          );
+          if (!checkedIn) assert.equal(row.checked_in_at, null);
+        }
+        assert.equal(roster.context.class_session_id, target.id);
+        assert.equal(roster.context.class.lecturer.name, 'Lecturer One');
+
+        // Roster status filter returns only that status.
+        for (const status of ['pending', 'present', 'late', 'absent']) {
+          const [{ n }] = await ds.query(
+            `SELECT COUNT(*) AS n FROM attendance_records
+               WHERE class_session_id = ? AND status = ?`,
+            [target.id, status],
+          );
+          const filtered = await rosters.list(lecturer, String(target.id), {
+            status,
+            limit: '100',
+          });
+          assert.equal(filtered.data.length, Number(n), status);
+          assert.ok(filtered.data.every((row) => row.status === status));
+          assert.equal(filtered.context.class_session_id, target.id);
+        }
+
+        // A session of another lecturer looks like a missing session.
+        const [foreign] = await ds.query(
+          `SELECT s.id FROM class_sessions s JOIN classes c ON c.id = s.class_id
+             WHERE c.teacher_id <> ? LIMIT 1`,
+          [lecturer.id],
+        );
+        await assert.rejects(
+          () => rosters.list(lecturer, String(foreign.id), {}),
+          (error) => error.getStatus() === 404,
+        );
+
+        // A cancelled session: availability "cancelled", empty roster, context kept.
+        const [cancelled] = await ds.query(
+          `SELECT s.id, c.teacher_id FROM class_sessions s
+             JOIN classes c ON c.id = s.class_id
+             WHERE s.state = 'cancelled' LIMIT 1`,
+        );
+        assert.ok(cancelled, 'the seed should contain a cancelled session');
+        const owner = { id: cancelled.teacher_id };
+        const ownerList = await sessions.list(owner, { limit: '100' });
+        assert.equal(
+          ownerList.data.find((item) => item.id === cancelled.id).availability,
+          'cancelled',
+        );
+        const empty = await rosters.list(owner, String(cancelled.id), {});
+        assert.deepEqual(empty.data, []);
+        assert.equal(empty.context.class_state, 'cancelled');
+        assert.equal(empty.meta.totalPages, 0);
+      });
       await t.test(
         'Nest exposes the shared database provider and closes the pool',
         async () => {

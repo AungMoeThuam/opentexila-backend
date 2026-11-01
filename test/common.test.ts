@@ -8,6 +8,11 @@ import {
 } from '../dist/common/api-exception.js';
 import { ApiExceptionFilter } from '../dist/common/api-exception.filter.js';
 import { QueryReader, pageMeta } from '../dist/common/query-reader.js';
+import {
+  createValidationPipe,
+  formatValidationErrors,
+} from '../dist/common/validation.pipe.js';
+import { PaginationQueryDto } from '../dist/common/dto/pagination-query.dto.js';
 
 function failure(work: () => void): any {
   try {
@@ -191,3 +196,43 @@ test('pageMeta computes total pages', () => {
   });
   assert.equal(pageMeta(1, 20, 0).totalPages, 0);
 });
+
+test('createValidationPipe formats class-validator errors into 422 VALIDATION_ERROR envelope', async () => {
+  const pipe = createValidationPipe();
+
+  // Valid value
+  const valid = (await pipe.transform(
+    { page: '5', limit: '10' },
+    {
+      type: 'query',
+      metatype: PaginationQueryDto,
+    },
+  )) as PaginationQueryDto;
+  assert.equal(valid.page, 5);
+  assert.equal(valid.limit, 10);
+
+  // Invalid value throws 422 ApiException
+  await assert.rejects(
+    () =>
+      pipe.transform(
+        { page: '15000' },
+        {
+          type: 'query',
+          metatype: PaginationQueryDto,
+        },
+      ),
+    (error: any) => {
+      assert.ok(error instanceof ApiException);
+      assert.equal(error.getStatus(), 422);
+      const body = error.getResponse() as any;
+      assert.equal(body.error.code, 'VALIDATION_ERROR');
+      assert.equal(body.error.message, 'Please correct the highlighted fields.');
+      assert.equal(
+        body.error.fields.page,
+        'Must be an integer between 1 and 10000.',
+      );
+      return true;
+    },
+  );
+});
+

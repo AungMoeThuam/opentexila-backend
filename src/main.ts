@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { createValidationPipe } from './common/validation.pipe';
 
 async function bootstrap(): Promise<void> {
   const port = Number(process.env.PORT ?? 3000);
@@ -10,6 +11,7 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api/v1');
+  app.useGlobalPipes(createValidationPipe());
   app.enableShutdownHooks();
   await app.listen(port, process.env.HOST ?? '127.0.0.1');
 }

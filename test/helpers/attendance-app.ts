@@ -4,6 +4,7 @@ import { Global, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AttendanceModule } from '../../dist/attendance/attendance.module.js';
 import { DATABASE } from '../../dist/database/database.constants.js';
+import { createValidationPipe } from '../../dist/common/validation.pipe.js';
 
 // Starts the attendance routes with fake repositories keyed by entity name
 // (for example `ClassSession`). Tests change the fake methods after start.
@@ -56,6 +57,7 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
     next();
   });
   app.setGlobalPrefix('api/v1');
+  app.useGlobalPipes(createValidationPipe());
   await app.listen(0, '127.0.0.1');
   return {
     base: `${await app.getUrl()}/api/v1`,

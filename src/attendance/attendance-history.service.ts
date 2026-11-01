@@ -3,16 +3,28 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
-
+import type { DataSource } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
-import { AttendanceRecordSchema } from '../database/entities/attendance-record.schema';
+import {
+  AttendanceRecordSchema,
+  AttendanceStatus,
+} from '../database/entities/attendance-record.schema';
 import { toClassSummary, toIso } from './class-summary';
+
+export interface PersonalAttendanceQuery {
+  studentId: number;
+  page?: number;
+  limit?: number;
+  classId?: number;
+  from?: Date;
+  to?: Date;
+  status?: AttendanceStatus;
+  includeCancelled?: boolean;
+}
 
 @Injectable()
 export class AttendanceHistoryService {
-  constructor(database) {
-    this.database = database;
-  }
+  constructor(@Inject(DATABASE) private readonly database: DataSource) {}
 
   async getPersonalAttendanceRecords({
     studentId,
@@ -23,7 +35,7 @@ export class AttendanceHistoryService {
     to,
     status,
     includeCancelled = false,
-  }) {
+  }: PersonalAttendanceQuery) {
     if (!this.database?.isInitialized) {
       throw new ServiceUnavailableException(
         'Attendance database is unavailable.',
@@ -70,14 +82,14 @@ export class AttendanceHistoryService {
     const rawRecords = await qb.getMany();
 
     const data = rawRecords.map((record) => {
-      const session = record.classSession;
+      const session = record.classSession!;
 
       return {
         class_session_id: record.class_session_id,
         student_id: record.student_id,
         // The session's room overrides the class default room.
         class: toClassSummary({
-          ...session.class,
+          ...session.class!,
           room_label: session.room_label,
         }),
         starts_at: toIso(session.starts_at),
@@ -102,5 +114,3 @@ export class AttendanceHistoryService {
     };
   }
 }
-
-Inject(DATABASE)(AttendanceHistoryService, undefined, 0);

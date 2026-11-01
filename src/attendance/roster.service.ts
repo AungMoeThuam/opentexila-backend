@@ -1,14 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { DataSource, EntityManager } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
+import type { ClassEntity, ClassSessionEntity } from '../database/entities';
 import { fail } from './attendance.rules';
 
-export async function databaseNow(manager) {
+export async function databaseNow(manager: EntityManager): Promise<Date> {
   const [row] = await manager.query('SELECT UTC_TIMESTAMP(3) AS now');
   return new Date(row.now);
 }
+
 // Call inside a transaction. All attendance/enrolment/finalisation writers must
 // use the same class -> class_session lock order.
-export async function lockClassSession(manager, id) {
+export async function lockClassSession(
+  manager: EntityManager,
+  id: number,
+): Promise<{ classroom: ClassEntity; session: ClassSessionEntity }> {
   const [reference] = await manager.query(
     'SELECT class_id FROM class_sessions WHERE id = ?',
     [id],
@@ -27,7 +33,12 @@ export async function lockClassSession(manager, id) {
     fail(404, 'RESOURCE_NOT_FOUND', 'The requested resource was not found.');
   return { classroom, session };
 }
-export async function materialiseLockedRoster(manager, session, now) {
+
+export async function materialiseLockedRoster(
+  manager: EntityManager,
+  session: ClassSessionEntity,
+  now: Date,
+): Promise<void> {
   if (session.state === 'cancelled' || now < session.starts_at) return;
   // A duplicate must never reset an existing present/late/absent record.
   await manager.query(
@@ -37,12 +48,12 @@ export async function materialiseLockedRoster(manager, session, now) {
     [session.id, session.class_id],
   );
 }
+
 @Injectable()
 export class RosterService {
-  constructor(database) {
-    this.database = database;
-  }
-  async materialise(classSessionId) {
+  constructor(@Inject(DATABASE) private readonly database: DataSource) {}
+
+  async materialise(classSessionId: number) {
     return this.database.transaction(async (manager) => {
       const { session } = await lockClassSession(manager, classSessionId);
       const now = await databaseNow(manager);
@@ -51,4 +62,3 @@ export class RosterService {
     });
   }
 }
-Inject(DATABASE)(RosterService, undefined, 0);

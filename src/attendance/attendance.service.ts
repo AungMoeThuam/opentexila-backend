@@ -1,9 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { DataSource, EntityManager } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
+import type {
+  AttendanceRecordEntity,
+  ClassEntity,
+  ClassSessionEntity,
+  UserRole,
+} from '../database/entities';
 import {
+  AttendanceCaller,
   availability,
   eligibility,
   fail,
+  ListQueryResult,
+  LocationReading,
   validateLocation,
 } from './attendance.rules';
 import {
@@ -12,8 +22,12 @@ import {
   materialiseLockedRoster,
 } from './roster.service';
 
-const iso = (value) => (value == null ? null : new Date(value).toISOString());
-export function attendanceDto(record) {
+const iso = (value: Date | string | null | undefined): string | null =>
+  value == null ? null : new Date(value).toISOString();
+
+export function attendanceDto(
+  record: AttendanceRecordEntity | null | undefined,
+) {
   return record
     ? {
         class_session_id: record.class_session_id,
@@ -27,11 +41,17 @@ export function attendanceDto(record) {
       }
     : null;
 }
-function requireRole(user, roles) {
+
+function requireRole(user: AttendanceCaller, roles: readonly UserRole[]) {
   if (!roles.includes(user.role))
     fail(403, 'FORBIDDEN', 'Your role cannot perform this operation.');
 }
-async function membership(manager, session, user) {
+
+async function membership(
+  manager: EntityManager,
+  session: ClassSessionEntity,
+  user: AttendanceCaller,
+): Promise<{ enrolled: boolean; record: AttendanceRecordEntity | null }> {
   if (user.role !== 'student') return { enrolled: false, record: null };
   const [enrolment] = await manager.query(
     'SELECT student_id FROM enrolments WHERE class_id = ? AND student_id = ? FOR UPDATE',
@@ -43,14 +63,27 @@ async function membership(manager, session, user) {
   );
   return { enrolled: Boolean(enrolment), record: record || null };
 }
-function authorise(classroom, user, enrolled, record) {
+
+function authorise(
+  classroom: ClassEntity,
+  user: AttendanceCaller,
+  enrolled: boolean,
+  record: AttendanceRecordEntity | null,
+) {
   if (
     (user.role === 'student' && !enrolled && !record) ||
     (user.role === 'teacher' && classroom.teacher_id !== user.id)
   )
     fail(404, 'RESOURCE_NOT_FOUND', 'The requested resource was not found.');
 }
-async function sessionDto(manager, session, classroom, record, now) {
+
+async function sessionDto(
+  manager: EntityManager,
+  session: ClassSessionEntity,
+  classroom: ClassEntity,
+  record: AttendanceRecordEntity | null,
+  now: Date,
+) {
   const [course] = await manager.query(
     'SELECT id, code, name FROM courses WHERE id = ?',
     [classroom.course_id],
@@ -78,14 +111,14 @@ async function sessionDto(manager, session, classroom, record, now) {
     my_attendance: attendanceDto(record),
   };
 }
+
 @Injectable()
 export class AttendanceService {
-  constructor(database) {
-    this.database = database;
-  }
-  async list(user, query) {
+  constructor(@Inject(DATABASE) private readonly database: DataSource) {}
+
+  async list(user: AttendanceCaller, query: ListQueryResult) {
     requireRole(user, ['student', 'teacher']);
-    const parameters = [user.id];
+    const parameters: unknown[] = [user.id];
     const filters = [
       user.role === 'teacher'
         ? 'c.teacher_id = ?'
@@ -119,7 +152,7 @@ export class AttendanceService {
         const result = await this.detail(user, row.id);
         const { check_in, ...session } = result.data;
         data.push(session);
-      } catch (error) {
+      } catch (error: any) {
         // Membership may have changed after the list query. Never leak that row.
         if (error.getStatus?.() !== 404) throw error;
       }
@@ -135,7 +168,8 @@ export class AttendanceService {
       },
     };
   }
-  async detail(user, id) {
+
+  async detail(user: AttendanceCaller, id: number) {
     requireRole(user, ['student', 'teacher', 'admin']);
     return this.database.transaction(async (manager) => {
       const { session, classroom } = await lockClassSession(manager, id);
@@ -159,7 +193,8 @@ export class AttendanceService {
       };
     });
   }
-  async checkIn(user, id, reading) {
+
+  async checkIn(user: AttendanceCaller, id: number, reading: LocationReading) {
     requireRole(user, ['student']);
     return this.database.transaction(async (manager) => {
       const { session, classroom } = await lockClassSession(manager, id);
@@ -169,7 +204,7 @@ export class AttendanceService {
       if (session.state === 'cancelled')
         fail(409, 'CLASS_CANCELLED', 'This class session has been cancelled.');
       // Successful replays retain original evidence, even after the time window.
-      if (['present', 'late'].includes(record?.status))
+      if (['present', 'late'].includes(record?.status as string))
         return {
           data: {
             class_session_id: id,
@@ -209,4 +244,3 @@ export class AttendanceService {
     });
   }
 }
-Inject(DATABASE)(AttendanceService, undefined, 0);

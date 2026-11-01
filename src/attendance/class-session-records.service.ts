@@ -1,16 +1,30 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { DataSource, FindOptionsSelect, Repository } from 'typeorm';
 import { ApiException, notFound } from '../common/api-exception';
 import { QueryReader, pageMeta } from '../common/query-reader';
 import { DATABASE } from '../database/database.constants';
-import { AttendanceRecordSchema } from '../database/entities/attendance-record.schema';
-import { ClassSessionSchema } from '../database/entities/class-session.schema';
+import {
+  AttendanceRecordEntity,
+  AttendanceRecordSchema,
+  AttendanceStatus,
+} from '../database/entities/attendance-record.schema';
+import {
+  ClassSessionEntity,
+  ClassSessionSchema,
+} from '../database/entities/class-session.schema';
+import type { AttendanceCaller } from './attendance.rules';
 import { toClassSummary, toIso } from './class-summary';
 
 const MAX_ID = 4294967295;
-const STATUSES = ['pending', 'present', 'late', 'absent'];
+const STATUSES: readonly AttendanceStatus[] = [
+  'pending',
+  'present',
+  'late',
+  'absent',
+];
 
 // Explicit allow-lists: no student email, distance or coordinates are read.
-const sessionFields = {
+const sessionFields: FindOptionsSelect<ClassSessionEntity> = {
   id: true,
   starts_at: true,
   late_after: true,
@@ -25,7 +39,8 @@ const sessionFields = {
     teacher: { id: true, name: true },
   },
 };
-const recordFields = {
+
+const recordFields: FindOptionsSelect<AttendanceRecordEntity> = {
   class_session_id: true,
   student_id: true,
   status: true,
@@ -33,17 +48,17 @@ const recordFields = {
   student: { id: true, name: true },
 };
 
-const toRow = (record) => ({
+const toRow = (record: AttendanceRecordEntity) => ({
   class_session_id: record.class_session_id,
   student_id: record.student_id,
   status: record.status,
   checked_in_at: toIso(record.checked_in_at),
-  student: { id: record.student.id, name: record.student.name },
+  student: { id: record.student!.id, name: record.student!.name },
 });
 
-const toContext = (session) => ({
+const toContext = (session: ClassSessionEntity) => ({
   class_session_id: session.id,
-  class: toClassSummary(session.class),
+  class: toClassSummary(session.class!),
   starts_at: toIso(session.starts_at),
   late_after: toIso(session.late_after),
   ends_at: toIso(session.ends_at),
@@ -52,13 +67,20 @@ const toContext = (session) => ({
 
 @Injectable()
 export class ClassSessionRecordsService {
-  constructor(database) {
+  private readonly classSessions: Repository<ClassSessionEntity>;
+  private readonly records: Repository<AttendanceRecordEntity>;
+
+  constructor(@Inject(DATABASE) database: DataSource) {
     this.classSessions = database.getRepository(ClassSessionSchema);
     this.records = database.getRepository(AttendanceRecordSchema);
   }
 
   // Read-only roster of one session taught by `user`.
-  async list(user, classSessionId, query) {
+  async list(
+    user: AttendanceCaller,
+    classSessionId: string,
+    query: Record<string, unknown>,
+  ) {
     if (user.role !== 'teacher') {
       throw new ApiException(
         403,
@@ -70,9 +92,9 @@ export class ClassSessionRecordsService {
     const id = reader.integer('classSessionId', {
       max: MAX_ID,
       required: true,
-    });
-    const page = reader.integer('page', { max: 10000, fallback: 1 });
-    const limit = reader.integer('limit', { max: 100, fallback: 20 });
+    })!;
+    const page = reader.integer('page', { max: 10000, fallback: 1 })!;
+    const limit = reader.integer('limit', { max: 100, fallback: 20 })!;
     const status = reader.oneOf('status', STATUSES);
     reader.finish();
 
@@ -100,6 +122,3 @@ export class ClassSessionRecordsService {
     };
   }
 }
-
-// JavaScript/Babel needs explicit constructor injection.
-Inject(DATABASE)(ClassSessionRecordsService, undefined, 0);

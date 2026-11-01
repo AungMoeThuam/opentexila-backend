@@ -1,12 +1,13 @@
-import { Catch, HttpException } from '@nestjs/common';
+import { ArgumentsHost, Catch, HttpException } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
+import type { Request, Response } from 'express';
 
 // Also handles malformed JSON rejected before controller/guard dispatch.
 @Catch()
 export class AttendanceExceptionFilter extends BaseExceptionFilter {
-  catch(exception, host) {
+  catch(exception: any, host: ArgumentsHost): void {
     const http = host.switchToHttp();
-    const request = http.getRequest();
+    const request = http.getRequest<Request>();
     const path = (request.originalUrl || request.url).split('?')[0];
     if (
       !/^\/api\/v1\/(me\/attendance-records|attendance\/me|me\/class-sessions|class-sessions(?:\/[^/]+(?:\/(check-ins|records))?)?)\/?$/.test(
@@ -14,14 +15,14 @@ export class AttendanceExceptionFilter extends BaseExceptionFilter {
       )
     )
       return super.catch(exception, host);
-    const response = http.getResponse();
+    const response = http.getResponse<Response>();
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : exception.status === 400
+        : exception?.status === 400
           ? 400
           : 500;
-    const body =
+    const body: any =
       exception instanceof HttpException ? exception.getResponse() : null;
     const error =
       status < 500 && body?.error?.code

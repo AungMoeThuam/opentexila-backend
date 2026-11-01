@@ -57,9 +57,9 @@ Use `npm run stack:logs` to inspect services and `npm run stack:down` to stop th
 
 ```text
 src/<feature>/            # one folder per feature: auth, enrolments, attendance, ...
-  <feature>.module.js
-  <feature>.controller.js # routes, input validation, delegates to the service
-  <feature>.service.js    # database queries and response mapping
+  <feature>.module.ts
+  <feature>.controller.ts # routes, input validation, delegates to the service
+  <feature>.service.ts    # database queries and response mapping
 src/database/entities/    # shared schemas (use them; don't copy them)
 database/migrations/      # schema changes (new file per change)
 database/seeds/demo.js    # fictional demo data
@@ -67,32 +67,35 @@ test/                     # tests
 docs/api/                 # API contract per feature
 ```
 
-Several feature folders, including `src/auth/` and `src/attendance/`, are placeholders with `.gitkeep`. `src/enrolments/` has not been created yet; create it when implementing that feature. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.js`, auth guards).
+`src/auth/` is currently a placeholder with `.gitkeep`; `src/attendance/` is implemented in TypeScript. `src/enrolments/` has not been created yet; create it when implementing that feature. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.ts`, auth guards).
 
 Course code/name belong to `courses`. A `classes` row is one offering in a term; use `course_id`, `section` and `term`. Classes have no `code`, `name` or `subject` columns; read the related course. See the [database design](database-design.md#classes) and [sample response](api/examples.md#get-examplesclassrooms).
 
 ## 4. Adding an API endpoint
 
-The project uses plain JavaScript with Babel, not TypeScript. Dependencies are injected with explicit `Inject(...)(...)` calls, as in [classrooms-example.controller.js](../src/examples/classrooms-example.controller.js).
+The backend application in `src/` is written in TypeScript and compiled with `tsc`. Use standard NestJS parameter decorators (`@Inject`, `@Req`, `@Query`, `@Param`, `@Body`), as in [classrooms-example.controller.ts](../src/examples/classrooms-example.controller.ts).
 
 1. **Write the contract first.** Add or update `docs/api/<feature>.md` with method, path, who can call it, parameters, response and errors. Get it reviewed before building on it.
 2. **Create the service.** Inject `DATABASE` and take repositories from it. Never open your own connection.
-   ```js
+   ```ts
    import { Inject, Injectable } from '@nestjs/common';
+   import type { DataSource, Repository } from 'typeorm';
    import { DATABASE } from '../database/database.constants';
-   import { EnrolmentSchema } from '../database/entities';
+   import { EnrolmentEntity, EnrolmentSchema } from '../database/entities';
 
    @Injectable()
    export class EnrolmentsService {
-     constructor(database) {
+     readonly database: DataSource;
+     readonly enrolments: Repository<EnrolmentEntity>;
+
+     constructor(@Inject(DATABASE) database: DataSource) {
        this.database = database;
        this.enrolments = database.getRepository(EnrolmentSchema);
      }
    }
-   Inject(DATABASE)(EnrolmentsService, undefined, 0);
    ```
 3. **Create the controller.** Validate every query, param and body value at runtime. Take the acting user from the validated server session, never from a client-supplied user ID in the body, query or path. Validate resource IDs separately and authorize access to them.
-4. **Register the module** and add it to `imports` in [app.module.js](../src/app.module.js).
+4. **Register the module** and add it to `imports` in [app.module.ts](../src/app.module.ts).
 5. **Return only allowlisted fields.** Never return an entity or `SELECT *` result directly.
 6. **Add tests** in `test/`, and add the file to the `test` script in `package.json`.
 

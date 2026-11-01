@@ -225,7 +225,10 @@ test('lecturer session roster over HTTP', async (t) => {
 });
 
 test('student attendance history requires a signed-in student', async (t) => {
-  const app = await startAttendanceApp({ ClassSession: {}, AttendanceRecord: {} });
+  const app = await startAttendanceApp({
+    ClassSession: {},
+    AttendanceRecord: {},
+  });
   t.after(() => app.close());
   const get = () => fetch(`${app.base}/me/attendance-records`);
 

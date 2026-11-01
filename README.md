@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **JavaScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation and a development-only sample classroom API are implemented. Authentication and enrolment APIs, attendance APIs and scheduled attendance processing are still to be built.
+NestJS in **TypeScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Authentication and enrolment APIs are still to be built.
 
 ## Start the whole stack
 
@@ -37,7 +37,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 - [Shared Docker stack](docs/DOCKER.md): one-command startup, configuration and troubleshooting.
 - [Database design](docs/database-design.md): tables, fields, schedule model and integrity rules.
 - [Database ER diagram](docs/database-erd.md): tables, keys, cardinalities and composite uniqueness.
-- [Using the database in APIs](docs/database-development.md): repositories, JavaScript dependency injection, transactions and migration workflow.
+- [Using the database in APIs](docs/database-development.md): repositories, dependency injection, transactions and migration workflow.
 - [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
 - [API overview](docs/api/README.md), [auth](docs/api/auth.md), [enrolments](docs/api/enrolments.md), [attendance](docs/api/attendance.md): planned contracts.
 
@@ -58,7 +58,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 | `npm run start:dev`    | Rebuild/restart the backend on source changes.                                                                                                                     |
 | `npm start`            | Build and start the backend.                                                                                                                                       |
 | `npm run start:prod`   | Run an existing compiled build.                                                                                                                                    |
-| `npm run build`        | Compile JavaScript with Babel 7.                                                                                                                                   |
+| `npm run build`        | Compile TypeScript (`src/**/*.ts`) to `dist/` with `tsc`.                                                                                                          |
 | `npm run format:check` | Check source, migrations, seeds, tests and JSON formatting.                                                                                                        |
 
 ## Database structure
@@ -73,19 +73,19 @@ Live MySQL 8.4 verification now passes: `npm run test:db` checks migration appli
 
 ```text
 src/database/
-  database.constants.js       # DATABASE injection token
-  database.module.js          # Async DataSource provider and shutdown cleanup
-  database-options.js         # Environment validation; synchronize:false
-  data-source.js              # Same DataSource for Nest and migration CLI
+  database.constants.ts       # DATABASE injection token
+  database.module.ts          # Async DataSource provider and shutdown cleanup
+  database-options.ts         # Environment validation; synchronize:false
+  data-source.ts              # Same DataSource for Nest and migration CLI
   entities/
-    user.schema.js
-    course.schema.js
-    class.schema.js
-    enrolment.schema.js
-    class-session.schema.js
-    attendance-record.schema.js
-    columns.js
-    index.js
+    user.schema.ts
+    course.schema.ts
+    class.schema.ts
+    enrolment.schema.ts
+    class-session.schema.ts
+    attendance-record.schema.ts
+    columns.ts
+    index.ts
 database/
   migrations/                 # Immutable, versioned CommonJS JavaScript migrations
   seeds/demo.js               # Local demo fixtures
@@ -94,7 +94,7 @@ test/database.integration.test.js
 
 Six domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
-Auth/attendance feature folders remain available for controllers, services, runtime request validation and guards. No TypeScript is used. In plain JavaScript, dependencies require explicit injection tokens; see the database development guide.
+Application source in `src/` is written in TypeScript and compiled with `tsc`. Migrations (`database/migrations/`) and tests (`test/`) remain plain Node.js modules that import the compiled `dist/` output.
 
 ## Seed fixtures
 

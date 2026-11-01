@@ -24,8 +24,8 @@
     "db:seed": "npm run build && node --env-file-if-exists=.env database/seeds/demo.js",
     "test:db": "npm run build && node --test test/database.integration.test.js",
     "test": "npm run build && node --test test/database.unit.test.js test/attendance.unit.test.js test/examples.test.js test/stack.test.js test/attendance.test.js test/dev-auth.test.js test/common.test.js test/attendance-records.test.js",
-    "format": "prettier --write \"src/**/*.{ts,js}\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
-    "format:check": "prettier --check \"src/**/*.{ts,js}\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
+    "format": "prettier --write \"src/**/*.ts\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"database/**/*.js\" \"test/**/*.js\" \"*.json\"",
     "db:seed:attendance": "npm run build && node --env-file-if-exists=.env scripts/create-attendance-demo.js"
   },
   "dependencies": {

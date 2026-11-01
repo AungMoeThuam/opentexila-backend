@@ -1,23 +1,40 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import type { NextFunction, Request, Response, RequestHandler } from 'express';
+import type { DataSource } from 'typeorm';
+import type { UserEntity, UserRole } from '../database/entities';
 
-export function devAuthEnabled(env = process.env) {
+export interface DevSession {
+  csrfToken: string;
+  cookie: { expires: Date };
+  userId?: number;
+  sessionVersion?: number;
+}
+
+export type SessionRequest = Request & {
+  session?: DevSession;
+};
+
+export function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.DEV_AUTH_ENABLED !== 'true') return false;
   if (env.NODE_ENV !== 'development')
     throw new Error('DEV_AUTH_ENABLED requires NODE_ENV=development.');
-  if (!['localhost', '127.0.0.1', '::1', 'db'].includes(env.DB_HOST))
+  if (!['localhost', '127.0.0.1', '::1', 'db'].includes(env.DB_HOST ?? ''))
     throw new Error(
       'Development authentication requires a local development database.',
     );
   return true;
 }
-const accounts = Object.freeze({
+
+const accounts: Readonly<Record<UserRole, string>> = Object.freeze({
   student: 'student.one@example.com',
   teacher: 'lecturer.one@example.com',
   admin: 'admin.demo@example.com',
 });
+
 const cookieName = 'ot_dev_session';
 const lifetime = 8 * 60 * 60 * 1000;
-const profile = (user) => ({
+
+const profile = (user: UserEntity) => ({
   id: user.id,
   name: user.name,
   email: user.email,
@@ -28,13 +45,25 @@ const profile = (user) => ({
 
 // Local development only. Opaque cookies refer to memory owned by this process;
 // restarting the API expires all sessions. No client-supplied identity is trusted.
-export function createDevAuthMiddleware(database, env = process.env) {
+export function createDevAuthMiddleware(
+  database: DataSource,
+  env: NodeJS.ProcessEnv = process.env,
+): RequestHandler {
   if (!devAuthEnabled(env))
     throw new Error('Development authentication is disabled.');
-  const sessions = new Map();
-  const error = (response, status, code, message) =>
-    response.status(status).json({ error: { code, message, fields: {} } });
-  return async (request, response, next) => {
+  const sessions = new Map<string, DevSession>();
+  const error = (
+    response: Response,
+    status: number,
+    code: string,
+    message: string,
+  ) => response.status(status).json({ error: { code, message, fields: {} } });
+
+  return async (
+    request: SessionRequest,
+    response: Response,
+    next: NextFunction,
+  ) => {
     const path = request.path;
     const handled = [
       '/api/v1/auth/csrf',
@@ -52,9 +81,9 @@ export function createDevAuthMiddleware(database, env = process.env) {
         .map((part) => part.trim())
         .find((part) => part.startsWith(`${cookieName}=`))
         ?.slice(cookieName.length + 1);
-      let session = sessions.get(id);
+      let session = id ? sessions.get(id) : undefined;
       if (session) request.session = session;
-      const create = (user) => {
+      const create = (user?: UserEntity): DevSession | null => {
         if (id) sessions.delete(id);
         if (sessions.size >= 1000) return null;
         const token = randomBytes(32).toString('hex');
@@ -82,7 +111,7 @@ export function createDevAuthMiddleware(database, env = process.env) {
             'DEV_SESSION_LIMIT',
             'Too many development sessions. Restart the API.',
           );
-        return response.json({ data: { csrfToken: session.csrfToken } });
+        return response.json({ data: { csrfToken: session!.csrfToken } });
       }
       if (request.method === 'GET' && path === '/api/v1/auth/me') {
         if (!session?.userId)
@@ -93,7 +122,7 @@ export function createDevAuthMiddleware(database, env = process.env) {
             'Select a development role to sign in.',
           );
         const user = await database
-          .getRepository('User')
+          .getRepository<UserEntity>('User')
           .findOneBy({ id: session.userId });
         if (
           !user ||
@@ -127,7 +156,7 @@ export function createDevAuthMiddleware(database, env = process.env) {
             'The security token is missing or invalid.',
           );
         if (path === '/api/v1/auth/logout') {
-          sessions.delete(id);
+          if (id) sessions.delete(id);
           response.setHeader(
             'Set-Cookie',
             `${cookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
@@ -143,8 +172,8 @@ export function createDevAuthMiddleware(database, env = process.env) {
             'Select student, teacher or admin.',
           );
         const user = await database
-          .getRepository('User')
-          .findOneBy({ email: accounts[role] });
+          .getRepository<UserEntity>('User')
+          .findOneBy({ email: accounts[role as UserRole] });
         if (!user)
           return error(
             response,

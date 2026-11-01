@@ -1,8 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import type { DataSource, FindOptionsSelect, Repository } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
-import { ClassSchema } from '../database/entities/class.schema';
+import { ClassEntity, ClassSchema } from '../database/entities/class.schema';
 
-const publicFields = {
+const publicFields: FindOptionsSelect<ClassEntity> = {
   id: true,
   section: true,
   course: { id: true, code: true, name: true },
@@ -11,27 +12,29 @@ const publicFields = {
 };
 
 // Explicit response mapping keeps future entity fields out of API responses.
-function toResponse(classroom) {
+function toResponse(classroom: ClassEntity) {
   return {
     id: classroom.id,
     section: classroom.section,
     term: classroom.term,
     room_label: classroom.room_label,
     course: {
-      id: classroom.course.id,
-      code: classroom.course.code,
-      name: classroom.course.name,
+      id: classroom.course!.id,
+      code: classroom.course!.code,
+      name: classroom.course!.name,
     },
   };
 }
 
 @Injectable()
 export class ClassroomsExampleService {
-  constructor(database) {
+  private readonly classrooms: Repository<ClassEntity>;
+
+  constructor(@Inject(DATABASE) database: DataSource) {
     this.classrooms = database.getRepository(ClassSchema);
   }
 
-  async list(page, limit) {
+  async list(page: number, limit: number) {
     const [classrooms, total] = await this.classrooms.findAndCount({
       select: publicFields,
       relations: { course: true },
@@ -46,7 +49,7 @@ export class ClassroomsExampleService {
     };
   }
 
-  async findOne(id) {
+  async findOne(id: number) {
     const classroom = await this.classrooms.findOne({
       where: { id },
       select: publicFields,
@@ -56,6 +59,3 @@ export class ClassroomsExampleService {
     return { data: toResponse(classroom) };
   }
 }
-
-// JavaScript/Babel needs explicit constructor injection.
-Inject(DATABASE)(ClassroomsExampleService, undefined, 0);

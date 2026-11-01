@@ -8,7 +8,12 @@ import {
 } from '@nestjs/common';
 import { ClassroomsExampleService } from './classrooms-example.service';
 
-function positiveInteger(value, name, maximum, fallback) {
+function positiveInteger(
+  value: unknown,
+  name: string,
+  maximum: number,
+  fallback?: number,
+): number {
   if (value === undefined && fallback !== undefined) return fallback;
   if (
     typeof value !== 'string' ||
@@ -25,24 +30,20 @@ function positiveInteger(value, name, maximum, fallback) {
 
 @Controller('examples/classrooms')
 export class ClassroomsExampleController {
-  constructor(classrooms) {
-    this.classrooms = classrooms;
-  }
+  constructor(
+    @Inject(ClassroomsExampleService)
+    private readonly classrooms: ClassroomsExampleService,
+  ) {}
 
   @Get()
-  list(query) {
+  list(@Query() query: Record<string, unknown>) {
     const page = positiveInteger(query.page, 'page', 10000, 1);
     const limit = positiveInteger(query.limit, 'limit', 100, 20);
     return this.classrooms.list(page, limit);
   }
 
   @Get(':id')
-  findOne(id) {
+  findOne(@Param('id') id: string) {
     return this.classrooms.findOne(positiveInteger(id, 'id', 4294967295));
   }
 }
-
-// Babel legacy decorators do not support parameter decorator syntax in JS.
-Inject(ClassroomsExampleService)(ClassroomsExampleController, undefined, 0);
-Query()(ClassroomsExampleController.prototype, 'list', 0);
-Param('id')(ClassroomsExampleController.prototype, 'findOne', 0);

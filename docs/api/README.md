@@ -6,6 +6,7 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 ## Feature references
 
+- [Classes API](classes.md) — implemented classes and demo endpoints with pagination, search, and meeting timetable.
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
 - [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.

@@ -1,5 +1,8 @@
 # Lecturer attendance rosters API — design
 
+> **Superseded:** the temporary `X-Dev-User-Id` header and `callerFrom` helper described here were removed. Lecturer routes now use `AttendanceGuard` and `request.attendanceUser`, and the lecturer session list is the shared `GET /me/class-sessions` route.
+
+
 Issue: AungMoeThuam/opentexila-backend#12. Paired frontend: AungMoeThuam/opentexila#9.
 Contract source: `docs/api/attendance.md`. Branch: `feat/lecturer-attendance-rosters`.
 

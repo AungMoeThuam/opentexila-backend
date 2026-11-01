@@ -1,34 +1,29 @@
 import { Module } from '@nestjs/common';
-import { AttendanceController } from './attendance.controller';
-import { AttendanceService } from './attendance.service';
-
-@Module({
-  controllers: [AttendanceController],
-  providers: [AttendanceService],
-  exports: [AttendanceService],
 import { APP_FILTER } from '@nestjs/core';
 import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 import { AttendanceGuard } from './attendance.guard';
 import { AttendanceExceptionFilter } from './attendance.filter';
 import { RosterService } from './roster.service';
-
-@Module({
-  controllers: [AttendanceController],
-  providers: [
-    AttendanceService,
-    AttendanceGuard,
-    RosterService,
-    { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
-  ],
-  exports: [AttendanceService, RosterService],
+import { AttendanceRecordsController } from './me-attendance-records.controller';
+import { AttendanceHistoryService } from './attendance-history.service';
 import { ClassSessionRecordsController } from './class-session-records.controller';
 import { ClassSessionRecordsService } from './class-session-records.service';
-import { MeClassSessionsController } from './me-class-sessions.controller';
-import { MeClassSessionsService } from './me-class-sessions.service';
 
 @Module({
-  controllers: [MeClassSessionsController, ClassSessionRecordsController],
-  providers: [MeClassSessionsService, ClassSessionRecordsService],
+  controllers: [
+    AttendanceController,
+    AttendanceRecordsController,
+    ClassSessionRecordsController,
+  ],
+  providers: [
+    AttendanceService,
+    AttendanceHistoryService,
+    AttendanceGuard,
+    RosterService,
+    ClassSessionRecordsService,
+    { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
+  ],
+  exports: [AttendanceService, AttendanceHistoryService, RosterService],
 })
 export class AttendanceModule {}

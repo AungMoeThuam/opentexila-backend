@@ -434,20 +434,18 @@ test(
       );
       await t.test('lecturer attendance routes read real data', async () => {
         const {
-          MeClassSessionsService,
-        } = require('../dist/attendance/me-class-sessions.service');
-        const {
           ClassSessionRecordsService,
         } = require('../dist/attendance/class-session-records.service');
-        const sessions = new MeClassSessionsService(ds);
         const rosters = new ClassSessionRecordsService(ds);
         const accountId = (email) =>
           fixtures.accounts.find((account) => account.email === email).id;
-        const lecturer = { id: accountId('lecturer.one@example.com') };
-        const otherLecturer = { id: accountId('lecturer.two@example.com') };
+        const lecturer = {
+          id: accountId('lecturer.one@example.com'),
+          role: 'teacher',
+        };
         const placeholders = (values) => values.map(() => '?').join(',');
 
-        // List: only the caller's sessions, ordered, with no personal attendance.
+        // The lecturer's own sessions.
         const mine = await ds.query(
           `SELECT s.id, s.class_id, s.starts_at FROM class_sessions s
              JOIN classes c ON c.id = s.class_id
@@ -455,58 +453,6 @@ test(
           [lecturer.id],
         );
         assert.ok(mine.length > 0 && mine.length <= 100);
-        const listed = await sessions.list(lecturer, { limit: '100' });
-        assert.deepEqual(
-          listed.data.map((item) => item.id),
-          mine.map((row) => row.id),
-        );
-        assert.equal(listed.meta.total, mine.length);
-        assert.ok(listed.data.every((item) => item.my_attendance === null));
-        assert.ok(
-          listed.data.every(
-            (item) => item.class.lecturer.name === 'Lecturer One',
-          ),
-        );
-        assert.ok(
-          listed.data.every(
-            (item) => !('state' in item) && !('latitude' in item.class),
-          ),
-        );
-
-        // Filters: classId and the half-open time range.
-        const classId = mine[0].class_id;
-        const byClass = await sessions.list(lecturer, {
-          classId: String(classId),
-          limit: '100',
-        });
-        assert.deepEqual(
-          byClass.data.map((item) => item.id),
-          mine.filter((row) => row.class_id === classId).map((row) => row.id),
-        );
-        const from = listed.data[1].starts_at;
-        const to = listed.data[3].starts_at;
-        const ranged = await sessions.list(lecturer, {
-          from,
-          to,
-          limit: '100',
-        });
-        assert.deepEqual(
-          ranged.data.map((item) => item.id),
-          listed.data
-            .filter((item) => item.starts_at >= from && item.starts_at < to)
-            .map((item) => item.id),
-        );
-        assert.ok(ranged.data.length > 0);
-        const paged = await sessions.list(lecturer, { page: '2', limit: '3' });
-        assert.deepEqual(
-          paged.data.map((item) => item.id),
-          mine.slice(3, 6).map((row) => row.id),
-        );
-
-        // Another lecturer sees none of these sessions.
-        const others = await sessions.list(otherLecturer, { limit: '100' });
-        const mineIds = new Set(mine.map((row) => row.id));
-        assert.ok(others.data.every((item) => !mineIds.has(item.id)));
 
         // Roster of a session with records.
         const [target] = await ds.query(
@@ -564,23 +510,76 @@ test(
           (error) => error.getStatus() === 404,
         );
 
-        // A cancelled session: availability "cancelled", empty roster, context kept.
+        // A cancelled session: empty roster, context kept.
         const [cancelled] = await ds.query(
           `SELECT s.id, c.teacher_id FROM class_sessions s
              JOIN classes c ON c.id = s.class_id
              WHERE s.state = 'cancelled' LIMIT 1`,
         );
         assert.ok(cancelled, 'the seed should contain a cancelled session');
-        const owner = { id: cancelled.teacher_id };
-        const ownerList = await sessions.list(owner, { limit: '100' });
-        assert.equal(
-          ownerList.data.find((item) => item.id === cancelled.id).availability,
-          'cancelled',
-        );
+        const owner = { id: cancelled.teacher_id, role: 'teacher' };
         const empty = await rosters.list(owner, String(cancelled.id), {});
         assert.deepEqual(empty.data, []);
         assert.equal(empty.context.class_state, 'cancelled');
         assert.equal(empty.meta.totalPages, 0);
+      });
+      await t.test('student attendance history reads real data', async () => {
+        const {
+          AttendanceHistoryService,
+        } = require('../dist/attendance/attendance-history.service');
+        const history = new AttendanceHistoryService(ds);
+        const [{ student_id: studentId }] = await ds.query(
+          `SELECT student_id FROM attendance_records
+             GROUP BY student_id ORDER BY COUNT(*) DESC, student_id LIMIT 1`,
+        );
+        const expected = await ds.query(
+          `SELECT r.class_session_id AS id, r.status FROM attendance_records r
+             JOIN class_sessions s ON s.id = r.class_session_id
+             WHERE r.student_id = ? AND s.state <> 'cancelled'
+             ORDER BY s.starts_at DESC, r.class_session_id DESC`,
+          [studentId],
+        );
+        assert.ok(expected.length > 0);
+        const result = await history.getPersonalAttendanceRecords({
+          studentId,
+          limit: 100,
+        });
+        assert.deepEqual(
+          result.data.map((row) => row.class_session_id),
+          expected.map((row) => row.id),
+        );
+        assert.equal(result.meta.total, expected.length);
+        for (const row of result.data) {
+          assert.equal(row.student_id, studentId);
+          assert.deepEqual(Object.keys(row.class.lecturer).sort(), [
+            'id',
+            'name',
+          ]);
+          assert.ok(
+            row.class.course.code && row.class.section && row.class.term,
+          );
+          assert.equal(typeof row.starts_at, 'string');
+        }
+        const filtered = await history.getPersonalAttendanceRecords({
+          studentId,
+          classId: result.data[0].class.id,
+          status: result.data[0].status,
+          limit: 100,
+        });
+        assert.ok(filtered.data.length > 0);
+        assert.ok(
+          filtered.data.every(
+            (row) =>
+              row.class.id === result.data[0].class.id &&
+              row.status === result.data[0].status,
+          ),
+        );
+        const withCancelled = await history.getPersonalAttendanceRecords({
+          studentId,
+          includeCancelled: true,
+          limit: 100,
+        });
+        assert.ok(withCancelled.meta.total >= result.meta.total);
       });
       await t.test(
         'Nest exposes the shared database provider and closes the pool',

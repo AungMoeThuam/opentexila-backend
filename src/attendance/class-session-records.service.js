@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { notFound } from '../common/api-exception';
+import { ApiException, notFound } from '../common/api-exception';
 import { QueryReader, pageMeta } from '../common/query-reader';
 import { DATABASE } from '../database/database.constants';
 import { AttendanceRecordSchema } from '../database/entities/attendance-record.schema';
@@ -59,6 +59,13 @@ export class ClassSessionRecordsService {
 
   // Read-only roster of one session taught by `user`.
   async list(user, classSessionId, query) {
+    if (user.role !== 'teacher') {
+      throw new ApiException(
+        403,
+        'FORBIDDEN',
+        'Only lecturers can view a session roster.',
+      );
+    }
     const reader = new QueryReader({ ...query, classSessionId });
     const id = reader.integer('classSessionId', {
       max: MAX_ID,

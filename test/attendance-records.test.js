@@ -63,8 +63,7 @@ test('lecturer session roster over HTTP', async (t) => {
   };
   const app = await startAttendanceApp({ ClassSession, AttendanceRecord });
   t.after(() => app.close());
-  const get = (path, headers = { 'x-dev-user-id': '2' }) =>
-    fetch(`${app.base}/class-sessions${path}`, { headers });
+  const get = (path) => fetch(`${app.base}/class-sessions${path}`);
 
   await t.test(
     'success shape, scoping, ordering and private fields',
@@ -126,8 +125,10 @@ test('lecturer session roster over HTTP', async (t) => {
   });
 
   await t.test('the caller id scopes the session lookup', async () => {
-    await get('/30/records', { 'x-dev-user-id': '9' });
+    app.state.user = { ...app.state.user, id: 9 };
+    await get('/30/records');
     assert.equal(sessionCalls.at(-1).where.class.teacher_id, 9);
+    app.state.user = { ...app.state.user, id: 2 };
   });
 
   await t.test('invalid input answers 422 before any query', async () => {
@@ -153,14 +154,20 @@ test('lecturer session roster over HTTP', async (t) => {
     assert.equal(recordCalls.length, recordCount);
   });
 
-  await t.test('a missing or bad caller header answers 422', async () => {
+  await t.test('signed-out and non-lecturer callers are refused', async () => {
     const count = sessionCalls.length;
-    for (const headers of [{}, { 'x-dev-user-id': 'abc' }]) {
-      const response = await get('/30/records', headers);
-      assert.equal(response.status, 422);
-      const { error } = await response.json();
-      assert.deepEqual(Object.keys(error.fields), ['X-Dev-User-Id']);
+    app.state.signedIn = false;
+    const signedOut = await get('/30/records');
+    assert.equal(signedOut.status, 401);
+    assert.equal((await signedOut.json()).error.code, 'UNAUTHENTICATED');
+    app.state.signedIn = true;
+    for (const role of ['student', 'admin']) {
+      app.state.user = { ...app.state.user, role };
+      const response = await get('/30/records');
+      assert.equal(response.status, 403, role);
+      assert.equal((await response.json()).error.code, 'FORBIDDEN');
     }
+    app.state.user = { ...app.state.user, role: 'teacher' };
     assert.equal(sessionCalls.length, count);
   });
 
@@ -215,4 +222,31 @@ test('lecturer session roster over HTTP', async (t) => {
     assert.equal(response.status, 500);
     assert.equal((await response.text()).includes('private details'), false);
   });
+});
+
+test('student attendance history requires a signed-in student', async (t) => {
+  const app = await startAttendanceApp({});
+  t.after(() => app.close());
+  const get = () => fetch(`${app.base}/me/attendance-records`);
+
+  app.state.signedIn = false;
+  const signedOut = await get();
+  assert.equal(signedOut.status, 401);
+  assert.equal((await signedOut.json()).error.code, 'UNAUTHENTICATED');
+
+  // Identity headers are never trusted, only the verified session is.
+  const spoofed = await fetch(`${app.base}/me/attendance-records`, {
+    headers: {
+      'x-authenticated-user-id': '3',
+      'x-authenticated-role': 'student',
+    },
+  });
+  assert.equal(spoofed.status, 401);
+
+  app.state.signedIn = true;
+  assert.equal((await get()).status, 403);
+
+  app.state.user = { ...app.state.user, id: 3, role: 'student' };
+  // The guard lets a student reach the service (the fake database is offline).
+  assert.equal((await get()).status, 503);
 });

@@ -132,58 +132,6 @@ test('ClassroomsService returns demo classes when database is not connected', as
   );
 });
 
-test('ClassroomsService uses database repository when connected and populated', async () => {
-  const dbRecord = {
-    id: 10,
-    code: 'LIVE-101',
-    name: 'Live Database Class',
-    subject: 'Database Systems',
-    term: '2026-SEM1',
-    room_label: 'Room 101',
-    teacher_id: 5,
-    teacher: {
-      id: 5,
-      name: 'Dr. Database',
-      email: 'db@opentexila.local',
-      role: 'teacher',
-      password_hash: 'secret-hash',
-    },
-    latitude: '3.123456',
-    longitude: '101.654321',
-    radius_m: '50.00',
-    max_accuracy_m: '20.00',
-    schedule: 'Mon 10:00 - 12:00',
-    enrolled_count: 15,
-    created_at: new Date('2026-10-27T00:00:00.000Z'),
-    updated_at: new Date('2026-10-27T00:00:00.000Z'),
-  };
-
-  const fakeDb = {
-    isInitialized: true,
-    getRepository() {
-      return {
-        async findAndCount() {
-          return [[dbRecord], 1];
-        },
-        async findOne(options) {
-          return options.where.id === 10 ? dbRecord : null;
-        },
-      };
-    },
-  };
-
-  const service = new ClassroomsService(fakeDb);
-  const listResult = await service.list({ page: 1, limit: 20 });
-  assert.equal(listResult.data.length, 1);
-  assert.equal(listResult.data[0].code, 'LIVE-101');
-  assert.equal(listResult.data[0].teacher.name, 'Dr. Database');
-  assert.equal(listResult.data[0].teacher.password_hash, undefined);
-
-  const oneResult = await service.findOne(10);
-  assert.equal(oneResult.data.id, 10);
-  assert.equal(oneResult.data.code, 'LIVE-101');
-});
-
 test('ClassroomsController validates input parameters', async (t) => {
   const service = new ClassroomsService(null);
   const controller = new ClassroomsController(service);

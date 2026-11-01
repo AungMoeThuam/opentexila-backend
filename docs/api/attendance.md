@@ -2,8 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
-**Status: student schedule, detail, check-in and roster materialisation implemented on the feature branch; production sign-in requires the separate authentication feature. History, lecturer roster and finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
-**Status: planned contract; database schema (`class_sessions`, `attendance_records`) implemented.** Until real authentication exists, the lecturer routes read the caller id from the temporary request header `X-Dev-User-Id` (no guard, no checks); a missing or invalid header gives `422 VALIDATION_ERROR`. All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: student schedule, detail, check-in, roster materialisation, student history and the lecturer roster are implemented. Every route requires the verified server session (`AttendanceGuard`); production sign-in comes from the separate authentication feature, and local development uses the dev sign-in described in [DEVELOPMENT_AUTH.md](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 

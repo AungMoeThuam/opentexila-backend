@@ -13,10 +13,12 @@ const {
 const { PATH_METADATA } = require('@nestjs/common/constants');
 
 const {
-  AttendanceController,
-} = require('../dist/attendance/attendance.controller');
+  AttendanceRecordsController: AttendanceController,
+} = require('../dist/attendance/me-attendance-records.controller');
 
-const { AttendanceService } = require('../dist/attendance/attendance.service');
+const {
+  AttendanceHistoryService: AttendanceService,
+} = require('../dist/attendance/attendance-history.service');
 
 // Test-only fixture. This data is never used by the actual API.
 function makeRecord({
@@ -25,37 +27,30 @@ function makeRecord({
   classId = 1,
   code = 'COS30043',
   status = 'present',
-  meetingState = 'scheduled',
   sessionState = 'scheduled',
   startsAt = '2026-10-29T01:00:00.000Z',
 } = {}) {
   return {
-    session_id: sessionId,
+    class_session_id: sessionId,
     student_id: studentId,
     status,
     checked_in_at:
       status === 'present' || status === 'late'
         ? new Date('2026-10-29T01:05:00.000Z')
         : null,
-    session: {
+    classSession: {
+      id: sessionId,
       state: sessionState,
       room_label: 'EN402',
-      meeting: {
-        state: meetingState,
-        starts_at: new Date(startsAt),
-        ends_at: new Date(new Date(startsAt).getTime() + 2 * 60 * 60 * 1000),
-        classroom: {
-          id: classId,
-          code,
-          name: 'Test Course',
-          subject: 'Test Subject',
-          term: '2026-S2',
-          room_label: 'EN402',
-          teacher: {
-            id: 2,
-            name: 'Test Lecturer',
-          },
-        },
+      starts_at: new Date(startsAt),
+      ends_at: new Date(new Date(startsAt).getTime() + 2 * 60 * 60 * 1000),
+      class: {
+        id: classId,
+        section: 'A',
+        term: '2026-S2',
+        room_label: 'EN401',
+        course: { id: classId, code, name: 'Test Course' },
+        teacher: { id: 2, name: 'Test Lecturer', email: 'secret@example.com' },
       },
     },
   };
@@ -90,31 +85,29 @@ function makeFakeDatabase(records = []) {
         );
       }
 
-      if (sql.includes("m.state != 'cancelled'")) {
+      if (sql.includes("s.state != 'cancelled'")) {
         result = result.filter(
-          (record) =>
-            record.session.meeting.state !== 'cancelled' &&
-            record.session.state !== 'cancelled',
+          (record) => record.classSession.state !== 'cancelled',
         );
       }
 
       if (sql.includes('c.id = :classId')) {
         result = result.filter(
-          (record) => record.session.meeting.classroom.id === params.classId,
+          (record) => record.classSession.class.id === params.classId,
         );
       }
 
-      if (sql.includes('m.starts_at >= :from')) {
+      if (sql.includes('s.starts_at >= :from')) {
         result = result.filter(
           (record) =>
-            record.session.meeting.starts_at.getTime() >= params.from.getTime(),
+            record.classSession.starts_at.getTime() >= params.from.getTime(),
         );
       }
 
-      if (sql.includes('m.starts_at < :to')) {
+      if (sql.includes('s.starts_at < :to')) {
         result = result.filter(
           (record) =>
-            record.session.meeting.starts_at.getTime() < params.to.getTime(),
+            record.classSession.starts_at.getTime() < params.to.getTime(),
         );
       }
 
@@ -125,12 +118,11 @@ function makeFakeDatabase(records = []) {
 
     result.sort((a, b) => {
       const timeDifference =
-        b.session.meeting.starts_at.getTime() -
-        a.session.meeting.starts_at.getTime();
+        b.classSession.starts_at.getTime() - a.classSession.starts_at.getTime();
 
       if (timeDifference !== 0) return timeDifference;
 
-      return b.session_id - a.session_id;
+      return b.class_session_id - a.class_session_id;
     });
 
     return result;
@@ -251,7 +243,7 @@ function createFixture() {
       sessionId: 22,
       classId: 1,
       status: 'pending',
-      meetingState: 'cancelled',
+      sessionState: 'cancelled',
       startsAt: '2026-10-08T01:00:00.000Z',
     }),
     makeRecord({
@@ -293,11 +285,13 @@ test('AttendanceService queries real repository interface', async (t) => {
 
     assert.equal(result.data[0].class.course.code, 'COS30043');
     assert.equal(result.data[0].class.lecturer.name, 'Test Lecturer');
+    assert.equal(result.data[0].class.lecturer.email, undefined);
+    assert.equal(result.data[0].class.room_label, 'EN402');
     assert.equal(result.data[0].starts_at, '2026-10-29T01:00:00.000Z');
 
     assert.deepEqual(
       calls.joins.map((join) => join.relation),
-      ['ar.session', 's.meeting', 'm.classroom', 'c.teacher'],
+      ['ar.classSession', 's.class', 'c.course', 'c.teacher'],
     );
   });
 
@@ -409,8 +403,8 @@ test('AttendanceService queries real repository interface', async (t) => {
     assert.equal(calls.take, 2);
 
     assert.deepEqual(calls.order, [
-      { field: 'm.starts_at', direction: 'DESC' },
-      { field: 'ar.session_id', direction: 'DESC' },
+      { field: 's.starts_at', direction: 'DESC' },
+      { field: 'ar.class_session_id', direction: 'DESC' },
     ]);
   });
 
@@ -508,7 +502,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
         () =>
           controller.getPersonalAttendanceRecords(
             {},
-            { user: { id: 2, role } },
+            { attendanceUser: { id: 2, role } },
           ),
         (error) => error instanceof ForbiddenException,
       );
@@ -516,7 +510,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
   });
 
   const validReq = {
-    user: {
+    attendanceUser: {
       id: 3,
       role: 'student',
     },

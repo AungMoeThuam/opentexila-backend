@@ -6,12 +6,14 @@ import {
   Query,
   Req,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common';
-import { callerFrom } from '../auth/dev-caller';
+import { AttendanceGuard } from './attendance.guard';
 import { ApiExceptionFilter } from '../common/api-exception.filter';
 import { ClassSessionRecordsService } from './class-session-records.service';
 
 @Controller('class-sessions')
+@UseGuards(AttendanceGuard)
 @UseFilters(ApiExceptionFilter)
 export class ClassSessionRecordsController {
   constructor(records) {
@@ -20,7 +22,7 @@ export class ClassSessionRecordsController {
 
   @Get(':classSessionId/records')
   list(classSessionId, query, request) {
-    return this.records.list(callerFrom(request), classSessionId, query);
+    return this.records.list(request.attendanceUser, classSessionId, query);
   }
 }
 

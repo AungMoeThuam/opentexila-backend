@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { IsNull } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
-import { ClassroomSchema } from '../database/entities/classroom.schema';
 import { DEMO_CLASSES } from './demo-classes.data';
 
 function sanitizeTeacher(teacher) {
@@ -44,11 +43,9 @@ function toResponse(classroom) {
 export class ClassroomsService {
   constructor(database) {
     this.database = database;
-    try {
-      this.classrooms = database?.getRepository?.(ClassroomSchema) ?? null;
-    } catch {
-      this.classrooms = null;
-    }
+    // The legacy `classrooms` table no longer exists (see ClassSchema), so this
+    // module serves the static demo data only until it is rebuilt on `classes`.
+    this.classrooms = null;
   }
 
   async list({

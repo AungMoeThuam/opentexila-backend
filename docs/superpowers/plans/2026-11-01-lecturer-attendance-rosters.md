@@ -1,5 +1,8 @@
 # Lecturer Attendance Rosters Implementation Plan
 
+> **Superseded:** the temporary `X-Dev-User-Id` header and `callerFrom` helper described here were removed. Lecturer routes now use `AttendanceGuard` and `request.attendanceUser`, and the lecturer session list is the shared `GET /me/class-sessions` route.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `GET /api/v1/me/class-sessions` (teacher branch) and `GET /api/v1/class-sessions/:classSessionId/records` for a lecturer caller.

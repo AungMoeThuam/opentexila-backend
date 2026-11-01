@@ -124,21 +124,22 @@ field applies).
 
 | HTTP | `code` | When |
 | --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | Temporary stub: missing or unknown caller, or not development |
-| 403 | `FORBIDDEN` | Temporary stub: caller is not an active teacher |
 | 404 | `RESOURCE_NOT_FOUND` | Route 2: session missing or not yours |
-| 422 | `VALIDATION_ERROR` | Any bad path or query value |
+| 422 | `VALIDATION_ERROR` | Any bad path or query value, or a missing or bad `X-Dev-User-Id` header |
+
+There is no 401 and no 403 in this stage: no guard and no authentication (team lead's decision).
 
 Unexpected errors stay Nest's default 500 `{ statusCode, message: 'Internal server error' }`.
 
 ## Temporary caller identity (your part of auth)
 
-Auth is postponed. A **dev-only stub guard** identifies the caller: header
-`X-Dev-User-Id: <users.id>`. It works only when `NODE_ENV=development` (same rule as the
-sample API). It loads the user, requires `role = 'teacher'` and `status = 'active'`, and sets
-`request.user = { id, role }`. Services take the caller as an argument `(user)`, so the real
-`AuthGuard` replaces only this guard later. The stub lives in `src/auth/` and is deleted
-when real auth lands.
+Auth is postponed. The team lead decided: **no guard and no authentication** at this stage.
+Both routes still need a lecturer id to scope the data, so a small helper
+`callerFrom(request)` in `src/auth/dev-caller.js` reads the header
+`X-Dev-User-Id: <users.id>` and returns `{ id }`. It does **no** check: no 401, no 403, no
+role check, no user lookup, no `NODE_ENV` rule. A missing or bad header is a 422. Services
+take the caller as an argument `(user)`, so real auth replaces only this helper later. The
+helper is deleted when real auth lands.
 
 ## Constraints
 
@@ -152,11 +153,12 @@ when real auth lands.
 
 ## Calls made by the author (not by the user)
 
-- The stub guard, its header name, and its dev-only rule.
-- Non-teacher caller in the stub gives 403; no admin or student path is written.
+- The helper `callerFrom`, its header name `X-Dev-User-Id`, and the 422 for a missing or
+  bad header (the user chose "header, no checks").
+- No admin or student path is written; a caller who is not a lecturer simply sees an empty
+  list, or a 404 on the roster, because the data is scoped by `teacher_id`.
 - A repeated query name (`?page=1&page=2`) is a 422, like the sample API rejects it.
 - `from` and `to` need an explicit timezone; the client must URL-encode `+` in an offset.
-- `AttendanceModule` is always registered; in non-development it answers 401.
 - `docs/api/attendance.md` drops `state` from the list item.
 - Error filter is attached to the two new controllers only, so the sample API keeps its
   current 400 shape.

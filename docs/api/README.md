@@ -6,7 +6,6 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 ## Feature references
 
-- [Classes API](classes.md) — implemented classes and demo endpoints with pagination, search, and meeting timetable.
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
 - [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
@@ -19,27 +18,27 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 All paths below are relative to `/api/v1`.
 
-| Domain | Method | Path | Allowed roles | Purpose | Spec |
-| --- | --- | --- | --- | --- | --- |
-| **Auth** | `GET` | `/auth/csrf` | Guest / Any | Initialise session and return a session-bound CSRF token | [auth.md](auth.md#get-authcsrf) |
-| **Auth** | `POST` | `/auth/login` | Guest | Authenticate an active account and establish a cookie session | [auth.md](auth.md#post-authlogin) |
-| **Auth** | `POST` | `/auth/logout` | Any signed-in | Destroy the current server session and clear cookie | [auth.md](auth.md#post-authlogout) |
-| **Auth** | `GET` | `/auth/me` | Any signed-in | Restore the current user's safe profile and role | [auth.md](auth.md#get-authme) |
-| **Auth** | `POST` | `/auth/change-password` | Any signed-in | Change own password and clear `must_change_password` | [auth.md](auth.md#post-authchange-password) |
-| **Auth** | `POST` | `/admin/users` | `admin` | Create a student/lecturer account with a temporary password | [auth.md](auth.md#post-adminusers) |
-| **Auth** | `POST` | `/admin/users/:id/reset-password` | `admin` | Set a new temporary password and bump `session_version` | [auth.md](auth.md#post-adminusersidreset-password) |
-| **Enrolments** | `GET` | `/classes` | `admin` | List classes with course, section, term, lecturer and room | [enrolments.md](enrolments.md#get-classes) |
-| **Enrolments** | `GET` | `/me/classes` | `student`, `teacher` | List student's enrolled classes or lecturer's assigned classes | [enrolments.md](enrolments.md#get-meclasses) |
-| **Enrolments** | `GET` | `/classes/:classId/enrolments` | `admin`, assigned `teacher` | List enrolled students for a class with class context | [enrolments.md](enrolments.md#get-classesclassidenrolments) |
-| **Enrolments** | `POST` | `/classes/:classId/enrolments` | `admin` | Enrol an active student into a class | [enrolments.md](enrolments.md#post-classesclassidenrolments) |
-| **Enrolments** | `DELETE` | `/classes/:classId/enrolments/:studentId` | `admin` | Remove a student's enrolment from a class | [enrolments.md](enrolments.md#delete-classesclassidenrolmentsstudentid) |
-| **Attendance** | `GET` | `/me/class-sessions` | `student`, `teacher` | List scheduled class sessions for enrolled/assigned classes | [attendance.md](attendance.md#get-meclass-sessions) |
-| **Attendance** | `GET` | `/class-sessions/:classSessionId` | Authorised `student`, `teacher`, `admin` | Class session detail, availability, and student check-in status | [attendance.md](attendance.md#get-class-sessionsclasssessionid) |
-| **Attendance** | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Validate browser geolocation and record `present` or `late` | [attendance.md](attendance.md#post-class-sessionsclasssessionidcheck-ins) |
-| **Attendance** | `GET` | `/class-sessions/:classSessionId/records` | Assigned `teacher`, `admin` | Read-only attendance roster for a class session | [attendance.md](attendance.md#get-class-sessionsclasssessionidrecords) |
-| **Attendance** | `GET` | `/me/attendance-records` | `student` | Personal attendance history across class sessions | [attendance.md](attendance.md#get-meattendance-records) |
-| **Examples** | `GET` | `/examples/classrooms` | Dev-only (`NODE_ENV=development`) | Sample paginated classroom list | [examples.md](examples.md#get-examplesclassrooms) |
-| **Examples** | `GET` | `/examples/classrooms/:id` | Dev-only (`NODE_ENV=development`) | Sample single classroom detail | [examples.md](examples.md#get-examplesclassroomsid) |
+| Domain         | Method   | Path                                        | Allowed roles                            | Purpose                                                         | Spec                                                                      |
+| -------------- | -------- | ------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Auth**       | `GET`    | `/auth/csrf`                                | Guest / Any                              | Initialise session and return a session-bound CSRF token        | [auth.md](auth.md#get-authcsrf)                                           |
+| **Auth**       | `POST`   | `/auth/login`                               | Guest                                    | Authenticate an active account and establish a cookie session   | [auth.md](auth.md#post-authlogin)                                         |
+| **Auth**       | `POST`   | `/auth/logout`                              | Any signed-in                            | Destroy the current server session and clear cookie             | [auth.md](auth.md#post-authlogout)                                        |
+| **Auth**       | `GET`    | `/auth/me`                                  | Any signed-in                            | Restore the current user's safe profile and role                | [auth.md](auth.md#get-authme)                                             |
+| **Auth**       | `POST`   | `/auth/change-password`                     | Any signed-in                            | Change own password and clear `must_change_password`            | [auth.md](auth.md#post-authchange-password)                               |
+| **Auth**       | `POST`   | `/admin/users`                              | `admin`                                  | Create a student/lecturer account with a temporary password     | [auth.md](auth.md#post-adminusers)                                        |
+| **Auth**       | `POST`   | `/admin/users/:id/reset-password`           | `admin`                                  | Set a new temporary password and bump `session_version`         | [auth.md](auth.md#post-adminusersidreset-password)                        |
+| **Enrolments** | `GET`    | `/classes`                                  | `admin`                                  | List classes with course, section, term, lecturer and room      | [enrolments.md](enrolments.md#get-classes)                                |
+| **Enrolments** | `GET`    | `/me/classes`                               | `student`, `teacher`                     | List student's enrolled classes or lecturer's assigned classes  | [enrolments.md](enrolments.md#get-meclasses)                              |
+| **Enrolments** | `GET`    | `/classes/:classId/enrolments`              | `admin`, assigned `teacher`              | List enrolled students for a class with class context           | [enrolments.md](enrolments.md#get-classesclassidenrolments)               |
+| **Enrolments** | `POST`   | `/classes/:classId/enrolments`              | `admin`                                  | Enrol an active student into a class                            | [enrolments.md](enrolments.md#post-classesclassidenrolments)              |
+| **Enrolments** | `DELETE` | `/classes/:classId/enrolments/:studentId`   | `admin`                                  | Remove a student's enrolment from a class                       | [enrolments.md](enrolments.md#delete-classesclassidenrolmentsstudentid)   |
+| **Attendance** | `GET`    | `/me/class-sessions`                        | `student`, `teacher`                     | List scheduled class sessions for enrolled/assigned classes     | [attendance.md](attendance.md#get-meclass-sessions)                       |
+| **Attendance** | `GET`    | `/class-sessions/:classSessionId`           | Authorised `student`, `teacher`, `admin` | Class session detail, availability, and student check-in status | [attendance.md](attendance.md#get-class-sessionsclasssessionid)           |
+| **Attendance** | `POST`   | `/class-sessions/:classSessionId/check-ins` | Eligible `student`                       | Validate browser geolocation and record `present` or `late`     | [attendance.md](attendance.md#post-class-sessionsclasssessionidcheck-ins) |
+| **Attendance** | `GET`    | `/class-sessions/:classSessionId/records`   | Assigned `teacher`, `admin`              | Read-only attendance roster for a class session                 | [attendance.md](attendance.md#get-class-sessionsclasssessionidrecords)    |
+| **Attendance** | `GET`    | `/me/attendance-records`                    | `student`                                | Personal attendance history across class sessions               | [attendance.md](attendance.md#get-meattendance-records)                   |
+| **Examples**   | `GET`    | `/examples/classrooms`                      | Dev-only (`NODE_ENV=development`)        | Sample paginated classroom list                                 | [examples.md](examples.md#get-examplesclassrooms)                         |
+| **Examples**   | `GET`    | `/examples/classrooms/:id`                  | Dev-only (`NODE_ENV=development`)        | Sample single classroom detail                                  | [examples.md](examples.md#get-examplesclassroomsid)                       |
 
 ## Base URL
 
@@ -117,29 +116,29 @@ All feature endpoints return errors in the following envelope (the development-o
 
 ### Standard HTTP status and error codes
 
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `400` | `BAD_REQUEST` | Malformed JSON body or unreadable request syntax |
-| `401` | `UNAUTHENTICATED` | Missing, expired, or invalidated authentication session |
-| `401` | `INVALID_CREDENTIALS` | Wrong email/password or inactive account on login |
-| `403` | `FORBIDDEN` | Authenticated user's role cannot perform this operation |
-| `403` | `ACCOUNT_INACTIVE` | Authenticated account's `status` is `inactive` (if session not yet cleared) |
-| `403` | `PASSWORD_CHANGE_REQUIRED` | User has `must_change_password = true` and called a non-exempt endpoint |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` header on a mutation |
-| `403` | `NOT_ELIGIBLE` | Student is not in the class session's materialised attendance roster |
-| `404` | `RESOURCE_NOT_FOUND` | Target resource does not exist or is outside the caller's authorised scope |
-| `409` | `EMAIL_ALREADY_EXISTS` | Creating a user with an email that already exists in `users` |
-| `409` | `ENROLMENT_ALREADY_EXISTS` | Student is already enrolled in the target class (`(class_id, student_id)`) |
-| `409` | `CLASS_NOT_STARTED` | Check-in attempted before `class_sessions.starts_at` |
-| `409` | `CLASS_ENDED` | Check-in attempted at or after `class_sessions.ends_at` |
-| `409` | `CLASS_CANCELLED` | Check-in attempted on a class session with `state = 'cancelled'` |
-| `422` | `VALIDATION_ERROR` | Invalid path ID, query parameter, body field, unknown status, or invalid date range |
-| `422` | `STUDENT_NOT_ELIGIBLE` | Target user for enrolment is not an active `student` |
-| `422` | `LOCATION_STALE` | Geolocation `reading_timestamp` fails freshness/future-time policy |
-| `422` | `LOCATION_INACCURATE` | Geolocation `accuracy_m` exceeds the service accuracy threshold |
-| `422` | `OUTSIDE_ALLOWED_AREA` | Geolocation distance exceeds the class session's `radius_m` geofence |
-| `429` | `RATE_LIMITED` | Request rate limit reached (include `Retry-After` response header) |
-| `500` | `INTERNAL_ERROR` | Unexpected server or database failure; generic message with no internal details |
+| HTTP  | `error.code`               | When                                                                                |
+| ----- | -------------------------- | ----------------------------------------------------------------------------------- |
+| `400` | `BAD_REQUEST`              | Malformed JSON body or unreadable request syntax                                    |
+| `401` | `UNAUTHENTICATED`          | Missing, expired, or invalidated authentication session                             |
+| `401` | `INVALID_CREDENTIALS`      | Wrong email/password or inactive account on login                                   |
+| `403` | `FORBIDDEN`                | Authenticated user's role cannot perform this operation                             |
+| `403` | `ACCOUNT_INACTIVE`         | Authenticated account's `status` is `inactive` (if session not yet cleared)         |
+| `403` | `PASSWORD_CHANGE_REQUIRED` | User has `must_change_password = true` and called a non-exempt endpoint             |
+| `403` | `CSRF_INVALID`             | Missing or invalid `X-CSRF-Token` header on a mutation                              |
+| `403` | `NOT_ELIGIBLE`             | Student is not in the class session's materialised attendance roster                |
+| `404` | `RESOURCE_NOT_FOUND`       | Target resource does not exist or is outside the caller's authorised scope          |
+| `409` | `EMAIL_ALREADY_EXISTS`     | Creating a user with an email that already exists in `users`                        |
+| `409` | `ENROLMENT_ALREADY_EXISTS` | Student is already enrolled in the target class (`(class_id, student_id)`)          |
+| `409` | `CLASS_NOT_STARTED`        | Check-in attempted before `class_sessions.starts_at`                                |
+| `409` | `CLASS_ENDED`              | Check-in attempted at or after `class_sessions.ends_at`                             |
+| `409` | `CLASS_CANCELLED`          | Check-in attempted on a class session with `state = 'cancelled'`                    |
+| `422` | `VALIDATION_ERROR`         | Invalid path ID, query parameter, body field, unknown status, or invalid date range |
+| `422` | `STUDENT_NOT_ELIGIBLE`     | Target user for enrolment is not an active `student`                                |
+| `422` | `LOCATION_STALE`           | Geolocation `reading_timestamp` fails freshness/future-time policy                  |
+| `422` | `LOCATION_INACCURATE`      | Geolocation `accuracy_m` exceeds the service accuracy threshold                     |
+| `422` | `OUTSIDE_ALLOWED_AREA`     | Geolocation distance exceeds the class session's `radius_m` geofence                |
+| `429` | `RATE_LIMITED`             | Request rate limit reached (include `Retry-After` response header)                  |
+| `500` | `INTERNAL_ERROR`           | Unexpected server or database failure; generic message with no internal details     |
 
 Example `404 Not Found`:
 
@@ -156,6 +155,7 @@ Example `404 Not Found`:
 ## Updating this reference
 
 When implementing or updating an endpoint:
+
 1. Verify that its method, path, role guard, query/body validation, success DTO, and error codes match its feature document ([`auth.md`](auth.md), [`enrolments.md`](enrolments.md), or [`attendance.md`](attendance.md)).
 2. Coordinate any contract adjustments with the paired frontend issue/owner before merging.
 3. Update the status banner in the feature document once the endpoint is merged and verified by automated tests.

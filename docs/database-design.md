@@ -2,7 +2,7 @@
 
 **Version 6 · 29 October 2026 · Minimal consolidated baseline.**
 
-The single migration `1793059200000-InitialSchema.js` directly creates this schema: six domain EntitySchemas and seven application tables (the six domain tables plus `auth_sessions`). This is a fresh-database baseline, not an upgrade path for earlier development schemas. Existing development databases must be recreated separately.
+The migrations `1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts` create this schema: six domain EntitySchemas and seven application tables (the six domain tables plus `auth_sessions`). This is a fresh-database baseline, not an upgrade path for earlier development schemas. Existing development databases must be recreated separately.
 
 See the [ER diagram](database-erd.md) and [baseline setup guide](database-refactor-migration.md). `users.role`, `users.status`, `class_sessions.state` and `attendance_records.status` are MySQL ENUMs. The application still needs authentication and attendance business services.
 
@@ -75,6 +75,9 @@ Composite primary key `(class_id, student_id)`. To withdraw a student, delete th
 | Field                          | Type / rule                                                  |
 | ------------------------------ | ------------------------------------------------------------ |
 | class_id                       | class FK                                                     |
+| room_label                     | varchar(100); session venue snapshot                         |
+| latitude / longitude           | decimal(9,6), within -90..90 / -180..180                     |
+| radius_m                       | positive decimal(10,2); session check-in radius              |
 | starts_at, late_after, ends_at | required UTC datetime(3); starts_at <= late_after < ends_at  |
 | state                          | ENUM('scheduled','cancelled'), NOT NULL, default 'scheduled' |
 

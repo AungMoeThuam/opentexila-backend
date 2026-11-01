@@ -26,6 +26,7 @@ const STATUSES: readonly AttendanceStatus[] = [
 // Explicit allow-lists: no student email, distance or coordinates are read.
 const sessionFields: FindOptionsSelect<ClassSessionEntity> = {
   id: true,
+  room_label: true,
   starts_at: true,
   late_after: true,
   ends_at: true,
@@ -58,7 +59,10 @@ const toRow = (record: AttendanceRecordEntity) => ({
 
 const toContext = (session: ClassSessionEntity) => ({
   class_session_id: session.id,
-  class: toClassSummary(session.class!),
+  class: toClassSummary({
+    ...session.class!,
+    room_label: session.room_label ?? session.class!.room_label,
+  }),
   starts_at: toIso(session.starts_at),
   late_after: toIso(session.late_after),
   ends_at: toIso(session.ends_at),
@@ -75,17 +79,17 @@ export class ClassSessionRecordsService {
     this.records = database.getRepository(AttendanceRecordSchema);
   }
 
-  // Read-only roster of one session taught by `user`.
+  // Read-only roster of one session for its assigned lecturer or an admin.
   async list(
     user: AttendanceCaller,
     classSessionId: string,
     query: Record<string, unknown>,
   ) {
-    if (user.role !== 'teacher') {
+    if (user.role !== 'teacher' && user.role !== 'admin') {
       throw new ApiException(
         403,
         'FORBIDDEN',
-        'Only lecturers can view a session roster.',
+        'Only lecturers and admins can view a session roster.',
       );
     }
     const reader = new QueryReader({ ...query, classSessionId });
@@ -102,7 +106,10 @@ export class ClassSessionRecordsService {
     const session = await this.classSessions.findOne({
       select: sessionFields,
       relations: { class: { course: true, teacher: true } },
-      where: { id, class: { teacher_id: user.id } },
+      where: {
+        id,
+        ...(user.role === 'teacher' && { class: { teacher_id: user.id } }),
+      },
     });
     if (!session) throw notFound('Class session not found.');
 

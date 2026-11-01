@@ -5,6 +5,7 @@ import { startAttendanceApp } from './helpers/attendance-app.ts';
 
 const classSession = (overrides: Record<string, any> = {}) => ({
   id: 30,
+  room_label: 'EN402',
   starts_at: new Date('2026-10-29T01:00:00.000Z'),
   late_after: new Date('2026-10-29T01:15:00.000Z'),
   ends_at: new Date('2026-10-29T03:00:00.000Z'),
@@ -13,7 +14,7 @@ const classSession = (overrides: Record<string, any> = {}) => ({
     id: 1,
     section: 'A',
     term: '2026-S2',
-    room_label: 'EN402',
+    room_label: 'EN101',
     course: {
       id: 1,
       code: 'COS30043',
@@ -104,6 +105,7 @@ test('lecturer session roster over HTTP', async (t) => {
       ]);
       assert.equal(body.context.class_state, 'scheduled');
       assert.equal(body.context.class.lecturer.name, 'Lecturer One');
+      assert.equal(body.context.class.room_label, 'EN402');
       assert.equal(JSON.stringify(body).includes('@example.com'), false);
       assert.equal(JSON.stringify(body).includes('distance'), false);
       assert.deepEqual(sessionCalls.at(-1).where, {
@@ -158,22 +160,28 @@ test('lecturer session roster over HTTP', async (t) => {
     assert.equal(recordCalls.length, recordCount);
   });
 
-  await t.test('signed-out and non-lecturer callers are refused', async () => {
-    const count = sessionCalls.length;
-    app.state.signedIn = false;
-    const signedOut = await get('/30/records');
-    assert.equal(signedOut.status, 401);
-    assert.equal((await signedOut.json()).error.code, 'UNAUTHENTICATED');
-    app.state.signedIn = true;
-    for (const role of ['student', 'admin']) {
-      app.state.user = { ...app.state.user, role };
-      const response = await get('/30/records');
-      assert.equal(response.status, 403, role);
-      assert.equal((await response.json()).error.code, 'FORBIDDEN');
-    }
-    app.state.user = { ...app.state.user, role: 'teacher' };
-    assert.equal(sessionCalls.length, count);
-  });
+  await t.test(
+    'signed-out and student callers are refused while admin can view any session',
+    async () => {
+      const count = sessionCalls.length;
+      app.state.signedIn = false;
+      const signedOut = await get('/30/records');
+      assert.equal(signedOut.status, 401);
+      assert.equal((await signedOut.json()).error.code, 'UNAUTHENTICATED');
+      app.state.signedIn = true;
+      app.state.user = { ...app.state.user, role: 'student' };
+      const studentRes = await get('/30/records');
+      assert.equal(studentRes.status, 403);
+      assert.equal((await studentRes.json()).error.code, 'FORBIDDEN');
+      assert.equal(sessionCalls.length, count);
+
+      app.state.user = { ...app.state.user, id: 1, role: 'admin' };
+      const adminRes = await get('/30/records');
+      assert.equal(adminRes.status, 200);
+      assert.deepEqual(sessionCalls.at(-1).where, { id: 30 });
+      app.state.user = { ...app.state.user, id: 2, role: 'teacher' };
+    },
+  );
 
   await t.test(
     'a cancelled session without records keeps the context',

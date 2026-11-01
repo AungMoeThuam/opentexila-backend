@@ -1,6 +1,6 @@
 # OpenTexila database ER diagram
 
-**Version 6 · 29 October 2026 · Minimal consolidated baseline.** This diagram matches the EntitySchemas and single `1793059200000-InitialSchema.js` migration. See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
+**Version 6 · 29 October 2026 · Minimal consolidated baseline + session venue snapshot.** This diagram matches the EntitySchemas and migrations (`1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts`). See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
 
 Seven application tables are shown; TypeORM's `schema_migrations` table is omitted. View in a Mermaid-capable preview. Older generated PNGs, if present, are obsolete; use this Markdown diagram.
 
@@ -48,6 +48,10 @@ erDiagram
     class_sessions {
         int id PK
         int class_id FK
+        varchar room_label "100"
+        decimal latitude "9,6"
+        decimal longitude "9,6"
+        decimal radius_m "10,2"
         datetime starts_at "UTC; unique with class_id"
         datetime late_after "UTC"
         datetime ends_at "UTC"

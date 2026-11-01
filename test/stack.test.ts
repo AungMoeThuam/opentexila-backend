@@ -1,20 +1,20 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
-const {
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
   readFileSync,
   existsSync,
   rmSync,
-} = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { parseEnv } = require('node:util');
-const { ensureEnvironment, ensureFrontend } = require('../scripts/stack.ts');
+} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { parseEnv } from 'node:util';
+import { ensureEnvironment, ensureFrontend } from '../scripts/stack.ts';
 
-function temporaryDirectory(t) {
+function temporaryDirectory(t: any): string {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'opentexila-stack-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
@@ -29,7 +29,7 @@ test('first-run configuration generates passwords and never overwrites existing 
   assert.equal(ensureEnvironment(dir), true);
   const original = readFileSync(path.join(dir, '.env'), 'utf8');
   const env = parseEnv(original);
-  assert.match(env.DB_PASSWORD, /^[a-f0-9]{48}$/);
+  assert.match(env.DB_PASSWORD!, /^[a-f0-9]{48}$/);
   assert.notEqual(env.DB_PASSWORD, env.DB_ROOT_PASSWORD);
   assert.equal(ensureEnvironment(dir), false);
   assert.equal(readFileSync(path.join(dir, '.env'), 'utf8'), original);
@@ -50,7 +50,7 @@ test('clones a missing repository, then preserves uncommitted frontend work on r
     path.join(source, 'package.json'),
     JSON.stringify({ name: 'opentexila-frontend', scripts: { dev: 'vite' } }),
   );
-  const git = (args) =>
+  const git = (args: string[]) =>
     execFileSync('git', args, { cwd: source, stdio: 'pipe' });
   git(['init', '-q']);
   git(['add', '.']);

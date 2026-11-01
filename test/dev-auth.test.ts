@@ -1,16 +1,14 @@
-require('reflect-metadata');
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { Module, Global } = require('@nestjs/common');
-const { NestFactory } = require('@nestjs/core');
-const { devAuthEnabled } = require('../dist/dev/dev-auth');
-const { DevAuthModule } = require('../dist/dev/dev-auth.module');
-const {
-  AttendanceController,
-} = require('../dist/attendance/attendance.controller');
-const { AttendanceGuard } = require('../dist/attendance/attendance.guard');
-const { AttendanceService } = require('../dist/attendance/attendance.service');
-const { DATABASE } = require('../dist/database/database.constants');
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Module, Global } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { devAuthEnabled } from '../dist/dev/dev-auth.js';
+import { DevAuthModule } from '../dist/dev/dev-auth.module.js';
+import { AttendanceController } from '../dist/attendance/attendance.controller.js';
+import { AttendanceGuard } from '../dist/attendance/attendance.guard.js';
+import { AttendanceService } from '../dist/attendance/attendance.service.js';
+import { DATABASE } from '../dist/database/database.constants.js';
 
 test('development authentication is explicit and refuses production and remote databases', () => {
   assert.equal(
@@ -59,7 +57,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
       else process.env[key] = previous[key];
     }
   });
-  const student = {
+  const student: Record<string, any> = {
     id: 3,
     email: 'student.one@example.com',
     role: 'student',
@@ -69,7 +67,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
     session_version: 0,
     password_hash: 'never expose',
   };
-  const teacher = {
+  const teacher: Record<string, any> = {
     ...student,
     id: 2,
     email: 'lecturer.one@example.com',
@@ -84,7 +82,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
         provide: DATABASE,
         useValue: {
           getRepository: () => ({
-            findOneBy: async (where) =>
+            findOneBy: async (where: Record<string, any>) =>
               users.find((u) =>
                 Object.entries(where).every(([k, v]) => u[k] === v),
               ),
@@ -103,7 +101,10 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
       {
         provide: AttendanceService,
         useValue: {
-          list: async (user) => ({ data: [{ student_id: user.id }], meta: {} }),
+          list: async (user: { id: number }) => ({
+            data: [{ student_id: user.id }],
+            meta: {},
+          }),
         },
       },
     ],
@@ -114,11 +115,11 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
   await app.listen(0, '127.0.0.1');
   const base = await app.getUrl();
   let cookie = '';
-  let token;
+  let token: string | undefined;
   async function request(
-    path,
+    path: string,
     method = 'GET',
-    body,
+    body?: unknown,
     csrf = token,
     updateCookie = true,
   ) {
@@ -132,7 +133,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (updateCookie && response.headers.has('set-cookie'))
-      cookie = response.headers.get('set-cookie').split(';')[0];
+      cookie = response.headers.get('set-cookie')!.split(';')[0];
     return response;
   }
   assert.equal((await request('/auth/me')).status, 401);
@@ -143,7 +144,10 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
   );
   let response = await request('/auth/csrf');
   token = (await response.json()).data.csrfToken;
-  assert.match(response.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+  assert.match(
+    response.headers.get('set-cookie')!,
+    /HttpOnly; SameSite=Strict/,
+  );
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const anonymousCookie = cookie;
   assert.equal(

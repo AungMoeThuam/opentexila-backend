@@ -1,7 +1,7 @@
 require('reflect-metadata');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { startAttendanceApp } = require('./helpers/attendance-app');
+const { startAttendanceApp } = require('./helpers/attendance-app.ts');
 
 const classSession = (overrides = {}) => ({
   id: 30,

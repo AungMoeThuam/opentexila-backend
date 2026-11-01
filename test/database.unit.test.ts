@@ -1,10 +1,10 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { existsSync } = require('node:fs');
-const path = require('node:path');
-const { DataSource } = require('typeorm');
-const { databaseOptions } = require('../dist/database/database-options');
-const { seedDemo } = require('../database/seeds/demo.ts');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { DataSource } from 'typeorm';
+import { databaseOptions } from '../dist/database/database-options.js';
+import { seedDemo } from '../database/seeds/demo.ts';
 
 const env = {
   DB_HOST: '127.0.0.1',
@@ -21,7 +21,7 @@ test('configuration fails before connecting when required values or ports are in
     );
   for (const port of ['0', '65536', '3306.5', 'oops'])
     assert.throws(() => databaseOptions({ ...env, DB_PORT: port }), /DB_PORT/);
-  const options = databaseOptions(env);
+  const options = databaseOptions(env) as any;
   assert.equal(options.synchronize, false);
   assert.equal(options.migrationsRun, false);
   assert.equal(options.timezone, 'Z');
@@ -39,7 +39,7 @@ test('configuration fails before connecting when required values or ports are in
 test('TypeORM resolves every JS schema relation without duplicate FK columns or exposed secrets', async () => {
   const ds = new DataSource(databaseOptions(env));
   // Build metadata only: no connection, SQL or external database.
-  await ds.buildMetadatas();
+  await (ds as any).buildMetadatas();
   assert.equal(ds.entityMetadatas.length, 6);
   for (const entity of ds.entityMetadatas) {
     assert.equal(
@@ -52,8 +52,8 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
       assert.ok(ds.entityMetadatas.includes(fk.referencedEntityMetadata));
     }
   }
-  const column = (name, field) =>
-    ds.getMetadata(name).columns.find((c) => c.propertyName === field);
+  const column = (name: string, field: string) =>
+    ds.getMetadata(name).columns.find((c) => c.propertyName === field)!;
   assert.equal(column('User', 'password_hash').isSelect, false);
   assert.equal(column('Class', 'course_id').isNullable, false);
   assert.equal(column('Class', 'section').isNullable, false);
@@ -90,11 +90,11 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
 
 test('seed rejects production and remote databases before any connection use', async () => {
   await assert.rejects(
-    seedDemo(null, { ...env, NODE_ENV: 'production' }),
+    seedDemo(null as any, { ...env, NODE_ENV: 'production' }),
     /development/,
   );
   await assert.rejects(
-    seedDemo(null, {
+    seedDemo(null as any, {
       ...env,
       NODE_ENV: 'development',
       DB_HOST: 'db.example.com',
@@ -102,7 +102,11 @@ test('seed rejects production and remote databases before any connection use', a
     /local DB_HOST/,
   );
   await assert.rejects(
-    seedDemo(null, { ...env, NODE_ENV: 'development', SEED_PASSWORD: 'short' }),
+    seedDemo(null as any, {
+      ...env,
+      NODE_ENV: 'development',
+      SEED_PASSWORD: 'short',
+    }),
     /12 characters/,
   );
 });

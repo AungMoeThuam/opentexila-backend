@@ -1,15 +1,15 @@
-require('reflect-metadata');
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const {
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
   ApiException,
   validationError,
   notFound,
-} = require('../dist/common/api-exception');
-const { ApiExceptionFilter } = require('../dist/common/api-exception.filter');
-const { QueryReader, pageMeta } = require('../dist/common/query-reader');
+} from '../dist/common/api-exception.js';
+import { ApiExceptionFilter } from '../dist/common/api-exception.filter.js';
+import { QueryReader, pageMeta } from '../dist/common/query-reader.js';
 
-function failure(work) {
+function failure(work: () => void): any {
   try {
     work();
   } catch (error) {
@@ -18,10 +18,10 @@ function failure(work) {
   assert.fail('Expected the work to throw.');
 }
 
-function assertValidationError(error, ...names) {
+function assertValidationError(error: any, ...names: string[]) {
   assert.ok(error instanceof ApiException);
   assert.equal(error.getStatus(), 422);
-  const { code, message, fields } = error.getResponse().error;
+  const { code, message, fields } = (error.getResponse() as any).error;
   assert.equal(code, 'VALIDATION_ERROR');
   assert.equal(message, 'Please correct the highlighted fields.');
   assert.deepEqual(Object.keys(fields).sort(), names.sort());
@@ -39,22 +39,24 @@ test('ApiException helpers build the shared error envelope', () => {
   });
   const invalid = validationError({ page: 'bad' });
   assert.equal(invalid.getStatus(), 422);
-  assert.deepEqual(invalid.getResponse().error.fields, { page: 'bad' });
+  assert.deepEqual((invalid.getResponse() as any).error.fields, {
+    page: 'bad',
+  });
 });
 
 test('ApiExceptionFilter writes the status and the error envelope', () => {
-  const sent = {};
+  const sent: { status?: number; body?: any } = {};
   const response = {
-    status(code) {
+    status(code: number) {
       sent.status = code;
       return this;
     },
-    json(body) {
+    json(body: any) {
       sent.body = body;
       return this;
     },
   };
-  const host = { switchToHttp: () => ({ getResponse: () => response }) };
+  const host: any = { switchToHttp: () => ({ getResponse: () => response }) };
   new ApiExceptionFilter().catch(
     new ApiException(404, 'RESOURCE_NOT_FOUND', 'x'),
     host,
@@ -108,7 +110,7 @@ test('QueryReader.timestamp needs an explicit timezone', () => {
   const instant = '2026-10-29T01:00:00.000Z';
   for (const value of [instant, '2026-10-29T09:00:00+08:00']) {
     const reader = new QueryReader({ from: value });
-    assert.equal(reader.timestamp('from').toISOString(), instant);
+    assert.equal(reader.timestamp('from')!.toISOString(), instant);
     assert.doesNotThrow(() => reader.finish());
   }
   assert.equal(new QueryReader({}).timestamp('from'), undefined);

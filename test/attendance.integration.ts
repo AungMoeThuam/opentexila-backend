@@ -1,12 +1,21 @@
-const assert = require('node:assert/strict');
-const { AttendanceService } = require('../dist/attendance/attendance.service');
-const { RosterService } = require('../dist/attendance/roster.service');
-const { locationBody } = require('../dist/attendance/attendance.rules');
-const errorCode = (expected) => (error) =>
+import assert from 'node:assert/strict';
+import type { DataSource } from 'typeorm';
+import { AttendanceService } from '../dist/attendance/attendance.service.js';
+import { RosterService } from '../dist/attendance/roster.service.js';
+import {
+  locationBody,
+  type AttendanceCaller,
+} from '../dist/attendance/attendance.rules.js';
+
+const errorCode = (expected: string) => (error: any) =>
   error.getResponse?.().error.code === expected;
 
 // Runs only inside the disposable MySQL container owned by test:db.
-module.exports = async function attendanceIntegration(t, ds, fixtures) {
+export async function attendanceIntegration(
+  t: any,
+  ds: DataSource,
+  fixtures: any,
+) {
   const original = await ds
     .getRepository('Class')
     .findOneBy({ id: fixtures.class_id });
@@ -22,11 +31,11 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
   const students = await ds.query(
     "SELECT id FROM users WHERE role = 'student' ORDER BY id LIMIT 3",
   );
-  const student = { id: students[0].id, role: 'student' };
-  const nonmember = { id: students[2].id, role: 'student' };
+  const student: AttendanceCaller = { id: students[0].id, role: 'student' };
+  const nonmember: AttendanceCaller = { id: students[2].id, role: 'student' };
   const service = new AttendanceService(ds);
   const roster = new RosterService(ds);
-  const sessions = [];
+  const sessions: number[] = [];
   const reading = () =>
     locationBody({
       latitude: 0,
@@ -68,7 +77,7 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
       .save(
         students
           .slice(0, 2)
-          .map((s) => ({ class_id: classroom.id, student_id: s.id })),
+          .map((s: any) => ({ class_id: classroom.id, student_id: s.id })),
       );
     const current = await createSession();
     await t.test(
@@ -81,7 +90,7 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
           .getRepository('AttendanceRecord')
           .findBy({ class_session_id: current.id });
         assert.equal(records.length, 2);
-        assert.ok(records.every((r) => r.status === 'pending'));
+        assert.ok(records.every((r: any) => r.status === 'pending'));
       },
     );
     await t.test(
@@ -94,17 +103,20 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
             { reading_timestamp: new Date(Date.now() - 120000) },
             'LOCATION_STALE',
           ],
-        ]) {
+        ] as const) {
           await assert.rejects(
-            service.checkIn(student, current.id, { ...reading(), ...patch }),
+            service.checkIn(student, current.id, {
+              ...reading(),
+              ...(patch as any),
+            }),
             errorCode(code),
           );
           const row = await ds.getRepository('AttendanceRecord').findOneBy({
             class_session_id: current.id,
             student_id: student.id,
           });
-          assert.equal(row.status, 'pending');
-          assert.equal(row.checked_in_at, null);
+          assert.equal(row!.status, 'pending');
+          assert.equal(row!.checked_in_at, null);
         }
         const results = await Promise.all(
           Array.from({ length: 5 }, () =>
@@ -156,7 +168,7 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
           ['future', 'CLASS_NOT_STARTED'],
           ['ended', 'CLASS_ENDED'],
           ['cancelled', 'CLASS_CANCELLED'],
-        ]) {
+        ] as const) {
           const row = await createSession(kind);
           await assert.rejects(
             service.checkIn(student, row.id, reading()),
@@ -217,7 +229,7 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
           { page: 1, limit: 20, classId: classroom.id },
         );
         assert.equal(teacher.meta.total, sessions.length);
-        assert.ok(teacher.data.every((s) => s.my_attendance === null));
+        assert.ok(teacher.data.every((s: any) => s.my_attendance === null));
         const foreignTeacher = await service.list(
           { id: 4294967295, role: 'teacher' },
           { page: 1, limit: 20, classId: classroom.id },
@@ -230,11 +242,11 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
           page: 1,
           limit: 20,
           classId: classroom.id,
-          from: row.starts_at,
-          to: new Date(+row.starts_at + 1),
+          from: row!.starts_at,
+          to: new Date(+row!.starts_at + 1),
         });
         assert.equal(range.meta.total, 1);
-        assert.equal(range.data[0].id, row.id);
+        assert.equal(range.data[0].id, row!.id);
         await ds
           .getRepository('Enrolment')
           .delete({ class_id: classroom.id, student_id: student.id });
@@ -254,4 +266,4 @@ module.exports = async function attendanceIntegration(t, ds, fixtures) {
     await ds.getRepository('Enrolment').delete({ class_id: classroom.id });
     await ds.getRepository('Class').delete(classroom.id);
   }
-};
+}

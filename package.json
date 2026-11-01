@@ -23,8 +23,8 @@
     "db:status": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "db:revert": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "db:seed": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env database/seeds/demo.ts",
-    "test:db": "npm run build && node --experimental-strip-types --no-warnings --test test/database.integration.test.js",
-    "test": "npm run build && node --experimental-strip-types --no-warnings --test test/database.unit.test.js test/attendance.unit.test.js test/examples.test.js test/stack.test.js test/attendance.test.js test/dev-auth.test.js test/common.test.js test/attendance-records.test.js",
+    "test:db": "npm run build && node --experimental-strip-types --no-warnings --test test/database.integration.test.ts",
+    "test": "npm run build && node --experimental-strip-types --no-warnings --test test/database.unit.test.ts test/attendance.unit.test.js test/examples.test.ts test/stack.test.ts test/attendance.test.js test/dev-auth.test.ts test/common.test.ts test/attendance-records.test.js",
     "format": "prettier --write \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.{ts,js}\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.{ts,js}\" \"*.json\"",
     "db:seed:attendance": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env scripts/create-attendance-demo.ts"

@@ -1,12 +1,12 @@
-require('reflect-metadata');
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const { execFileSync } = require('node:child_process');
-const { Module, Global } = require('@nestjs/common');
-const { NestFactory } = require('@nestjs/core');
-const { ExamplesModule } = require('../dist/examples/examples.module');
-const { DATABASE } = require('../dist/database/database.constants');
-const { ClassSchema } = require('../dist/database/entities/class.schema');
+import 'reflect-metadata';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { Module, Global } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { ExamplesModule } from '../dist/examples/examples.module.js';
+import { DATABASE } from '../dist/database/database.constants.js';
+import { ClassSchema } from '../dist/database/entities/class.schema.js';
 
 const fixture = {
   id: 1,
@@ -17,9 +17,9 @@ const fixture = {
 };
 
 test('sample HTTP routes validate input, paginate and allowlist responses', async (t) => {
-  const calls = [];
+  const calls: any[] = [];
   const repository = {
-    async findAndCount(options) {
+    async findAndCount(options: any) {
       calls.push(options);
       return [
         [
@@ -36,7 +36,7 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
         21,
       ];
     },
-    async findOne(options) {
+    async findOne(options: any) {
       calls.push(options);
       return options.where.id === 1 ? fixture : null;
     },
@@ -48,7 +48,7 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
       {
         provide: DATABASE,
         useValue: {
-          getRepository(schema) {
+          getRepository(schema: unknown) {
             assert.equal(schema, ClassSchema);
             return repository;
           },
@@ -170,7 +170,7 @@ test('sample module is registered only in development', () => {
     `,
       ],
       {
-        cwd: require('node:path').resolve(__dirname, '..'),
+        cwd: process.cwd(),
         env: {
           ...process.env,
           NODE_ENV: environment,

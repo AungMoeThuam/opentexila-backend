@@ -1,16 +1,16 @@
-require('reflect-metadata');
-const assert = require('node:assert/strict');
-const { Global, Module } = require('@nestjs/common');
-const { NestFactory } = require('@nestjs/core');
-const { AttendanceModule } = require('../../dist/attendance/attendance.module');
-const { DATABASE } = require('../../dist/database/database.constants');
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import { Global, Module } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { AttendanceModule } from '../../dist/attendance/attendance.module.js';
+import { DATABASE } from '../../dist/database/database.constants.js';
 
 // Starts the attendance routes with fake repositories keyed by entity name
 // (for example `ClassSession`). Tests change the fake methods after start.
 // A trusted fixture middleware signs the caller in as `state.user`; set
 // `state.session = undefined` to simulate a signed-out request and change
 // `state.user` to simulate account changes.
-async function startAttendanceApp(repositories) {
+export async function startAttendanceApp(repositories: Record<string, any>) {
   const state = {
     user: {
       id: 2,
@@ -19,7 +19,7 @@ async function startAttendanceApp(repositories) {
       session_version: 0,
       must_change_password: false,
     },
-    session: undefined,
+    session: undefined as any,
     signedIn: true,
   };
   const validSession = () => ({
@@ -35,7 +35,7 @@ async function startAttendanceApp(repositories) {
       {
         provide: DATABASE,
         useValue: {
-          getRepository(schema) {
+          getRepository(schema: any) {
             const name =
               typeof schema === 'string' ? schema : schema.options.name;
             if (name === 'User') return { findOneBy: async () => state.user };
@@ -51,7 +51,7 @@ async function startAttendanceApp(repositories) {
   class TestAppModule {}
   Module({ imports: [TestDatabaseModule, AttendanceModule] })(TestAppModule);
   const app = await NestFactory.create(TestAppModule, { logger: false });
-  app.use((request, response, next) => {
+  app.use((request: any, _response: any, next: () => void) => {
     request.session = state.signedIn ? validSession() : undefined;
     next();
   });
@@ -63,5 +63,3 @@ async function startAttendanceApp(repositories) {
     close: () => app.close(),
   };
 }
-
-module.exports = { startAttendanceApp };

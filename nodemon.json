@@ -1,5 +1,5 @@
 {
-  "watch": ["src", ".env", "tsconfig.json"],
+  "watch": ["src", ".env", "tsconfig.json", "tsconfig.build.json"],
   "ext": "ts,json,env",
   "ignore": ["src/**/*.spec.ts"],
   "exec": "npm start"

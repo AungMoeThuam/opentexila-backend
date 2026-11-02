@@ -1,12 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DataSource, FindOptionsSelect, Repository } from 'typeorm';
 import { ApiException, notFound } from '../common/api-exception';
-import { QueryReader, pageMeta } from '../common/query-reader';
+import { pageMeta } from '../common/query-reader';
 import { DATABASE } from '../database/database.constants';
 import {
   AttendanceRecordEntity,
   AttendanceRecordSchema,
-  AttendanceStatus,
 } from '../database/entities/attendance-record.schema';
 import {
   ClassSessionEntity,
@@ -15,13 +14,8 @@ import {
 import type { AttendanceCaller } from './attendance.rules';
 import { toClassSummary, toIso } from './class-summary';
 
-const MAX_ID = 4294967295;
-const STATUSES: readonly AttendanceStatus[] = [
-  'pending',
-  'present',
-  'late',
-  'absent',
-];
+import type { SessionRecordsQueryDto } from './dto/attendance-query.dto';
+import type { SessionRosterResponseDto } from './dto/attendance-response.dto';
 
 // Explicit allow-lists: no student email, distance or coordinates are read.
 const sessionFields: FindOptionsSelect<ClassSessionEntity> = {
@@ -82,9 +76,9 @@ export class ClassSessionRecordsService {
   // Read-only roster of one session for its assigned lecturer or an admin.
   async list(
     user: AttendanceCaller,
-    classSessionId: string,
-    query: Record<string, unknown>,
-  ) {
+    classSessionId: number,
+    query: SessionRecordsQueryDto,
+  ): Promise<SessionRosterResponseDto> {
     if (user.role !== 'teacher' && user.role !== 'admin') {
       throw new ApiException(
         403,
@@ -92,15 +86,8 @@ export class ClassSessionRecordsService {
         'Only lecturers and admins can view a session roster.',
       );
     }
-    const reader = new QueryReader({ ...query, classSessionId });
-    const id = reader.integer('classSessionId', {
-      max: MAX_ID,
-      required: true,
-    })!;
-    const page = reader.integer('page', { max: 10000, fallback: 1 })!;
-    const limit = reader.integer('limit', { max: 100, fallback: 20 })!;
-    const status = reader.oneOf('status', STATUSES);
-    reader.finish();
+    const id = classSessionId;
+    const { page, limit, status } = query;
 
     // A session of another lecturer looks the same as a missing session.
     const session = await this.classSessions.findOne({

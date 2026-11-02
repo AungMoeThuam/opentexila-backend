@@ -5,12 +5,14 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { timingSafeEqual } from 'node:crypto';
+import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
 import type { DataSource } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
-import type { UserEntity } from '../database/entities';
+import { User, type UserRole } from '../database/entities';
 import type { DevSession } from '../dev/dev-auth';
 import { AttendanceCaller, fail } from './attendance.rules';
+import { ATTENDANCE_ROLES } from './roles.decorator';
 
 export type AttendanceRequest = Request & {
   session?: DevSession;
@@ -21,7 +23,10 @@ export type AttendanceRequest = Request & {
 // verified server-side cookie-session middleware, never by request input.
 @Injectable()
 export class AttendanceGuard implements CanActivate {
-  constructor(@Inject(DATABASE) private readonly database: DataSource) {}
+  constructor(
+    @Inject(DATABASE) private readonly database: DataSource,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const http = context.switchToHttp();
@@ -32,15 +37,16 @@ export class AttendanceGuard implements CanActivate {
       session?.cookie?.expires && new Date(session.cookie.expires).getTime();
     if (
       !session ||
+      typeof session.userId !== 'number' ||
       !Number.isSafeInteger(session.userId) ||
-      session.userId! <= 0 ||
+      session.userId <= 0 ||
       !Number.isSafeInteger(session.sessionVersion) ||
       !expires ||
       expires <= Date.now()
     )
       fail(401, 'UNAUTHENTICATED', 'A valid sign-in session is required.');
     const user = await this.database
-      .getRepository<UserEntity>('User')
+      .getRepository(User)
       .findOneBy({ id: session.userId });
     if (!user || user.session_version !== session.sessionVersion)
       fail(401, 'UNAUTHENTICATED', 'A valid sign-in session is required.');
@@ -65,6 +71,12 @@ export class AttendanceGuard implements CanActivate {
         fail(403, 'CSRF_INVALID', 'The security token is missing or invalid.');
     }
     request.attendanceUser = { id: user.id, role: user.role };
+    const roles = this.reflector.getAllAndOverride<readonly UserRole[]>(
+      ATTENDANCE_ROLES,
+      [context.getHandler(), context.getClass()],
+    );
+    if (roles && !roles.includes(user.role))
+      fail(403, 'FORBIDDEN', 'Your role cannot perform this operation.');
     return true;
   }
 }

@@ -7,6 +7,10 @@ import { ApiException } from '../dist/common/api-exception.js';
 import { AttendanceRecordsController as AttendanceController } from '../dist/attendance/me-attendance-records.controller.js';
 import { AttendanceHistoryService as AttendanceService } from '../dist/attendance/attendance-history.service.js';
 
+import { createValidationPipe } from '../dist/common/validation.pipe.js';
+import { PersonalAttendanceQueryDto } from '../dist/attendance/dto/attendance-query.dto.js';
+import type { AttendanceCaller } from '../dist/attendance/attendance.rules.js';
+
 // Test-only fixture. This data is never used by the actual API.
 function makeRecord({
   studentId = 3,
@@ -483,14 +487,28 @@ test('AttendanceService queries real repository interface', async (t) => {
   );
 });
 
-test('AttendanceController enforces authentication, authorization, and validation', async (t) => {
+test('AttendanceController and DTO pipeline enforce authentication, authorization, and validation', async (t) => {
   const { database } = makeFakeDatabase(createFixture());
   const service = new AttendanceService(database);
   const controller = new AttendanceController(service);
+  const pipe = createValidationPipe();
+  async function invoke(
+    query: Record<string, unknown>,
+    request: { attendanceUser?: AttendanceCaller },
+  ) {
+    const dto: PersonalAttendanceQueryDto = await pipe.transform(query, {
+      type: 'query',
+      metatype: PersonalAttendanceQueryDto,
+    });
+    return controller.getPersonalAttendanceRecords(
+      dto,
+      request.attendanceUser!,
+    );
+  }
 
   await t.test('rejects unauthenticated requests with 401', async () => {
     await assert.rejects(
-      () => controller.getPersonalAttendanceRecords({}, {} as any),
+      () => invoke({}, {} as any),
       (error) => error instanceof ApiException && error.getStatus() === 401,
     );
   });
@@ -499,7 +517,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
     for (const role of ['teacher', 'admin'] as const) {
       await assert.rejects(
         () =>
-          controller.getPersonalAttendanceRecords({}, {
+          invoke({}, {
             attendanceUser: { id: 2, role },
           } as any),
         (error) => error instanceof ApiException && error.getStatus() === 403,
@@ -517,8 +535,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('validates page', async () => {
     for (const invalid of ['0', '-1', '10001', 'abc', '1.5']) {
       await assert.rejects(
-        () =>
-          controller.getPersonalAttendanceRecords({ page: invalid }, validReq),
+        () => invoke({ page: invalid }, validReq),
         (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
@@ -527,8 +544,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('validates limit', async () => {
     for (const invalid of ['0', '-5', '101', 'xyz']) {
       await assert.rejects(
-        () =>
-          controller.getPersonalAttendanceRecords({ limit: invalid }, validReq),
+        () => invoke({ limit: invalid }, validReq),
         (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
@@ -537,11 +553,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('validates classId', async () => {
     for (const invalid of ['0', '-1', 'abc']) {
       await assert.rejects(
-        () =>
-          controller.getPersonalAttendanceRecords(
-            { classId: invalid },
-            validReq,
-          ),
+        () => invoke({ classId: invalid }, validReq),
         (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
@@ -550,15 +562,14 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('validates ISO timestamps and date range', async () => {
     for (const invalid of ['2026-10-29', 'not-a-date', '2026-10-29T10:00:00']) {
       await assert.rejects(
-        () =>
-          controller.getPersonalAttendanceRecords({ from: invalid }, validReq),
+        () => invoke({ from: invalid }, validReq),
         (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
 
     await assert.rejects(
       () =>
-        controller.getPersonalAttendanceRecords(
+        invoke(
           {
             from: '2026-10-30T00:00:00.000Z',
             to: '2026-10-20T00:00:00.000Z',
@@ -571,11 +582,7 @@ test('AttendanceController enforces authentication, authorization, and validatio
 
   await t.test('validates status', async () => {
     await assert.rejects(
-      () =>
-        controller.getPersonalAttendanceRecords(
-          { status: 'unknown' },
-          validReq,
-        ),
+      () => invoke({ status: 'unknown' }, validReq),
       (error) => error instanceof ApiException && error.getStatus() === 422,
     );
   });
@@ -583,18 +590,14 @@ test('AttendanceController enforces authentication, authorization, and validatio
   await t.test('validates includeCancelled', async () => {
     for (const invalid of ['yes', '1', '0', 'no']) {
       await assert.rejects(
-        () =>
-          controller.getPersonalAttendanceRecords(
-            { includeCancelled: invalid },
-            validReq,
-          ),
+        () => invoke({ includeCancelled: invalid }, validReq),
         (error) => error instanceof ApiException && error.getStatus() === 422,
       );
     }
   });
 
   await t.test('returns formatted data and pagination meta', async () => {
-    const result = await controller.getPersonalAttendanceRecords(
+    const result = await invoke(
       {
         page: '1',
         limit: '10',

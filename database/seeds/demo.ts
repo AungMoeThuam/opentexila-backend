@@ -1,6 +1,14 @@
 import path from 'node:path';
 import argon2 from 'argon2';
-import type { DataSource } from 'typeorm';
+import type { DataSource, DeepPartial } from 'typeorm';
+import type {
+  UserEntity,
+  CourseEntity,
+  ClassEntity,
+  ClassSessionEntity,
+  EnrolmentEntity,
+  AttendanceRecordEntity,
+} from '../../dist/database/entities/index.js';
 
 const DAY_MS = 86400000;
 const HOUR_MS = 3600000;
@@ -396,8 +404,8 @@ export async function seedDemo(
   });
 
   return dataSource.transaction(async (manager) => {
-    const accounts: any[] = [];
-    const users = manager.getRepository('User');
+    const accounts: UserEntity[] = [];
+    const users = manager.getRepository<UserEntity>('User');
     for (const { name, email, role } of USER_FIXTURES) {
       let user = await users.findOneBy({ email });
       if (user && user.role !== role)
@@ -417,8 +425,8 @@ export async function seedDemo(
     }
     const userByEmail = new Map(accounts.map((u) => [u.email, u]));
 
-    const courses = manager.getRepository('Course');
-    const courseByCode = new Map<string, any>();
+    const courses = manager.getRepository<CourseEntity>('Course');
+    const courseByCode = new Map<string, CourseEntity>();
     for (const { code, name } of COURSE_FIXTURES) {
       courseByCode.set(
         code,
@@ -427,18 +435,22 @@ export async function seedDemo(
       );
     }
 
-    const classes = manager.getRepository('Class');
-    const enrolments = manager.getRepository('Enrolment');
-    const classSessions = manager.getRepository('ClassSession');
-    const records = manager.getRepository('AttendanceRecord');
+    const classes = manager.getRepository<ClassEntity>('Class');
+    const enrolments = manager.getRepository<EnrolmentEntity>('Enrolment');
+    const classSessions =
+      manager.getRepository<ClassSessionEntity>('ClassSession');
+    const records =
+      manager.getRepository<AttendanceRecordEntity>('AttendanceRecord');
     const classIds: number[] = [];
     const sessionIds: number[] = [];
-    let firstClass: any;
-    let firstClassSessions: any[] = [];
+    let firstClass: ClassEntity | undefined;
+    let firstClassSessions: ClassSessionEntity[] = [];
 
     for (const [index, plan] of CLASS_FIXTURES.entries()) {
       const course = courseByCode.get(plan.courseCode);
       const teacher = userByEmail.get(plan.teacherEmail);
+      if (!course || !teacher)
+        throw new Error('Seed class references an unknown course or teacher.');
       let classroom = await classes.findOneBy({
         course_id: course.id,
         section: plan.section,
@@ -458,9 +470,11 @@ export async function seedDemo(
       classIds.push(classroom.id);
 
       // Keep membership stable on reruns. Never overwrite API work.
-      const enrolledStudents = plan.studentEmails.map((email) =>
-        userByEmail.get(email),
-      );
+      const enrolledStudents = plan.studentEmails.map((email) => {
+        const student = userByEmail.get(email);
+        if (!student) throw new Error(`Unknown seed student: ${email}`);
+        return student;
+      });
       for (const student of enrolledStudents) {
         const enrolled = await enrolments.findOneBy({
           class_id: classroom.id,
@@ -473,7 +487,7 @@ export async function seedDemo(
           });
       }
 
-      const schedule: any[] = [];
+      const schedule: ClassSessionEntity[] = [];
       for (const week of SESSION_WEEK_OFFSETS) {
         const start = new Date(
           startsAt.getTime() + week * 7 * DAY_MS + plan.hourOffset * HOUR_MS,
@@ -500,30 +514,34 @@ export async function seedDemo(
           // current and upcoming sessions remain pending.
           if (classSession.state === 'scheduled') {
             const weekOutcomes = PAST_WEEK_ATTENDANCE[String(week)];
+            const classSessionId = classSession.id;
             await records.save(
-              enrolledStudents.map((student, slot) => {
-                if (!weekOutcomes)
+              enrolledStudents.map(
+                (student, slot): DeepPartial<AttendanceRecordEntity> => {
+                  if (!weekOutcomes)
+                    return {
+                      class_session_id: classSessionId,
+                      student_id: student.id,
+                    };
+                  const outcome = weekOutcomes[slot];
+                  if (outcome.status === 'absent')
+                    return {
+                      class_session_id: classSessionId,
+                      student_id: student.id,
+                      status: 'absent',
+                    };
                   return {
-                    class_session_id: classSession.id,
+                    class_session_id: classSessionId,
                     student_id: student.id,
+                    status: outcome.status,
+                    checked_in_at: new Date(
+                      start.getTime() +
+                        (outcome.checkInMinutes ?? 0) * MINUTE_MS,
+                    ),
+                    distance_m: outcome.distance_m,
                   };
-                const outcome = weekOutcomes[slot];
-                if (outcome.status === 'absent')
-                  return {
-                    class_session_id: classSession.id,
-                    student_id: student.id,
-                    status: 'absent',
-                  };
-                return {
-                  class_session_id: classSession.id,
-                  student_id: student.id,
-                  status: outcome.status,
-                  checked_in_at: new Date(
-                    start.getTime() + (outcome.checkInMinutes ?? 0) * MINUTE_MS,
-                  ),
-                  distance_m: outcome.distance_m,
-                };
-              }),
+                },
+              ),
             );
           }
         }
@@ -537,6 +555,9 @@ export async function seedDemo(
       }
     }
 
+    const firstCourse = courseByCode.get('COS30043');
+    if (!firstClass || !firstCourse)
+      throw new Error('Required seed class or course is missing.');
     return {
       accounts: accounts.map(({ id, email, role, status }) => ({
         id,
@@ -544,7 +565,7 @@ export async function seedDemo(
         role,
         status,
       })),
-      course_id: courseByCode.get('COS30043').id,
+      course_id: firstCourse.id,
       class_id: firstClass.id,
       class_session_ids: firstClassSessions.map((m) => m.id),
       class_ids: classIds,

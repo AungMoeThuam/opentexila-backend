@@ -5,7 +5,9 @@ import type { ClassEntity, ClassSessionEntity } from '../database/entities';
 import { fail } from './attendance.rules';
 
 export async function databaseNow(manager: EntityManager): Promise<Date> {
-  const [row] = await manager.query('SELECT UTC_TIMESTAMP(3) AS now');
+  const [row] = await manager.query<{ now: Date }[]>(
+    'SELECT UTC_TIMESTAMP(3) AS now',
+  );
   return new Date(row.now);
 }
 
@@ -15,17 +17,17 @@ export async function lockClassSession(
   manager: EntityManager,
   id: number,
 ): Promise<{ classroom: ClassEntity; session: ClassSessionEntity }> {
-  const [reference] = await manager.query(
+  const [reference] = await manager.query<{ class_id: number }[]>(
     'SELECT class_id FROM class_sessions WHERE id = ?',
     [id],
   );
   if (!reference)
     fail(404, 'RESOURCE_NOT_FOUND', 'The requested resource was not found.');
-  const [classroom] = await manager.query(
+  const [classroom] = await manager.query<ClassEntity[]>(
     'SELECT * FROM classes WHERE id = ? FOR UPDATE',
     [reference.class_id],
   );
-  const [session] = await manager.query(
+  const [session] = await manager.query<ClassSessionEntity[]>(
     'SELECT * FROM class_sessions WHERE id = ? FOR UPDATE',
     [id],
   );

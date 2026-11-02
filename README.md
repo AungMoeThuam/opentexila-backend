@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **TypeScript**, with MySQL 8.4 and TypeORM EntitySchema. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Authentication and enrolment APIs are still to be built.
+NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Authentication and enrolment APIs are still to be built.
 
 ## Start the whole stack
 
@@ -94,7 +94,7 @@ test/database.integration.test.js
 
 Six domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
-Application source in `src/` is written in TypeScript and compiled with `tsc`. Migrations (`database/migrations/`) and tests (`test/`) remain plain Node.js modules that import the compiled `dist/` output.
+Application source in `src/` is written in strict TypeScript and compiled with `tsc`. Run `npm run typecheck` after building to check application code, migrations, seeds, scripts and tests. Migrations (`database/migrations/`) and tests (`test/`) remain plain Node.js modules that import the compiled `dist/` output.
 
 ## Seed fixtures
 

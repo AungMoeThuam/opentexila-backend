@@ -29,7 +29,8 @@ export function createValidationPipe(): ValidationPipe {
   return new ValidationPipe({
     whitelist: true,
     transform: true,
-    transformOptions: { enableImplicitConversion: true },
+    // Each DTO explicitly converts query strings. JSON body types stay intact.
+    transformOptions: { enableImplicitConversion: false },
     exceptionFactory: (errors: ValidationError[]) => {
       return validationError(formatValidationErrors(errors));
     },

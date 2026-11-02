@@ -11,12 +11,12 @@ import {
 import { AttendanceService } from './attendance.service';
 import { AttendanceGuard } from './attendance.guard';
 import { CurrentUser } from './current-user.decorator';
+import type { AttendanceCaller } from './attendance.rules';
 import {
-  type AttendanceCaller,
-  listQuery,
-  locationBody,
-  positiveInteger,
-} from './attendance.rules';
+  ClassSessionsQueryDto,
+  ClassSessionParamsDto,
+} from './dto/attendance-query.dto';
+import { CheckInDto } from './dto/check-in.dto';
 
 @Controller()
 @UseGuards(AttendanceGuard)
@@ -26,30 +26,26 @@ export class AttendanceController {
   @Get('me/class-sessions')
   list(
     @CurrentUser() user: AttendanceCaller,
-    @Query() query: Record<string, any>,
+    @Query() query: ClassSessionsQueryDto,
   ) {
-    return this.attendance.list(user, listQuery(query));
+    return this.attendance.list(user, query);
   }
 
   @Get('class-sessions/:classSessionId')
   detail(
     @CurrentUser() user: AttendanceCaller,
-    @Param('classSessionId') id: unknown,
+    @Param() params: ClassSessionParamsDto,
   ) {
-    return this.attendance.detail(user, positiveInteger(id, 'classSessionId'));
+    return this.attendance.detail(user, params.classSessionId);
   }
 
   @Post('class-sessions/:classSessionId/check-ins')
   @HttpCode(200)
   checkIn(
     @CurrentUser() user: AttendanceCaller,
-    @Param('classSessionId') id: unknown,
-    @Body() body: unknown,
+    @Param() params: ClassSessionParamsDto,
+    @Body() body: CheckInDto,
   ) {
-    return this.attendance.checkIn(
-      user,
-      positiveInteger(id, 'classSessionId'),
-      locationBody(body),
-    );
+    return this.attendance.checkIn(user, params.classSessionId, body);
   }
 }

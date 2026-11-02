@@ -1,26 +1,22 @@
 import {
-  Inject,
   MiddlewareConsumer,
   Module,
   NestModule,
   RequestMethod,
 } from '@nestjs/common';
-import type { RequestHandler } from 'express';
-import type { DataSource } from 'typeorm';
-import { DATABASE } from '../database/database.constants';
-import { createDevAuthMiddleware } from './dev-auth';
+import { DevAuthController } from './dev-auth.controller';
+import { DevAuthService } from './dev-auth.service';
+import { DevCsrfGuard } from './dev-auth.guard';
+import { DevAuthSessionMiddleware } from './dev-auth.middleware';
 
-@Module({})
+@Module({
+  controllers: [DevAuthController],
+  providers: [DevAuthService, DevCsrfGuard, DevAuthSessionMiddleware],
+})
 export class DevAuthModule implements NestModule {
-  private readonly middleware: RequestHandler;
-
-  constructor(@Inject(DATABASE) database: DataSource) {
-    this.middleware = createDevAuthMiddleware(database);
-  }
-
   configure(consumer: MiddlewareConsumer): void {
     consumer
-      .apply(this.middleware)
+      .apply(DevAuthSessionMiddleware)
       .forRoutes({ path: '*path', method: RequestMethod.ALL });
   }
 }

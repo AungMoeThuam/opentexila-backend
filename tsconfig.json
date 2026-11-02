@@ -17,12 +17,9 @@
     "skipLibCheck": true,
     "allowJs": false,
     "checkJs": false,
-    "strict": false,
-    "strictNullChecks": false,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": true
   },
   "include": ["src/**/*", "database/**/*", "scripts/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -12,6 +12,7 @@ export interface ErrorEnvelope {
 
 // Carries the shared error envelope: { error: { code, message, fields } }.
 export class ApiException extends HttpException {
+  private readonly envelope: ErrorEnvelope;
   constructor(
     status: number,
     code: string,
@@ -19,6 +20,11 @@ export class ApiException extends HttpException {
     fields: ErrorFields = {},
   ) {
     super({ error: { code, message, fields } }, status);
+    this.envelope = { error: { code, message, fields } };
+  }
+
+  override getResponse(): ErrorEnvelope {
+    return this.envelope;
   }
 }
 

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Module, Global } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { createValidationPipe } from '../dist/common/validation.pipe.js';
 import { devAuthEnabled } from '../dist/dev/dev-auth.js';
 import { DevAuthModule } from '../dist/dev/dev-auth.module.js';
 import { AttendanceController } from '../dist/attendance/attendance.controller.js';
@@ -112,6 +113,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
   const app = await NestFactory.create(TestApp, { logger: false });
   t.after(() => app.close());
   app.setGlobalPrefix('api/v1');
+  app.useGlobalPipes(createValidationPipe());
   await app.listen(0, '127.0.0.1');
   const base = await app.getUrl();
   let cookie = '';
@@ -191,6 +193,11 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
       .status,
     422,
   );
+  for (const role of [null, true, ['student'], '__proto__']) {
+    const invalid = await request('/dev/auth/select-role', 'POST', { role });
+    assert.equal(invalid.status, 422);
+    assert.equal((await invalid.json()).error.code, 'VALIDATION_ERROR');
+  }
   assert.equal(
     (await request('/dev/auth/select-role', 'POST', { role: 'admin' })).status,
     409,

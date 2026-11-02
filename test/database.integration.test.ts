@@ -472,8 +472,9 @@ test(
           mine.map((row: any) => row.id),
         );
         assert.ok(target, 'the seed should give the lecturer a roster');
-        const roster = await rosters.list(lecturer, String(target.id), {
-          limit: '100',
+        const roster = await rosters.list(lecturer, target.id, {
+          page: 1,
+          limit: 100,
         });
         assert.equal(roster.data.length, Number(target.n));
         const studentIds = roster.data.map((row: any) => row.student_id);
@@ -494,15 +495,21 @@ test(
         assert.equal(roster.context.class.lecturer!.name, 'Lecturer One');
 
         // Roster status filter returns only that status.
-        for (const status of ['pending', 'present', 'late', 'absent']) {
+        for (const status of [
+          'pending',
+          'present',
+          'late',
+          'absent',
+        ] as const) {
           const [{ n }] = await ds!.query(
             `SELECT COUNT(*) AS n FROM attendance_records
                WHERE class_session_id = ? AND status = ?`,
             [target.id, status],
           );
-          const filtered = await rosters.list(lecturer, String(target.id), {
+          const filtered = await rosters.list(lecturer, target.id, {
+            page: 1,
             status,
-            limit: '100',
+            limit: 100,
           });
           assert.equal(filtered.data.length, Number(n), status);
           assert.ok(filtered.data.every((row: any) => row.status === status));
@@ -516,7 +523,7 @@ test(
           [lecturer.id],
         );
         await assert.rejects(
-          () => rosters.list(lecturer, String(foreign.id), {}),
+          () => rosters.list(lecturer, foreign.id, { page: 1, limit: 20 }),
           (error: any) => error.getStatus() === 404,
         );
 
@@ -531,7 +538,10 @@ test(
           id: cancelled.teacher_id,
           role: 'teacher',
         };
-        const empty = await rosters.list(owner, String(cancelled.id), {});
+        const empty = await rosters.list(owner, cancelled.id, {
+          page: 1,
+          limit: 20,
+        });
         assert.deepEqual(empty.data, []);
         assert.equal(empty.context.class_state, 'cancelled');
         assert.equal(empty.meta.totalPages, 0);

@@ -4,12 +4,6 @@ import { ErrorFields, validationError } from './api-exception';
 const TIMESTAMP =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-export interface IntegerOption {
-  max: number;
-  fallback?: number;
-  required?: boolean;
-}
-
 export interface PageMeta {
   page: number;
   limit: number;
@@ -17,7 +11,7 @@ export interface PageMeta {
   totalPages: number;
 }
 
-// Reads and checks query or path values. Collect every problem, then call finish().
+// Parses optional history timestamps. Call finish() to report invalid values.
 export class QueryReader {
   private readonly source: Record<string, unknown>;
   private readonly fields: ErrorFields;
@@ -27,29 +21,8 @@ export class QueryReader {
     this.fields = {};
   }
 
-  fail(name: string, message: string): void {
+  private fail(name: string, message: string): void {
     this.fields[name] ??= message;
-  }
-
-  integer(
-    name: string,
-    { max, fallback, required = false }: IntegerOption,
-  ): number | undefined {
-    const value = this.source[name];
-    if (value === undefined) {
-      if (required) this.fail(name, `${name} is required.`);
-      return fallback;
-    }
-    if (
-      typeof value !== 'string' ||
-      !/^[1-9]\d*$/.test(value) ||
-      !Number.isSafeInteger(Number(value)) ||
-      Number(value) > max
-    ) {
-      this.fail(name, `${name} must be an integer between 1 and ${max}.`);
-      return undefined;
-    }
-    return Number(value);
   }
 
   timestamp(name: string): Date | undefined {
@@ -74,25 +47,6 @@ export class QueryReader {
       return undefined;
     }
     return date;
-  }
-
-  oneOf<T extends string>(name: string, allowed: readonly T[]): T | undefined {
-    const value = this.source[name];
-    if (value === undefined) return undefined;
-    if (typeof value !== 'string' || !allowed.includes(value as T)) {
-      this.fail(name, `${name} must be one of: ${allowed.join(', ')}.`);
-      return undefined;
-    }
-    return value as T;
-  }
-
-  boolean(name: string, fallback = false): boolean {
-    const value = this.source[name];
-    if (value === undefined || value === null || value === '') return fallback;
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    this.fail(name, `${name} must be either "true" or "false".`);
-    return fallback;
   }
 
   finish(): void {

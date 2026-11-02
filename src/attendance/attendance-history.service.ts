@@ -10,6 +10,10 @@ import {
   AttendanceStatus,
 } from '../database/entities/attendance-record.schema';
 import { toClassSummary, toIso } from './class-summary';
+import type {
+  PaginatedResponse,
+  PersonalAttendanceRecordDto,
+} from './dto/attendance-response.dto';
 
 export interface PersonalAttendanceQuery {
   studentId: number;
@@ -35,7 +39,9 @@ export class AttendanceHistoryService {
     to,
     status,
     includeCancelled = false,
-  }: PersonalAttendanceQuery) {
+  }: PersonalAttendanceQuery): Promise<
+    PaginatedResponse<PersonalAttendanceRecordDto>
+  > {
     if (!this.database?.isInitialized) {
       throw new ServiceUnavailableException(
         'Attendance database is unavailable.',
@@ -82,14 +88,18 @@ export class AttendanceHistoryService {
     const rawRecords = await qb.getMany();
 
     const data = rawRecords.map((record) => {
-      const session = record.classSession!;
+      const session = record.classSession;
+      if (!session?.class)
+        throw new Error(
+          'Attendance history requires session and class relations.',
+        );
 
       return {
         class_session_id: record.class_session_id,
         student_id: record.student_id,
         // The session's room overrides the class default room.
         class: toClassSummary({
-          ...session.class!,
+          ...session.class,
           room_label: session.room_label,
         }),
         starts_at: toIso(session.starts_at),

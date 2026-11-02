@@ -3,18 +3,24 @@ import { AttendanceGuard } from './attendance.guard';
 import { ClassSessionRecordsService } from './class-session-records.service';
 import { CurrentUser } from './current-user.decorator';
 import type { AttendanceCaller } from './attendance.rules';
+import {
+  ClassSessionParamsDto,
+  SessionRecordsQueryDto,
+} from './dto/attendance-query.dto';
+import { Roles } from './roles.decorator';
 
 @Controller('class-sessions')
 @UseGuards(AttendanceGuard)
+@Roles('teacher', 'admin')
 export class ClassSessionRecordsController {
   constructor(public readonly records: ClassSessionRecordsService) {}
 
   @Get(':classSessionId/records')
   list(
-    @Param('classSessionId') classSessionId: string,
-    @Query() query: Record<string, any>,
+    @Param() params: ClassSessionParamsDto,
+    @Query() query: SessionRecordsQueryDto,
     @CurrentUser() user: AttendanceCaller,
   ) {
-    return this.records.list(user, classSessionId, query);
+    return this.records.list(user, params.classSessionId, query);
   }
 }

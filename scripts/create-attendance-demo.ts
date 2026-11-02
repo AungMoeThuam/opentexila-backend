@@ -2,10 +2,8 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { databaseOptions } from '../dist/database/database-options.js';
-import {
-  ClassSessionSchema,
-  type ClassSessionEntity,
-} from '../dist/database/entities/class-session.schema.js';
+import { ClassSessionSchema } from '../dist/database/entities/class-session.schema.js';
+import type { ClassEntity } from '../dist/database/entities/class.schema.js';
 import { devAuthEnabled } from '../dist/dev/dev-auth.js';
 import {
   databaseNow,
@@ -20,7 +18,7 @@ async function main() {
   const database = await new DataSource(databaseOptions()).initialize();
   try {
     const result = await database.transaction(async (manager) => {
-      const [offering] = await manager.query(
+      const [offering] = await manager.query<{ id: number }[]>(
         `SELECT c.id FROM classes c
         JOIN enrolments e ON e.class_id = c.id JOIN users u ON u.id = e.student_id
         WHERE u.email = ? AND u.role = 'student' AND u.status = 'active'
@@ -31,7 +29,7 @@ async function main() {
         throw new Error(
           'Seed the demo student and enrolments with npm run db:seed first.',
         );
-      const [classroom] = await manager.query(
+      const [classroom] = await manager.query<ClassEntity[]>(
         'SELECT * FROM classes WHERE id = ? FOR UPDATE',
         [offering.id],
       );
@@ -44,7 +42,7 @@ async function main() {
         ends_at: string;
       }> = [];
       for (const scenario of ['present', 'late']) {
-        const session = (await manager.getRepository(ClassSessionSchema).save({
+        const session = await manager.getRepository(ClassSessionSchema).save({
           class_id: classroom.id,
           starts_at: new Date(
             +now - (scenario === 'present' ? 1 : 30) * minute,
@@ -58,7 +56,7 @@ async function main() {
           latitude: '0.000000',
           longitude: '0.000000',
           radius_m: '100.00',
-        })) as ClassSessionEntity;
+        });
         await materialiseLockedRoster(manager, session, now);
         sessions.push({
           scenario,

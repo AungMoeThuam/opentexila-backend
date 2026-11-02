@@ -1,10 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable } from '@nestjs/common';
 import type { DataSource, EntityManager } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
 import type {
   AttendanceRecordEntity,
   ClassEntity,
   ClassSessionEntity,
+  CourseEntity,
+  UserEntity,
   UserRole,
 } from '../database/entities';
 import {
@@ -22,10 +24,24 @@ import {
   materialiseLockedRoster,
 } from './roster.service';
 import { toIso } from './class-summary';
+import type {
+  AttendanceRecordDto,
+  ClassSessionDto,
+  ClassSessionDetailDto,
+  CheckInResponseDto,
+  DataResponse,
+  PaginatedResponse,
+} from './dto/attendance-response.dto';
 
 export function attendanceDto(
+  record: AttendanceRecordEntity,
+): AttendanceRecordDto;
+export function attendanceDto(
   record: AttendanceRecordEntity | null | undefined,
-) {
+): AttendanceRecordDto | null;
+export function attendanceDto(
+  record: AttendanceRecordEntity | null | undefined,
+): AttendanceRecordDto | null {
   return record
     ? {
         class_session_id: record.class_session_id,
@@ -51,11 +67,11 @@ async function membership(
   user: AttendanceCaller,
 ): Promise<{ enrolled: boolean; record: AttendanceRecordEntity | null }> {
   if (user.role !== 'student') return { enrolled: false, record: null };
-  const [enrolment] = await manager.query(
+  const [enrolment] = await manager.query<{ student_id: number }[]>(
     'SELECT student_id FROM enrolments WHERE class_id = ? AND student_id = ? FOR UPDATE',
     [session.class_id, user.id],
   );
-  const [record] = await manager.query(
+  const [record] = await manager.query<AttendanceRecordEntity[]>(
     'SELECT * FROM attendance_records WHERE class_session_id = ? AND student_id = ? FOR UPDATE',
     [session.id, user.id],
   );
@@ -81,15 +97,15 @@ async function sessionDto(
   classroom: ClassEntity,
   record: AttendanceRecordEntity | null,
   now: Date,
-) {
-  const [course] = await manager.query(
-    'SELECT id, code, name FROM courses WHERE id = ?',
-    [classroom.course_id],
-  );
-  const [lecturer] = await manager.query(
+): Promise<ClassSessionDto> {
+  const [course] = await manager.query<
+    Pick<CourseEntity, 'id' | 'code' | 'name'>[]
+  >('SELECT id, code, name FROM courses WHERE id = ?', [classroom.course_id]);
+  const [lecturer] = await manager.query<Pick<UserEntity, 'id' | 'name'>[]>(
     'SELECT id, name FROM users WHERE id = ?',
     [classroom.teacher_id],
   );
+  if (!course || !lecturer) throw new Error('Class relations are missing.');
   return {
     id: session.id,
     class_id: session.class_id,
@@ -114,7 +130,10 @@ async function sessionDto(
 export class AttendanceService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}
 
-  async list(user: AttendanceCaller, query: ListQueryResult) {
+  async list(
+    user: AttendanceCaller,
+    query: ListQueryResult,
+  ): Promise<PaginatedResponse<ClassSessionDto>> {
     requireRole(user, ['student', 'teacher']);
     const parameters: unknown[] = [user.id];
     const filters = [
@@ -136,23 +155,24 @@ export class AttendanceService {
       parameters.push(query.to);
     }
     const source = `FROM class_sessions s JOIN classes c ON c.id = s.class_id WHERE ${filters.join(' AND ')}`;
-    const [count] = await this.database.query(
+    const [count] = await this.database.query<{ total: number | string }[]>(
       `SELECT COUNT(*) AS total ${source}`,
       parameters,
     );
-    const rows = await this.database.query(
+    const rows = await this.database.query<{ id: number }[]>(
       `SELECT s.id ${source} ORDER BY s.starts_at ASC, s.id ASC LIMIT ? OFFSET ?`,
       [...parameters, query.limit, (query.page - 1) * query.limit],
     );
-    const data = [];
+    const data: ClassSessionDto[] = [];
     for (const row of rows) {
       try {
         const result = await this.detail(user, row.id);
         const { check_in, ...session } = result.data;
         data.push(session);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Membership may have changed after the list query. Never leak that row.
-        if (error.getStatus?.() !== 404) throw error;
+        if (!(error instanceof HttpException) || error.getStatus() !== 404)
+          throw error;
       }
     }
     const total = Number(count.total);
@@ -167,7 +187,10 @@ export class AttendanceService {
     };
   }
 
-  async detail(user: AttendanceCaller, id: number) {
+  async detail(
+    user: AttendanceCaller,
+    id: number,
+  ): Promise<DataResponse<ClassSessionDetailDto>> {
     requireRole(user, ['student', 'teacher', 'admin']);
     return this.database.transaction(async (manager) => {
       const { session, classroom } = await lockClassSession(manager, id);
@@ -192,7 +215,11 @@ export class AttendanceService {
     });
   }
 
-  async checkIn(user: AttendanceCaller, id: number, reading: LocationReading) {
+  async checkIn(
+    user: AttendanceCaller,
+    id: number,
+    reading: LocationReading,
+  ): Promise<DataResponse<CheckInResponseDto>> {
     requireRole(user, ['student']);
     return this.database.transaction(async (manager) => {
       const { session, classroom } = await lockClassSession(manager, id);
@@ -202,7 +229,7 @@ export class AttendanceService {
       if (session.state === 'cancelled')
         fail(409, 'CLASS_CANCELLED', 'This class session has been cancelled.');
       // Successful replays retain original evidence, even after the time window.
-      if (['present', 'late'].includes(record?.status as string))
+      if (record && (record.status === 'present' || record.status === 'late'))
         return {
           data: {
             class_session_id: id,

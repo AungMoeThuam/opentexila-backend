@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import type { DataSource } from 'typeorm';
+import type { ClassEntity } from '../dist/database/entities/index.js';
 import { AttendanceService } from '../dist/attendance/attendance.service.js';
 import { RosterService } from '../dist/attendance/roster.service.js';
-import {
-  locationBody,
-  type AttendanceCaller,
+import type {
+  AttendanceCaller,
+  LocationReading,
 } from '../dist/attendance/attendance.rules.js';
 
 const errorCode = (expected: string) => (error: any) =>
@@ -17,11 +18,12 @@ export async function attendanceIntegration(
   fixtures: any,
 ) {
   const original = await ds
-    .getRepository('Class')
+    .getRepository<ClassEntity>('Class')
     .findOneBy({ id: fixtures.class_id });
-  const classroom = await ds.getRepository('Class').save({
-    ...original,
-    id: undefined,
+  assert.ok(original);
+  const { id: originalId, ...classFields } = original;
+  const classroom = await ds.getRepository<ClassEntity>('Class').save({
+    ...classFields,
     section: 'ATTTEST',
     room_label: 'Frozen room',
     latitude: '0.000000',
@@ -36,13 +38,12 @@ export async function attendanceIntegration(
   const service = new AttendanceService(ds);
   const roster = new RosterService(ds);
   const sessions: number[] = [];
-  const reading = () =>
-    locationBody({
-      latitude: 0,
-      longitude: 0,
-      accuracy_m: 5,
-      reading_timestamp: new Date().toISOString(),
-    });
+  const reading = (): LocationReading => ({
+    latitude: 0,
+    longitude: 0,
+    accuracy_m: 5,
+    reading_timestamp: new Date(),
+  });
   async function createSession(kind = 'current') {
     const [clock] = await ds.query('SELECT UTC_TIMESTAMP(3) AS now');
     const now = +new Date(clock.now);
@@ -139,7 +140,7 @@ export async function attendanceIntegration(
     await t.test(
       'venue snapshots and safe detail survive changes to the class venue',
       async () => {
-        await ds.getRepository('Class').update(classroom.id, {
+        await ds.getRepository<ClassEntity>('Class').update(classroom.id, {
           room_label: 'Moved room',
           latitude: '10.000000',
         });
@@ -264,6 +265,6 @@ export async function attendanceIntegration(
       await ds.getRepository('ClassSession').delete(id);
     }
     await ds.getRepository('Enrolment').delete({ class_id: classroom.id });
-    await ds.getRepository('Class').delete(classroom.id);
+    await ds.getRepository<ClassEntity>('Class').delete(classroom.id);
   }
 }

@@ -6,13 +6,15 @@ import {
   validationError,
   notFound,
 } from '../dist/common/api-exception.js';
-import { ApiExceptionFilter } from '../dist/common/api-exception.filter.js';
 import { QueryReader, pageMeta } from '../dist/common/query-reader.js';
-import {
-  createValidationPipe,
-  formatValidationErrors,
-} from '../dist/common/validation.pipe.js';
+import { createValidationPipe } from '../dist/common/validation.pipe.js';
 import { PaginationQueryDto } from '../dist/common/dto/pagination-query.dto.js';
+import {
+  ClassSessionsQueryDto,
+  ClassSessionParamsDto,
+  PersonalAttendanceQueryDto,
+} from '../dist/attendance/dto/attendance-query.dto.js';
+import { CheckInDto } from '../dist/attendance/dto/check-in.dto.js';
 
 function failure(work: () => void): any {
   try {
@@ -49,68 +51,6 @@ test('ApiException helpers build the shared error envelope', () => {
   });
 });
 
-test('ApiExceptionFilter writes the status and the error envelope', () => {
-  const sent: { status?: number; body?: any } = {};
-  const response = {
-    status(code: number) {
-      sent.status = code;
-      return this;
-    },
-    json(body: any) {
-      sent.body = body;
-      return this;
-    },
-  };
-  const host: any = { switchToHttp: () => ({ getResponse: () => response }) };
-  new ApiExceptionFilter().catch(
-    new ApiException(404, 'RESOURCE_NOT_FOUND', 'x'),
-    host,
-  );
-  assert.equal(sent.status, 404);
-  assert.deepEqual(sent.body, {
-    error: { code: 'RESOURCE_NOT_FOUND', message: 'x', fields: {} },
-  });
-});
-
-test('QueryReader.integer applies fallback and accepts valid integers', () => {
-  const options = { max: 10000, fallback: 1 };
-  assert.equal(new QueryReader({}).integer('page', options), 1);
-  const reader = new QueryReader({ page: '3' });
-  assert.equal(reader.integer('page', options), 3);
-  assert.doesNotThrow(() => reader.finish());
-  assert.equal(new QueryReader({}).integer('classId', { max: 9 }), undefined);
-});
-
-test('QueryReader.integer rejects every malformed value', () => {
-  for (const value of ['0', '-1', '1.5', '1e2', '', '10001', ['1', '2']]) {
-    const reader = new QueryReader({ page: value });
-    reader.integer('page', { max: 10000, fallback: 1 });
-    assertValidationError(
-      failure(() => reader.finish()),
-      'page',
-    );
-  }
-});
-
-test('QueryReader.integer enforces required path ids and the id maximum', () => {
-  const options = { max: 4294967295, required: true };
-  for (const source of [
-    {},
-    { classSessionId: '4294967296' },
-    { classSessionId: '1abc' },
-  ]) {
-    const reader = new QueryReader(source);
-    reader.integer('classSessionId', options);
-    assertValidationError(
-      failure(() => reader.finish()),
-      'classSessionId',
-    );
-  }
-  const reader = new QueryReader({ classSessionId: '4294967295' });
-  assert.equal(reader.integer('classSessionId', options), 4294967295);
-  assert.doesNotThrow(() => reader.finish());
-});
-
 test('QueryReader.timestamp needs an explicit timezone', () => {
   const instant = '2026-10-29T01:00:00.000Z';
   for (const value of [instant, '2026-10-29T09:00:00+08:00']) {
@@ -136,55 +76,6 @@ test('QueryReader.timestamp needs an explicit timezone', () => {
       'from',
     );
   }
-});
-
-test('QueryReader.oneOf accepts only listed values', () => {
-  const allowed = ['pending', 'present', 'late', 'absent'];
-  const reader = new QueryReader({ status: 'late' });
-  assert.equal(reader.oneOf('status', allowed), 'late');
-  assert.doesNotThrow(() => reader.finish());
-  assert.equal(new QueryReader({}).oneOf('status', allowed), undefined);
-  for (const value of ['LATE', 'x', '', ['late', 'late']]) {
-    const bad = new QueryReader({ status: value });
-    bad.oneOf('status', allowed);
-    assertValidationError(
-      failure(() => bad.finish()),
-      'status',
-    );
-  }
-});
-
-test('QueryReader.boolean parses boolean values and rejects others', () => {
-  assert.equal(new QueryReader({}).boolean('includeCancelled', false), false);
-  assert.equal(
-    new QueryReader({ includeCancelled: 'true' }).boolean('includeCancelled'),
-    true,
-  );
-  assert.equal(
-    new QueryReader({ includeCancelled: 'false' }).boolean('includeCancelled'),
-    false,
-  );
-  const bad = new QueryReader({ includeCancelled: 'yes' });
-  bad.boolean('includeCancelled');
-  assertValidationError(
-    failure(() => bad.finish()),
-    'includeCancelled',
-  );
-});
-
-test('QueryReader.finish reports every bad field in one error', () => {
-  const reader = new QueryReader({ page: '0', limit: '101', status: 'x' });
-  reader.integer('page', { max: 10000, fallback: 1 });
-  reader.integer('limit', { max: 100, fallback: 20 });
-  reader.oneOf('status', ['pending']);
-  reader.fail('from', 'from must be earlier than to.');
-  assertValidationError(
-    failure(() => reader.finish()),
-    'page',
-    'limit',
-    'status',
-    'from',
-  );
 });
 
 test('pageMeta computes total pages', () => {
@@ -236,5 +127,221 @@ test('createValidationPipe formats class-validator errors into 422 VALIDATION_ER
       );
       return true;
     },
+  );
+});
+
+test('request DTOs keep strict query parsing and remove undeclared fields', async () => {
+  const pipe = createValidationPipe();
+  const dto: ClassSessionsQueryDto = await pipe.transform(
+    { page: '2', limit: '5', classId: '4294967295', studentId: '999' },
+    { type: 'query', metatype: ClassSessionsQueryDto },
+  );
+  assert.ok(dto instanceof ClassSessionsQueryDto);
+  assert.equal(dto.page, 2);
+  assert.equal(dto.limit, 5);
+  assert.equal(dto.classId, 4294967295);
+  assert.equal('studentId' in dto, false);
+  const defaults: ClassSessionsQueryDto = await pipe.transform(
+    {},
+    {
+      type: 'query',
+      metatype: ClassSessionsQueryDto,
+    },
+  );
+  assert.equal(defaults.page, 1);
+  assert.equal(defaults.limit, 20);
+  for (const value of [
+    '1e2',
+    '0x10',
+    '01',
+    '+1',
+    ' 1 ',
+    '',
+    ['1', '2'],
+    null,
+    true,
+  ]) {
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { page: value },
+          { type: 'query', metatype: ClassSessionsQueryDto },
+        ),
+      (error: unknown) =>
+        error instanceof ApiException &&
+        error.getStatus() === 422 &&
+        'page' in error.getResponse().error.fields,
+    );
+  }
+  const maximum: ClassSessionParamsDto = await pipe.transform(
+    { classSessionId: '4294967295' },
+    {
+      type: 'param',
+      metatype: ClassSessionParamsDto,
+    },
+  );
+  assert.equal(maximum.classSessionId, 4294967295);
+  await assert.rejects(
+    () =>
+      pipe.transform({}, { type: 'param', metatype: ClassSessionParamsDto }),
+    ApiException,
+  );
+  for (const value of ['0', '4294967296', '30abc', ['30'], null]) {
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { classSessionId: value },
+          { type: 'param', metatype: ClassSessionParamsDto },
+        ),
+      (error: unknown) =>
+        error instanceof ApiException &&
+        'classSessionId' in error.getResponse().error.fields,
+    );
+  }
+});
+
+test('history DTO handles false explicitly and aggregates field errors', async () => {
+  const pipe = createValidationPipe();
+  const valid: PersonalAttendanceQueryDto = await pipe.transform(
+    { status: 'late' },
+    {
+      type: 'query',
+      metatype: PersonalAttendanceQueryDto,
+    },
+  );
+  assert.equal(valid.status, 'late');
+  for (const status of ['LATE', 'x', '', ['late', 'late']]) {
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { status },
+          {
+            type: 'query',
+            metatype: PersonalAttendanceQueryDto,
+          },
+        ),
+      (error: unknown) => {
+        assertValidationError(error, 'status');
+        return true;
+      },
+    );
+  }
+
+  for (const [value, expected] of [
+    ['false', false],
+    ['true', true],
+    ['', false],
+  ] as const) {
+    const dto: PersonalAttendanceQueryDto = await pipe.transform(
+      { includeCancelled: value },
+      {
+        type: 'query',
+        metatype: PersonalAttendanceQueryDto,
+      },
+    );
+    assert.equal(dto.includeCancelled, expected);
+  }
+  await assert.rejects(
+    () =>
+      pipe.transform(
+        { page: '0', limit: '101', status: 'LATE', includeCancelled: 'yes' },
+        {
+          type: 'query',
+          metatype: PersonalAttendanceQueryDto,
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ApiException);
+      assert.deepEqual(Object.keys(error.getResponse().error.fields).sort(), [
+        'includeCancelled',
+        'limit',
+        'page',
+        'status',
+      ]);
+      return true;
+    },
+  );
+});
+
+test('date DTOs preserve timestamp precision rules and validate ranges', async () => {
+  const pipe = createValidationPipe();
+  const history: PersonalAttendanceQueryDto = await pipe.transform(
+    { from: '2026-11-02T12:00+08:00' },
+    {
+      type: 'query',
+      metatype: PersonalAttendanceQueryDto,
+    },
+  );
+  assert.equal(history.from?.toISOString(), '2026-11-02T04:00:00.000Z');
+  for (const metatype of [PersonalAttendanceQueryDto, ClassSessionsQueryDto]) {
+    for (const query of [
+      { from: '2026-02-30T00:00:00Z' },
+      { from: '2026-11-02T00:00:00' },
+      { from: '2026-11-02T00:00:00Z', to: '2026-11-02T00:00:00Z' },
+      { from: '2026-11-03T00:00:00Z', to: '2026-11-02T00:00:00Z' },
+    ]) {
+      await assert.rejects(
+        () => pipe.transform(query, { type: 'query', metatype }),
+        ApiException,
+      );
+    }
+  }
+  await assert.rejects(
+    () =>
+      pipe.transform(
+        { from: '2026-11-02T12:00Z' },
+        {
+          type: 'query',
+          metatype: ClassSessionsQueryDto,
+        },
+      ),
+    ApiException,
+  );
+});
+
+test('check-in DTO rejects numeric coercion and requires a real UTC timestamp', async () => {
+  const pipe = createValidationPipe();
+  const body = {
+    latitude: 0,
+    longitude: 0,
+    accuracy_m: 5,
+    reading_timestamp: '2026-11-02T04:00:00Z',
+  };
+  const dto: CheckInDto = await pipe.transform(
+    { ...body, student_id: 999 },
+    {
+      type: 'body',
+      metatype: CheckInDto,
+    },
+  );
+  assert.ok(dto instanceof CheckInDto);
+  assert.ok(dto.reading_timestamp instanceof Date);
+  assert.equal('student_id' in dto, false);
+  for (const patch of [
+    { latitude: '0' },
+    { latitude: null },
+    { latitude: true },
+    { latitude: [0] },
+    { longitude: 181 },
+    { accuracy_m: 0 },
+    { accuracy_m: '5' },
+    { reading_timestamp: '2026-11-02T12:00:00+08:00' },
+    { reading_timestamp: '2026-02-30T04:00:00Z' },
+  ]) {
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { ...body, ...patch },
+          {
+            type: 'body',
+            metatype: CheckInDto,
+          },
+        ),
+      ApiException,
+    );
+  }
+  await assert.rejects(
+    () => pipe.transform([], { type: 'body', metatype: CheckInDto }),
+    ApiException,
   );
 });

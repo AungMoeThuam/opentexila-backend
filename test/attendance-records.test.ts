@@ -260,6 +260,10 @@ test('student attendance history requires a signed-in student', async (t) => {
 
   app.state.signedIn = true;
   assert.equal((await get()).status, 403);
+  assert.equal(
+    (await fetch(`${app.base}/me/attendance-records?page=invalid`)).status,
+    403,
+  );
 
   app.state.user = { ...app.state.user, id: 3, role: 'student' };
   // The guard lets a student reach the service (the fake database is offline).

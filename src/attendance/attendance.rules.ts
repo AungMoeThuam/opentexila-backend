@@ -1,4 +1,5 @@
 import { ApiException, validationError } from '../common/api-exception';
+import type { CheckInEligibility } from './dto/attendance-response.dto';
 import type {
   AttendanceRecordEntity,
   ClassSessionEntity,
@@ -37,25 +38,8 @@ export function fail(
   throw new ApiException(status, code, message, fields);
 }
 
-export function invalid(field: string, message: string): never {
+function invalid(field: string, message: string): never {
   throw validationError({ [field]: message });
-}
-
-export function positiveInteger(
-  value: unknown,
-  field: string,
-  maximum = 4294967295,
-  fallback?: number,
-): number {
-  if (value === undefined && fallback !== undefined) return fallback;
-  if (
-    typeof value !== 'string' ||
-    !/^[1-9]\d*$/.test(value) ||
-    !Number.isSafeInteger(Number(value)) ||
-    Number(value) > maximum
-  )
-    invalid(field, `Must be an integer between 1 and ${maximum}.`);
-  return Number(value);
 }
 
 export function timestamp(
@@ -86,55 +70,6 @@ export function timestamp(
   return new Date(value as string);
 }
 
-export function listQuery(query: Record<string, unknown>): ListQueryResult {
-  const result: ListQueryResult = {
-    page: positiveInteger(query.page, 'page', 10000, 1),
-    limit: positiveInteger(query.limit, 'limit', 100, 20),
-  };
-  if (query.classId !== undefined)
-    result.classId = positiveInteger(query.classId, 'classId');
-  for (const field of ['from', 'to'] as const)
-    if (query[field] !== undefined)
-      result[field] = timestamp(query[field], field);
-  if (result.from && result.to && result.from >= result.to)
-    invalid('to', 'Must be later than from.');
-  return result;
-}
-
-export function locationBody(body: unknown): LocationReading {
-  if (!body || typeof body !== 'object' || Array.isArray(body))
-    invalid('body', 'A JSON object is required.');
-  const record = body as Record<string, unknown>;
-  for (const [field, min, max] of [
-    ['latitude', -90, 90],
-    ['longitude', -180, 180],
-    ['accuracy_m', 0, Number.MAX_VALUE],
-  ] as const) {
-    const val = record[field];
-    if (
-      typeof val !== 'number' ||
-      !Number.isFinite(val) ||
-      val < min ||
-      val > max ||
-      (field === 'accuracy_m' && val === 0)
-    )
-      invalid(
-        field,
-        `Must be a finite number ${field === 'accuracy_m' ? 'greater than zero' : `between ${min} and ${max}`}.`,
-      );
-  }
-  return {
-    latitude: record.latitude as number,
-    longitude: record.longitude as number,
-    accuracy_m: record.accuracy_m as number,
-    reading_timestamp: timestamp(
-      record.reading_timestamp,
-      'reading_timestamp',
-      true,
-    ),
-  };
-}
-
 export function availability(
   session: Pick<ClassSessionEntity, 'state' | 'starts_at' | 'ends_at'>,
   now: Date,
@@ -154,7 +89,7 @@ export function eligibility(
   eligible: boolean,
   record: Pick<AttendanceRecordEntity, 'status'> | null | undefined,
   now: Date,
-) {
+): CheckInEligibility {
   const reason =
     session.state === 'cancelled'
       ? 'CLASS_CANCELLED'
@@ -162,14 +97,16 @@ export function eligibility(
         ? 'ROLE_NOT_STUDENT'
         : !eligible
           ? 'NOT_ELIGIBLE'
-          : ['present', 'late'].includes(record?.status as string)
+          : record?.status === 'present' || record?.status === 'late'
             ? 'ALREADY_CHECKED_IN'
             : now < session.starts_at
               ? 'NOT_STARTED'
               : now >= session.ends_at
                 ? 'CLASS_ENDED'
                 : null;
-  return { allowed: reason === null, reason };
+  return reason === null
+    ? { allowed: true, reason: null }
+    : { allowed: false, reason };
 }
 
 export function distanceMeters(

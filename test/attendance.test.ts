@@ -3,11 +3,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Module, Global } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { createValidationPipe } from '../dist/common/validation.pipe.js';
 import { AttendanceModule } from '../dist/attendance/attendance.module.js';
 import { AttendanceService } from '../dist/attendance/attendance.service.js';
 import { DATABASE } from '../dist/database/database.constants.js';
 import * as rules from '../dist/attendance/attendance.rules.js';
 import { materialiseLockedRoster } from '../dist/attendance/roster.service.js';
+import {
+  ClassSessionsQueryDto,
+  ClassSessionParamsDto,
+} from '../dist/attendance/dto/attendance-query.dto.js';
+import { CheckInDto } from '../dist/attendance/dto/check-in.dto.js';
 
 const start = new Date('2026-11-01T01:00:00Z');
 const late = new Date('2026-11-01T01:15:00Z');
@@ -31,11 +37,23 @@ const body = {
   accuracy_m: 12,
   reading_timestamp: start.toISOString(),
 };
+// Service tests receive already-parsed domain input; DTO tests exercise parsing.
+const validReading = (): rules.LocationReading => ({
+  ...body,
+  reading_timestamp: new Date(start),
+});
+
 const code = (expected: string) => (error: any) =>
   error.getResponse().error.code === expected;
 
-test('strict query, path and reading validation rejects coercion and invalid calendar dates', () => {
-  assert.deepEqual(rules.listQuery({}), { page: 1, limit: 20 });
+test('DTO query, path and reading validation rejects coercion and invalid calendar dates', async () => {
+  const pipe = createValidationPipe();
+  const defaults: ClassSessionsQueryDto = await pipe.transform(
+    {},
+    { type: 'query', metatype: ClassSessionsQueryDto },
+  );
+  assert.equal(defaults.page, 1);
+  assert.equal(defaults.limit, 20);
   for (const query of [
     { page: '0' },
     { page: '10001' },
@@ -46,10 +64,21 @@ test('strict query, path and reading validation rejects coercion and invalid cal
     { to: '2026-11-01' },
     { from: start.toISOString(), to: start.toISOString() },
   ])
-    assert.throws(() => rules.listQuery(query), code('VALIDATION_ERROR'));
+    await assert.rejects(
+      () =>
+        pipe.transform(query, {
+          type: 'query',
+          metatype: ClassSessionsQueryDto,
+        }),
+      code('VALIDATION_ERROR'),
+    );
   for (const id of ['0', '-1', '1.2', '4294967296', ['1']])
-    assert.throws(
-      () => rules.positiveInteger(id, 'id'),
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { classSessionId: id },
+          { type: 'param', metatype: ClassSessionParamsDto },
+        ),
       code('VALIDATION_ERROR'),
     );
   for (const update of [
@@ -61,11 +90,18 @@ test('strict query, path and reading validation rejects coercion and invalid cal
     { reading_timestamp: '2026-02-30T00:00:00Z' },
     { reading_timestamp: '2026-11-01T01:00:00+00:00' },
   ])
-    assert.throws(
-      () => rules.locationBody({ ...body, ...update }),
+    await assert.rejects(
+      () =>
+        pipe.transform(
+          { ...body, ...update },
+          { type: 'body', metatype: CheckInDto },
+        ),
       code('VALIDATION_ERROR'),
     );
-  assert.throws(() => rules.locationBody([]), code('VALIDATION_ERROR'));
+  await assert.rejects(
+    () => pipe.transform([], { type: 'body', metatype: CheckInDto }),
+    code('VALIDATION_ERROR'),
+  );
 });
 
 test('availability and eligibility use precise time boundaries and reason priority', () => {
@@ -123,7 +159,7 @@ test('geofence and reading policy boundaries', () => {
     assert.equal(
       rules.validateLocation(
         {
-          ...rules.locationBody(body),
+          ...validReading(),
           reading_timestamp: new Date(+start - offset),
         },
         session,
@@ -136,7 +172,7 @@ test('geofence and reading policy boundaries', () => {
       () =>
         rules.validateLocation(
           {
-            ...rules.locationBody(body),
+            ...validReading(),
             reading_timestamp: new Date(+start - offset),
           },
           session,
@@ -147,7 +183,7 @@ test('geofence and reading policy boundaries', () => {
   assert.throws(
     () =>
       rules.validateLocation(
-        { ...rules.locationBody(body), accuracy_m: 101 },
+        { ...validReading(), accuracy_m: 101 },
         session,
         start,
       ),
@@ -156,13 +192,13 @@ test('geofence and reading policy boundaries', () => {
   assert.throws(
     () =>
       rules.validateLocation(
-        { ...rules.locationBody(body), latitude: 1 },
+        { ...validReading(), latitude: 1 },
         session,
         start,
       ),
     code('OUTSIDE_ALLOWED_AREA'),
   );
-  const reading = { ...rules.locationBody(body), longitude: 0.001 };
+  const reading = { ...validReading(), longitude: 0.001 };
   const radius = rules.distanceMeters(0, 0.001, 0, 0);
   assert.equal(
     rules.validateLocation(
@@ -260,7 +296,7 @@ for (const [now, expected] of [
 ] as const) {
   test(`check-in at ${now.toISOString()} yields ${expected}`, async () => {
     const { service, state } = databaseFixture(now);
-    const reading = { ...rules.locationBody(body), reading_timestamp: now };
+    const reading = { ...validReading(), reading_timestamp: now };
     if (expected.startsWith('CLASS'))
       await assert.rejects(
         service.checkIn(student, 30, reading),
@@ -296,7 +332,7 @@ test('location failures leave pending evidence unchanged and permit retry', asyn
     const { service, state } = databaseFixture();
     await assert.rejects(
       service.checkIn(student, 30, {
-        ...rules.locationBody(body),
+        ...validReading(),
         ...(patch as any),
       }),
       code(expected),
@@ -304,7 +340,7 @@ test('location failures leave pending evidence unchanged and permit retry', asyn
     assert.equal(state.record.status, 'pending');
     assert.equal(state.record.checked_in_at, null);
     assert.equal(
-      (await service.checkIn(student, 30, rules.locationBody(body))).data
+      (await service.checkIn(student, 30, validReading())).data
         .attendance_record.status,
       'present',
     );
@@ -312,15 +348,15 @@ test('location failures leave pending evidence unchanged and permit retry', asyn
 });
 test('replay retains original record after end, but cancelled sessions reject replay', async () => {
   const { service, state } = databaseFixture();
-  const original = await service.checkIn(student, 30, rules.locationBody(body));
+  const original = await service.checkIn(student, 30, validReading());
   state.now = end;
   assert.deepEqual(
-    await service.checkIn(student, 30, rules.locationBody(body)),
+    await service.checkIn(student, 30, validReading()),
     original,
   );
   state.session.state = 'cancelled';
   await assert.rejects(
-    service.checkIn(student, 30, rules.locationBody(body)),
+    service.checkIn(student, 30, validReading()),
     code('CLASS_CANCELLED'),
   );
 });
@@ -328,6 +364,7 @@ test('resource authorization, roster creation, and safe snapshot DTOs', async ()
   const { service, state } = databaseFixture();
   state.record = null;
   const result = await service.detail(student, 30);
+  assert.ok(result.data.my_attendance);
   assert.equal(result.data.my_attendance.status, 'pending');
   assert.equal(result.data.class.room_label, 'Original room');
   assert.equal(JSON.stringify(result).includes('latitude'), false);
@@ -340,19 +377,19 @@ test('resource authorization, roster creation, and safe snapshot DTOs', async ()
     code('RESOURCE_NOT_FOUND'),
   );
   await assert.rejects(
-    service.checkIn({ id: 2, role: 'teacher' }, 30, rules.locationBody(body)),
+    service.checkIn({ id: 2, role: 'teacher' }, 30, validReading()),
     code('FORBIDDEN'),
   );
   state.enrolled = false;
   state.record = null;
   await assert.rejects(service.detail(student, 30), code('RESOURCE_NOT_FOUND'));
   await assert.rejects(
-    service.checkIn(student, 30, rules.locationBody(body)),
+    service.checkIn(student, 30, validReading()),
     code('RESOURCE_NOT_FOUND'),
   );
   state.record = { class_session_id: 30, student_id: 3, status: 'absent' };
   await assert.rejects(
-    service.checkIn(student, 30, rules.locationBody(body)),
+    service.checkIn(student, 30, validReading()),
     code('NOT_ELIGIBLE'),
   );
 });
@@ -418,6 +455,7 @@ test('HTTP routes enforce sessions, CSRF, account state, validation and safe err
     next();
   });
   app.setGlobalPrefix('api/v1');
+  app.useGlobalPipes(createValidationPipe());
   await app.listen(0, '127.0.0.1');
   const base = `${await app.getUrl()}/api/v1`;
   const send = (path: string, options: RequestInit = {}) =>
@@ -454,6 +492,23 @@ test('HTTP routes enforce sessions, CSRF, account state, validation and safe err
     422,
     'VALIDATION_ERROR',
   );
+  for (const path of [
+    '/me/class-sessions?page=1e2',
+    '/me/class-sessions?page=1&page=2',
+    '/me/class-sessions?from=2026-02-30T00:00:00Z',
+  ]) {
+    await expectError(await send(path), 422, 'VALIDATION_ERROR');
+  }
+  const paginated = await send(
+    '/me/class-sessions?page=2&limit=5&studentId=999',
+  );
+  assert.equal(paginated.status, 200);
+  assert.deepEqual((await paginated.json()).meta, {
+    page: 2,
+    limit: 5,
+    total: 1,
+    totalPages: 1,
+  });
   const get = await send('/class-sessions/30');
   assert.equal(get.status, 200);
   assert.equal((await get.json()).data.check_in.allowed, true);
@@ -479,6 +534,14 @@ test('HTTP routes enforce sessions, CSRF, account state, validation and safe err
   );
   await expectError(
     await send('/class-sessions/30/check-ins', { ...post, body: '{}' }),
+    422,
+    'VALIDATION_ERROR',
+  );
+  await expectError(
+    await send('/class-sessions/30/check-ins', {
+      ...post,
+      body: JSON.stringify({ ...body, latitude: '0' }),
+    }),
     422,
     'VALIDATION_ERROR',
   );

@@ -99,6 +99,16 @@ The backend application in `src/` is written in TypeScript and compiled with `ts
 5. **Return only allowlisted fields.** Never return an entity or `SELECT *` result directly.
 6. **Add tests** in `test/`, and add the file to the `test` script in `package.json`.
 
+### TypeScript and request validation
+
+- Keep `strict` enabled. Run `npm run build`, `npm run typecheck`, and `npm test` before submitting changes; run `npm run test:db` for database changes.
+- Use concrete DTO classes for `@Query()`, `@Param()` and `@Body()` so the global validation pipe can validate and whitelist input. See `src/attendance/dto/`. Query strings use explicit transformations; JSON numeric fields must remain numbers. Do not enable implicit conversion globally.
+- Use a Nest pipe for endpoint-specific parsing, as in the sample classroom routes, which retain their documented 400 errors. Attendance validation returns the shared 422 error envelope.
+- Take users from `@CurrentUser()` behind `AttendanceGuard`; use `@Roles(...)` for endpoint roles. Keep resource ownership checks in services.
+- Give public service responses explicit types. Type raw SQL result rows with `query<RowType[]>()` and use typed repositories. These types describe the expected database result; they do not validate SQL at runtime. Preserve transaction boundaries and lock order.
+- Use `unknown` for caught errors and narrow them before inspecting properties. Entity property `!` declarations are for ORM hydration, not a replacement for checking nullable lookup results.
+- Development auth uses controllers, an injectable session store and a CSRF guard. Its middleware only restores a server-owned session. It is still local-development-only.
+
 ### Rules that matter
 
 - **Permissions on the server.** Check account status, role and class membership in the API. Hiding a button in the UI is not enough.

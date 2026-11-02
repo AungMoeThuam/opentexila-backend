@@ -11,7 +11,7 @@ Production Docker packaging is outside this plan.
   Verify that source and build-config changes trigger rebuilding.
 - [x] **Batch 3 — Documentation:** update JavaScript-era migration/seed paths,
   dependency injection examples, and host/container workflow instructions.
-- [ ] **Batch 4 — Final verification:** run unit/HTTP tests, disposable MySQL
+- [x] **Batch 4 — Final verification:** run unit/HTTP tests, disposable MySQL
   tests, formatting checks, Docker build, and isolated startup/reload checks.
 
 ## Progress
@@ -61,8 +61,29 @@ Batch 3 completed on 2026-11-03:
 - Historical implementation plans remain unchanged. No application or Docker
   configuration changed in this batch; full runtime checks remain in Batch 4.
 
-Next: Batch 4, after the user says `continue`. The commit for Batch 3 is titled
-`docs: align backend guides with TypeScript and Docker workflows`.
+Batch 3 commit: `af4c555` — `docs: align backend guides with TypeScript and Docker workflows`.
+
+Batch 4 completed on 2026-11-03:
+
+- `npm run typecheck` (including its automatic build), `npm run format:check`
+  and `git diff --check` passed.
+- All 71 unit/HTTP tests and all 19 disposable MySQL integration tests passed.
+- Built the backend, migration and frontend Docker images from temporary source
+  copies using the current Compose configuration. The isolated project used
+  generated test credentials, ephemeral localhost ports and its own database
+  volume; the application's `.env` and database volume were not used.
+- Migrations exited successfully, and MySQL, Nest and Vite became healthy. The
+  sample API queried the migrated database both directly and through Vite's
+  proxy, and the frontend served HTML.
+- Editing the temporary mounted TypeScript source rebuilt and restarted Nest.
+  Editing the mounted `tsconfig.build.json` triggered another rebuild/restart;
+  disabling source maps removed `dist/main.js.map`, confirming the changed
+  compiler setting took effect. The API responded after both reloads.
+- Removed the disposable stack and verified its containers, network and volume
+  were gone. No application or Docker configuration fixes were needed.
+
+All four batches are complete. Production Docker packaging remains outside this
+plan.
 
 Application refactor and unused-code cleanup were committed previously as
 `8351115`.

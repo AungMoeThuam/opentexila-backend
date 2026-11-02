@@ -103,7 +103,9 @@ This is a local development setup. Services publish only on localhost. A deploym
 
 ## Verification
 
-Verified using a fresh clone from GitHub and a separate disposable MySQL volume: all services became healthy, migrations applied, Vue deep routes loaded, and the Vite proxy reached the real sample API/database. Backend reload and frontend HMR were observed. Stopping and restarting retained a test database marker and reported no pending migrations. These earlier stack checks included preservation of an existing frontend checkout and `.env`. Verification of the current TypeScript tooling changes is tracked separately in [the batch checklist](ts-tooling-plan.md); full stack re-verification is scheduled for Batch 4.
+Verified using a fresh clone from GitHub and a separate disposable MySQL volume: all services became healthy, migrations applied, Vue deep routes loaded, and the Vite proxy reached the real sample API/database. Backend reload and frontend HMR were observed. Stopping and restarting retained a test database marker and reported no pending migrations. These earlier stack checks included preservation of an existing frontend checkout and `.env`.
+
+The current TypeScript tooling was re-verified on 2026-11-03 in an isolated Compose project using temporary source copies and a disposable MySQL volume. Image builds, migrations, service health checks, frontend HTML, and direct/proxied API database queries passed. Both mounted TypeScript source edits and `tsconfig.build.json` edits rebuilt and restarted Nest successfully. All test containers, the network and the database volume were removed afterward. See [the completed batch checklist](ts-tooling-plan.md) for the full verification record.
 
 ## Consolidated database baseline
 

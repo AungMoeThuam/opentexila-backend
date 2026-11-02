@@ -1,6 +1,6 @@
 # OpenTexila database ER diagram
 
-**Version 6 · 29 October 2026 · Minimal consolidated baseline + session venue snapshot.** This diagram matches the EntitySchemas and migrations (`1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts`). See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
+**Version 6 · 29 October 2026 · Minimal consolidated baseline + session venue snapshot.** This diagram matches the decorated TypeORM entities and migrations (`1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts`). See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
 
 Seven application tables are shown; TypeORM's `schema_migrations` table is omitted. View in a Mermaid-capable preview. Older generated PNGs, if present, are obsolete; use this Markdown diagram.
 

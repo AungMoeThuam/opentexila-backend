@@ -25,7 +25,7 @@ Open <http://localhost:5173>. Check the real API through the frontend proxy:
 curl http://localhost:5173/api/v1/examples/classrooms
 ```
 
-An empty `data` array is expected before seeding. Authentication, enrolment and attendance APIs are not implemented yet. For UI work with mock identities, set `FRONTEND_MOCK_AUTH=true` in **backend/.env** and rerun `npm run stack:up`. Mock mode blocks live API calls; use `false` when integrating real APIs.
+An empty `data` array is expected before seeding. Attendance APIs and optional development sign-in are implemented; production authentication and enrolment APIs are still pending. For seeded accounts with real attendance APIs, follow [development sign-in](DEVELOPMENT_AUTH.md). For UI work with mock identities, set `FRONTEND_MOCK_AUTH=true` in **backend/.env** and rerun `npm run stack:up`. Mock mode blocks live API calls; use `false` when integrating real APIs.
 
 > [!WARNING]
 > Never commit `.env`. Changing `DB_PASSWORD` does **not** change credentials inside an existing Docker volume. Restore the credentials that initialized it rather than deleting data to fix a login problem.
@@ -60,14 +60,14 @@ src/<feature>/            # one folder per feature: auth, enrolments, attendance
   <feature>.module.ts
   <feature>.controller.ts # routes, input validation, delegates to the service
   <feature>.service.ts    # database queries and response mapping
-src/database/entities/    # shared schemas (use them; don't copy them)
+src/database/entities/    # shared decorated TypeORM entities
 database/migrations/      # schema changes (new file per change)
-database/seeds/demo.js    # fictional demo data
+database/seeds/demo.ts    # fictional demo data
 test/                     # tests
 docs/api/                 # API contract per feature
 ```
 
-`src/auth/` is currently a placeholder with `.gitkeep`; `src/attendance/` is implemented in TypeScript. `src/enrolments/` has not been created yet; create it when implementing that feature. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.ts`, auth guards).
+`src/attendance/` contains the implemented attendance feature; `src/dev/` contains local development authentication. Create `src/auth/` and `src/enrolments/` when implementing the production features. Work in your own feature folder and coordinate edits to another member's files. Talk to the owner first if you need a change in shared code (`src/database/`, `app.module.ts`, auth guards).
 
 Course code/name belong to `courses`. A `classes` row is one offering in a term; use `course_id`, `section` and `term`. Classes have no `code`, `name` or `subject` columns; read the related course. See the [database design](database-design.md#classes) and [sample response](api/examples.md#get-examplesclassrooms).
 
@@ -81,16 +81,14 @@ The backend application in `src/` is written in TypeScript and compiled with `ts
    import { Inject, Injectable } from '@nestjs/common';
    import type { DataSource, Repository } from 'typeorm';
    import { DATABASE } from '../database/database.constants';
-   import { EnrolmentEntity, EnrolmentSchema } from '../database/entities';
+   import { Enrolment } from '../database/entities';
 
    @Injectable()
    export class EnrolmentsService {
-     readonly database: DataSource;
-     readonly enrolments: Repository<EnrolmentEntity>;
+     private readonly enrolments: Repository<Enrolment>;
 
      constructor(@Inject(DATABASE) database: DataSource) {
-       this.database = database;
-       this.enrolments = database.getRepository(EnrolmentSchema);
+       this.enrolments = database.getRepository(Enrolment);
      }
    }
    ```
@@ -101,7 +99,7 @@ The backend application in `src/` is written in TypeScript and compiled with `ts
 
 ### TypeScript and request validation
 
-- Keep `strict` enabled. Run `npm run build`, `npm run typecheck`, and `npm test` before submitting changes; run `npm run test:db` for database changes.
+- Keep `strict` enabled. Run `npm run typecheck` and `npm test` before submitting changes; both build the application automatically. Run `npm run test:db` for database changes.
 - Use concrete DTO classes for `@Query()`, `@Param()` and `@Body()` so the global validation pipe can validate and whitelist input. See `src/attendance/dto/`. Query strings use explicit transformations; JSON numeric fields must remain numbers. Do not enable implicit conversion globally.
 - Use a Nest pipe for endpoint-specific parsing, as in the sample classroom routes, which retain their documented 400 errors. Attendance validation returns the shared 422 error envelope.
 - Take users from `@CurrentUser()` behind `AttendanceGuard`; use `@Roles(...)` for endpoint roles. Keep resource ownership checks in services.
@@ -127,15 +125,15 @@ The project now uses one consolidated initial migration. Existing old developmen
 Do this only when your feature needs a new table or column.
 
 1. **Tell the team and open a separate PR.** Database changes are reviewed on their own.
-2. **Never edit a migration that has been merged.** Add a new one: `database/migrations/<timestamp>-<Name>.js`. It is a CommonJS file with explicit SQL. Use the existing `1793059200000-InitialSchema.js` as the model.
-3. **Update the matching schema** in `src/database/entities/` and [database-design.md](database-design.md) in the same PR.
+2. **Never edit a migration that has been merged.** Add a new one: `database/migrations/<timestamp>-<Name>.ts`. Export a class implementing `MigrationInterface` with typed `QueryRunner` arguments and explicit SQL. Use `1793491200000-SessionVenueSnapshot.ts` as the model. Migrations run through Node type stripping, so keep imports of interfaces type-only and avoid decorators, enums and parameter properties.
+3. **Update the matching entity** in `src/database/entities/` and [database-design.md](database-design.md) in the same PR.
 4. Apply it with `npm run stack:up` (Docker workflow) or `npm run db:migrate` after starting MySQL (host workflow), then run `npm run test:db` on the host.
 5. **Don't use `db:revert` casually.** The initial rollback deletes all application tables and data. Use it only on a disposable database, and never to "fix" a teammate's data.
 6. After pulling the merge, everyone reruns their workflow’s migration/start command above.
 
 `synchronize` is off on purpose. Changing a schema file does **not** change the database.
 
-To add demo data, extend `database/seeds/demo.js`. Keep it safe to rerun and fictional. Coordinate seed changes with the team, especially the attendance developer; fixture ownership has not been established in this guide.
+To add demo data, extend `database/seeds/demo.ts`. Keep it safe to rerun and fictional. Coordinate seed changes with the team, especially the attendance developer; fixture ownership has not been established in this guide.
 
 ## 6. Before you push
 
@@ -144,6 +142,7 @@ Run these on the host after `npm ci`. The application containers do not include 
 ```sh
 npm run format        # fix formatting
 npm run format:check
+npm run typecheck     # builds first, then checks source, scripts and tests
 npm test              # builds and runs the unit and HTTP tests
 npm run test:db       # only if you changed migrations, schemas or queries
 ```
@@ -161,7 +160,7 @@ npm run test:db       # only if you changed migrations, schemas or queries
 - [ ] Input validated, and only allowlisted fields returned
 - [ ] Tests added and passing, including a test that another user's data is not exposed
 - [ ] Any migration is new (no edits to old ones), and the schema and database docs are updated
-- [ ] `format:check` and `npm test` pass
+- [ ] `format:check`, `typecheck` and `npm test` pass
 - [ ] No `.env`, passwords or tokens in the diff
 
 ## 8. Troubleshooting
@@ -174,4 +173,4 @@ npm run test:db       # only if you changed migrations, schemas or queries
 | Port 3306, 3000 or 5173 in use                | For the shared stack, change `DB_PORT`, `BACKEND_PORT` or `FRONTEND_DEV_PORT` in backend `.env`. Host NestJS uses `PORT` instead of `BACKEND_PORT`.                                                                                                            |
 | Dates look off by 8 hours                     | You are comparing UTC with local time. Keep UTC in the backend.                                                                                                                                                                                                |
 | `db:seed` refuses to run                      | Check `SEED_PASSWORD` (12+ characters), `NODE_ENV=development`, local `DB_HOST`, valid `SEED_MEETING_START` if set, and applied migrations. Run the seed on the host.                                                                                          |
-| Frontend shows "Unable to check your session" | `/api/v1/auth/me` is not implemented yet. For shared-stack UI work set `FRONTEND_MOCK_AUTH=true` in backend `.env` and rerun `npm run stack:up`. Direct host Vite uses `VITE_ENABLE_MOCK_AUTH=true` in frontend `.env.local`. Mock mode cannot call real APIs. |
+| Frontend shows "Unable to check your session" | For real local APIs, enable `DEV_AUTH_ENABLED=true`, keep `FRONTEND_MOCK_AUTH=false`, seed the demo accounts on the host, and follow [development sign-in](DEVELOPMENT_AUTH.md). For offline UI previews, use mock auth instead. Production sign-in is still pending. |

@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Authentication and enrolment APIs are still to be built.
+NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Optional [development sign-in](docs/DEVELOPMENT_AUTH.md) is available for seeded accounts. Production authentication and enrolment APIs are still to be built.
 
 ## Start the whole stack
 
@@ -39,7 +39,7 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 - [Database ER diagram](docs/database-erd.md): tables, keys, cardinalities and composite uniqueness.
 - [Using the database in APIs](docs/database-development.md): repositories, dependency injection, transactions and migration workflow.
 - [Sample API](docs/api/examples.md): working controller/service/module pattern, validation, pagination, error responses and curl examples.
-- [API overview](docs/api/README.md), [auth](docs/api/auth.md), [enrolments](docs/api/enrolments.md), [attendance](docs/api/attendance.md): planned contracts.
+- [API overview](docs/api/README.md), [auth](docs/api/auth.md), [enrolments](docs/api/enrolments.md), [attendance](docs/api/attendance.md): feature contracts and implementation status.
 
 ## Commands
 
@@ -55,10 +55,12 @@ The API binds to `127.0.0.1:3000` with prefix `/api/v1`. With `NODE_ENV=developm
 | `npm run db:revert`    | Revert the last migration. **The initial rollback deletes all application tables and data; use only on disposable databases.**                                     |
 | `npm run db:seed`      | Add fictional local development fixtures without resetting existing demo accounts.                                                                                 |
 | `npm run test:db`      | Build, create an isolated MySQL container, test migration/constraints/seeds/Nest DI, then remove only that container. Requires Docker; pulls mysql:8.4 if missing. |
-| `npm run start:dev`    | Rebuild/restart the backend on source changes.                                                                                                                     |
+| `npm run start:dev`    | Rebuild/restart on source, `.env`, `tsconfig.json` and `tsconfig.build.json` changes.                                                                                                                     |
 | `npm start`            | Build and start the backend.                                                                                                                                       |
 | `npm run start:prod`   | Run an existing compiled build.                                                                                                                                    |
 | `npm run build`        | Compile TypeScript (`src/**/*.ts`) to `dist/` with `tsc`.                                                                                                          |
+| `npm run typecheck` | Build automatically, then strictly check application code, migrations, seeds, scripts and tests. |
+| `npm test` | Build and run unit/HTTP tests on the host. |
 | `npm run format:check` | Check source, migrations, seeds, tests and JSON formatting.                                                                                                        |
 
 ## Database structure
@@ -76,7 +78,7 @@ src/database/
   database.constants.ts       # DATABASE injection token
   database.module.ts          # Async DataSource provider and shutdown cleanup
   database-options.ts         # Environment validation; synchronize:false
-  data-source.ts              # Same DataSource for Nest and migration CLI
+  data-source.ts              # Migration CLI DataSource using the shared options
   entities/
     user.schema.ts
     course.schema.ts
@@ -84,17 +86,16 @@ src/database/
     enrolment.schema.ts
     class-session.schema.ts
     attendance-record.schema.ts
-    columns.ts
     index.ts
 database/
-  migrations/                 # Immutable, versioned CommonJS JavaScript migrations
-  seeds/demo.js               # Local demo fixtures
-test/database.integration.test.js
+  migrations/                 # Versioned TypeScript migrations executed with Node type stripping
+  seeds/demo.ts               # Local demo fixtures
+test/database.integration.test.ts
 ```
 
 Six domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
-Application source in `src/` is written in strict TypeScript and compiled with `tsc`. Run `npm run typecheck` after building to check application code, migrations, seeds, scripts and tests. Migrations (`database/migrations/`) and tests (`test/`) remain plain Node.js modules that import the compiled `dist/` output.
+Application source in `src/` is written in strict TypeScript and compiled with `tsc`. Run `npm run typecheck` to build automatically and then check application code, migrations, seeds, scripts and tests. Node runs the application from `dist/main.js`; generated `.js` files are expected build output. Migrations, seeds, launcher scripts and tests are `.ts` files executed with Node type stripping. They use syntax that does not need code generation and import compiled application modules from `dist/` where needed. The application uses `tsc` for NestJS/TypeORM decorators and emitted metadata.
 
 ## Seed fixtures
 
@@ -108,10 +109,10 @@ The class uses **synthetic coordinates (0,0)** and an example radius. It is for 
 
 The single initial migration creates this model directly, including ENUMs and constraints. There are no `code`, `name` or `subject` columns on classes. The sample API returns nested `course: { id, code, name }` plus `section`.
 
-Existing development databases need separate recreation because the initial migration has been rewritten. Running `db:migrate` or `stack:up` against old migration history does not upgrade the schema. See the [baseline setup guide](docs/database-refactor-migration.md). This code change does not reset your local data.
+Development databases created from an older, incompatible baseline need separate recreation because the initial migration was rewritten. Databases created from the current baseline use normal incremental migrations. Running `db:migrate` or `stack:up` against old migration history does not upgrade the schema. See the [baseline setup guide](docs/database-refactor-migration.md). This code change does not reset your local data.
 
 ## Current attendance direction
 
-Attendance follows `class_sessions` automatically. Timing and cancellation live only on that table. The role, status and state fields use ENUMs as listed in the database design. Students enter a class and check in with location. There is no session code or manual lecturer opening action. The schema supports this flow; scheduling, record creation, check-in validation and closure still require API/service implementation.
+Attendance follows `class_sessions` automatically. Timing and cancellation live only on that table. The role, status and state fields use ENUMs as listed in the database design. Students enter a class and check in with location. There is no session code or manual lecturer opening action. Attendance reads, pending-roster materialisation and location check-in are implemented. Scheduling, cancellation and automatic finalisation still require feature implementation.
 
-The existing Multer override remains in place. Docker supports local development; authentication/session middleware and production deployment configuration remain to be implemented.
+The existing Multer override remains in place. Docker supports local development; production authentication/session handling and deployment configuration remain to be implemented.

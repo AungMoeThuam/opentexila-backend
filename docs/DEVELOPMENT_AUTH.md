@@ -21,7 +21,7 @@ The selector uses only these existing demo accounts:
 | Lecturer  | lecturer.one@example.com |
 | Admin     | admin.demo@example.com   |
 
-If an account is missing, set a fictional `SEED_PASSWORD` of at least 12 characters in the local `.env` and run `npm run db:seed`. Seeding is repeatable and does not reset existing accounts. An inactive account, wrong role, or mandatory password-change flag is reported rather than overridden.
+If an account is missing, set a fictional `SEED_PASSWORD` of at least 12 characters in the local `.env` and run `npm ci` followed by `npm run db:seed` on the host. Keep host `DB_HOST=127.0.0.1` and `DB_PORT` equal to the published MySQL port. Seeding is repeatable and does not reset existing accounts. An inactive account, wrong role, or mandatory password-change flag is reported rather than overridden.
 
 For separate host processes, set backend `NODE_ENV=development`, `DEV_AUTH_ENABLED=true` and a local `DB_HOST`; set frontend `VITE_ENABLE_DEV_AUTH=true` in `.env.local`. Restart both processes. The development API proxy is still used.
 
@@ -39,7 +39,7 @@ To return to normal authentication, set `DEV_AUTH_ENABLED=false`, leave `FRONTEN
 
 ## Fresh check-in sessions
 
-Run `npm run db:seed:attendance` from the backend on the host when existing fixtures are outside their check-in window. This requires development sign-in enabled and existing demo enrolments. Each run adds two sessions to the demo student's first class, preserving all existing data:
+After host `npm ci`, run `npm run db:seed:attendance` from the backend on the host when existing fixtures are outside their check-in window. This requires development sign-in enabled and existing demo enrolments. Each run adds two sessions to the demo student's first class, preserving all existing data:
 
 - **DEV PRESENT**: open for four hours, on-time threshold two hours from creation.
 - **DEV LATE**: open for four hours, already past the on-time threshold.

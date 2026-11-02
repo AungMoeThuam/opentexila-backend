@@ -2,7 +2,7 @@
 
 **Version 6 · 29 October 2026 · Minimal consolidated baseline.**
 
-The migrations `1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts` create this schema: six domain EntitySchemas and seven application tables (the six domain tables plus `auth_sessions`). This is a fresh-database baseline, not an upgrade path for earlier development schemas. Existing development databases must be recreated separately.
+The migrations `1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts` create this schema: six domain decorated TypeORM entities and seven application tables (the six domain tables plus `auth_sessions`). This is a fresh-database baseline, not an upgrade path for earlier development schemas. Development databases from an older, incompatible baseline must be recreated separately; databases using the current baseline apply subsequent migrations normally.
 
 See the [ER diagram](database-erd.md) and [baseline setup guide](database-refactor-migration.md). `users.role`, `users.status`, `class_sessions.state` and `attendance_records.status` are MySQL ENUMs. The application still needs authentication and attendance business services.
 
@@ -104,7 +104,7 @@ The migration matches the [express-mysql-session schema](https://github.com/chil
 
 ## Indexes and checks
 
-Unique keys: `users.email`, `courses.code`, `(course_id, term, section)` on classes, `(class_id, starts_at)` on class sessions. Additional indexes cover role/status, lecturer classes, student enrolments, due class sessions, student attendance history and session rosters. Index definitions match the EntitySchemas.
+Unique keys: `users.email`, `courses.code`, `(course_id, term, section)` on classes, `(class_id, starts_at)` on class sessions. Additional indexes cover role/status, lecturer classes, student enrolments, due class sessions, student attendance history and session rosters. Index definitions match the decorated TypeORM entities.
 
 Checks cover identity normalization, nonempty password hash, class-session windows, coordinates, radius and attendance evidence. ENUMs constrain vocabulary, not transitions. Keep strict SQL mode. Do not use TypeORM synchronize to replace explicit migrations.
 
@@ -116,8 +116,8 @@ Check-in is allowed for a noncancelled class session with `starts_at <= now < en
 
 ## Implementation boundary
 
-Implemented: one initial migration, six EntitySchemas, seven application tables, shared connection, guarded demo seeds, development-only sample APIs and Docker setup. TypeORM also maintains `schema_migrations`, which remains after initial-migration rollback.
+Implemented: the initial baseline and session venue-snapshot migration, six decorated TypeORM entities, seven application tables, shared connection, guarded demo seeds, attendance APIs, development sign-in, sample APIs and Docker setup. TypeORM also maintains `schema_migrations`, which remains after initial-migration rollback.
 
-Still required: authentication/session/CSRF middleware, guards, endpoint contracts and feature APIs, session creation/check-in/finalisation/cancellation services and real-device location testing.
+Still required: production authentication/session handling, enrolment APIs, session creation/finalisation/cancellation services and real-device location testing. Attendance reads and check-in, session/account guards and development CSRF checks are implemented.
 
 Sample URLs remain `/api/v1/examples/classrooms` and `/api/v1/examples/classrooms/:id`, backed by `ClassSchema`. `SEED_MEETING_START` remains supported; seed output includes `class_id` and `class_session_ids`.

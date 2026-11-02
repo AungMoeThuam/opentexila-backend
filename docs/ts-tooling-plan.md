@@ -9,7 +9,7 @@ Production Docker packaging is outside this plan.
   `dist` directory.
 - [x] **Batch 2 — Development reload:** watch `tsconfig.build.json` in Nodemon.
   Verify that source and build-config changes trigger rebuilding.
-- [ ] **Batch 3 — Documentation:** update JavaScript-era migration/seed paths,
+- [x] **Batch 3 — Documentation:** update JavaScript-era migration/seed paths,
   dependency injection examples, and host/container workflow instructions.
 - [ ] **Batch 4 — Final verification:** run unit/HTTP tests, disposable MySQL
   tests, formatting checks, Docker build, and isolated startup/reload checks.
@@ -43,8 +43,26 @@ Batch 2 completed on 2026-11-02:
 - Nodemon JSON formatting and `git diff --check` passed. Docker-mounted reload
   and full application startup remain scheduled for Batch 4.
 
-Next: Batch 3, after the user says `continue`. The commit for Batch 2 is titled
-`fix(dev): rebuild when TypeScript build configuration changes`.
+Batch 2 commit: `541cb28` — `fix(dev): rebuild when TypeScript build configuration changes`.
+
+Batch 3 completed on 2026-11-03:
+
+- Updated the current setup, team, database and API guides to use `.ts`
+  migration/seed paths, decorated entities and typed constructor injection.
+- Documented automatic builds before type checking, Nodemon's build-config
+  watch, compiled application output versus type-stripped tooling, and which
+  commands execute on the host or inside Docker.
+- Corrected stale attendance/development-auth implementation descriptions and
+  distinguished the initial baseline rollback from the later venue migration.
+- Checked all npm script references, relative Markdown links and named
+  migration files in the edited guides against the repository.
+- Compiled both complete service examples in a temporary source copy using the
+  project's strict compiler settings and installed dependencies; both passed.
+- Historical implementation plans remain unchanged. No application or Docker
+  configuration changed in this batch; full runtime checks remain in Batch 4.
+
+Next: Batch 4, after the user says `continue`. The commit for Batch 3 is titled
+`docs: align backend guides with TypeScript and Docker workflows`.
 
 Application refactor and unused-code cleanup were committed previously as
 `8351115`.

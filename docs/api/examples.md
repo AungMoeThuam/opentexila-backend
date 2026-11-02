@@ -1,6 +1,6 @@
 # Sample classroom API
 
-Implemented in TypeScript as a reference for teammates. These read-only routes use the real shared TypeORM connection and existing classroom schema. They are registered **only when `NODE_ENV=development`**, because authentication and membership permissions are not implemented yet. Use a local demo database. These are examples, not the production classroom API contract.
+Implemented in TypeScript as a reference for teammates. These read-only routes use the real shared TypeORM connection and existing classroom schema. They are registered **only when `NODE_ENV=development`**, because these sample routes do not enforce authentication or membership permissions. Use a local demo database. These are examples, not the production classroom API contract.
 
 ## Try it
 

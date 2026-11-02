@@ -37,9 +37,24 @@ docker compose ps -a
 
 The stack runs in the background. Once the frontend checkout and `.env` exist, `docker compose up --build` is also available for attached logs. That raw Compose command does not clone repositories or generate configuration.
 
-Edit backend `src/` or frontend `src/` on your machine. They are mounted read-only **inside** containers; your editor can still change the host files. Nest rebuilds/restarts and Vite hot reloads. Linux `node_modules` and compiled backend `dist` stay inside images/containers. Re-run `npm run stack:up` after changing dependencies, migrations or Docker configuration. To apply pending migrations separately, run `docker compose build migrate`, then `docker compose run --rm migrate`. The normal stack command already builds and runs this migration service.
+Edit backend `src/` or frontend `src/` on your machine. They are mounted read-only **inside** containers; your editor can still change the host files. Nodemon runs `npm start`, whose `prestart` script compiles NestJS with `tsc` before Node launches `dist/main.js`; Vite hot reloads. Backend changes to `tsconfig.json` and `tsconfig.build.json` also trigger a rebuild/restart. Linux `node_modules` and compiled backend `dist` stay inside images/containers. Re-run `npm run stack:up` after changing dependencies, migrations or Docker configuration. To apply pending migrations separately, run `docker compose build migrate`, then `docker compose run --rm migrate`. The normal stack command already builds and runs this migration service.
 
 Do not run the frontend repository's standalone Compose services at the same time on the same ports. Its production Nginx build and frontend-only UI workflow remain available separately.
+
+## Host and container commands
+
+Run commands from the backend checkout on your host:
+
+| Task | Command / execution location |
+| --- | --- |
+| Shared stack | `npm run stack:up`, `npm run stack:logs`, `npm run stack:down` run the launcher on the host and manage containers; no host dependencies are required. |
+| Backend inside Docker | Compose starts `npm run start:dev` in `/app`; compilation and `dist/` stay inside the container. |
+| Backend on the host | Run `npm ci`, `npm run db:up`, `npm run db:migrate`, then `npm run start:dev`. Use the host database address from `.env`. |
+| Type checks / formatting / tests | Run `npm ci` on the host, then `npm run typecheck`, `npm run format:check`, `npm test` or `npm run test:db`. Typecheck and tests build automatically. The database suite owns a disposable test container. |
+| Demo data | Run `npm run db:seed` or `npm run db:seed:attendance` on the host after `npm ci`, using the documented development settings. |
+| Migrations inside Docker | Run `docker compose build migrate`, then `docker compose run --rm migrate` from the host. The migration command executes inside the container against `db:3306`. |
+
+The development image includes source, build configuration and `database/`, but excludes host `node_modules`, `dist`, `.env`, scripts, tests and documentation. Do not run the host launcher, attendance seed script or full test commands with `docker compose exec backend`. The Dockerfile has a development target only; `start:prod` runs a previously compiled build and does not create a production image or set `NODE_ENV`.
 
 ## Configuration
 
@@ -52,10 +67,11 @@ Set these in **backend/.env** or your shell (shell values take precedence):
 | `FRONTEND_DEV_PORT`                                     | `5173`                               | Frontend localhost port                                             |
 | `BACKEND_PORT`                                          | `3000`                               | Backend localhost port                                              |
 | `DB_PORT`                                               | `3306`                               | MySQL localhost port                                                |
+| `DEV_AUTH_ENABLED` | `false` | Enable development sign-in using seeded accounts and real APIs; requires development mode. |
 | `FRONTEND_MOCK_AUTH`                                    | `false`                              | Set `true` for isolated UI work; mock mode blocks real API requests |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD` | See `.env.example`                   | MySQL initialization and application credentials                    |
 
-Authentication and attendance APIs are still under development. Real API mode will not provide a working login until those endpoints exist. Verify connectivity now with `http://localhost:5173/api/v1/examples/classrooms`; an empty `data` array on a new database is expected. For UI demos, set `FRONTEND_MOCK_AUTH=true`, run `npm run stack:up`, then use the developer role selector. Demo accounts are not automatically seeded.
+Attendance APIs and optional development sign-in are implemented. To use seeded accounts with real APIs, set `DEV_AUTH_ENABLED=true` and `FRONTEND_MOCK_AUTH=false`, then follow [development sign-in](DEVELOPMENT_AUTH.md). Production password authentication is still pending. Verify connectivity now with `http://localhost:5173/api/v1/examples/classrooms`; an empty `data` array on a new database is expected. For UI demos, set `FRONTEND_MOCK_AUTH=true`, run `npm run stack:up`, then use the developer role selector. Demo accounts are not automatically seeded.
 
 To update an existing frontend checkout, review and pull its changes yourself, then rerun the stack command. The launcher deliberately does not alter any existing checkout's Git state. Commit frontend work in the frontend repository and backend/infrastructure work here.
 
@@ -87,8 +103,8 @@ This is a local development setup. Services publish only on localhost. A deploym
 
 ## Verification
 
-Verified using a fresh clone from GitHub and a separate disposable MySQL volume: all services became healthy, migrations applied, Vue deep routes loaded, and the Vite proxy reached the real sample API/database. Backend reload and frontend HMR were observed. Stopping and restarting retained a test database marker and reported no pending migrations. The 14 backend/launcher tests passed, including preservation of an existing frontend checkout and `.env`. These checks do not imply unfinished authentication or attendance endpoints are implemented.
+Verified using a fresh clone from GitHub and a separate disposable MySQL volume: all services became healthy, migrations applied, Vue deep routes loaded, and the Vite proxy reached the real sample API/database. Backend reload and frontend HMR were observed. Stopping and restarting retained a test database marker and reported no pending migrations. These earlier stack checks included preservation of an existing frontend checkout and `.env`. Verification of the current TypeScript tooling changes is tracked separately in [the batch checklist](ts-tooling-plan.md); full stack re-verification is scheduled for Batch 4.
 
 ## Consolidated database baseline
 
-The migration container applies one initial migration with the final schema. Existing volumes created with the older migration contents must be recreated separately before using this checkout. `stack:up` preserves volumes and does not perform this reset; old migration history can misleadingly report the rewritten baseline as applied. Read the [baseline setup guide](database-refactor-migration.md). No application database has been reset by this change.
+The migration container applies the initial baseline and subsequent pending migrations, including `1793491200000-SessionVenueSnapshot.ts`. Existing volumes created with the older migration contents must be recreated separately before using this checkout. `stack:up` preserves volumes and does not perform this reset; old migration history can misleadingly report the rewritten baseline as applied. Read the [baseline setup guide](database-refactor-migration.md). No application database has been reset by this change.

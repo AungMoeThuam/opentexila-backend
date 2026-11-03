@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Classes & Enrolments](enrolments.md) · [Attendance](attendance.md) · [Database design](../database-design.md)
 
-**Status: planned contract; database schema (`users`, `auth_sessions`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: the original cookie-session contract below is planned. The opt-in JWT login, refresh, profile, logout and password-change endpoints are now implemented; see [JWT authentication](../JWT_AUTH.md) for their current contract. Admin provisioning/reset endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Account and session lifecycle
 

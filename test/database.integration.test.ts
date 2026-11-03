@@ -14,6 +14,7 @@ import { ClassSessionRecordsService } from '../dist/attendance/class-session-rec
 import { AttendanceHistoryService } from '../dist/attendance/attendance-history.service.js';
 import type { AttendanceCaller } from '../dist/attendance/attendance.rules.js';
 import { seedDemo } from '../database/seeds/demo.ts';
+import { authIntegration } from './auth.integration.ts';
 import { attendanceIntegration } from './attendance.integration.ts';
 
 // This command owns its container. It never reads .env or connects to the app database.
@@ -603,6 +604,7 @@ test(
         });
         assert.ok(withCancelled.meta.total >= result.meta.total);
       });
+      await authIntegration(t, ds!);
       await t.test(
         'Nest exposes the shared database provider and closes the pool',
         async () => {

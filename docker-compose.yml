@@ -8,6 +8,8 @@ x-backend-build: &backend-build
 x-backend-environment: &backend-environment
   NODE_ENV: development
   DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-false}
+  JWT_AUTH_ENABLED: ${JWT_AUTH_ENABLED:-false}
+  JWT_SECRET: ${JWT_SECRET:-}
   HOST: 0.0.0.0
   PORT: 3000
   DB_HOST: db

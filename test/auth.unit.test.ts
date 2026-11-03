@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JwtService } from '@nestjs/jwt';
-import { jwtOptions } from '../dist/auth/auth.config.js';
+import { jwtAuthEnabled, jwtOptions } from '../dist/auth/auth.config.js';
 
 test('JWT configuration rejects missing or short signing secrets', () => {
   for (const JWT_SECRET of [undefined, '', 'short']) {
@@ -23,4 +23,22 @@ test('JWT verification enforces signature, expiry, issuer and audience', async (
     const invalid = await jwt.signAsync(claims, options);
     await assert.rejects(jwt.verifyAsync(invalid));
   }
+});
+
+test('JWT endpoint activation is explicit and prevents duplicate development routes', () => {
+  assert.equal(jwtAuthEnabled({}), false);
+  assert.equal(
+    jwtAuthEnabled({ JWT_AUTH_ENABLED: 'false', DEV_AUTH_ENABLED: 'true' }),
+    false,
+  );
+  assert.equal(jwtAuthEnabled({ JWT_AUTH_ENABLED: 'true' }), true);
+  assert.throws(
+    () => jwtAuthEnabled({ JWT_AUTH_ENABLED: 'yes' }),
+    /true or false/,
+  );
+  assert.throws(
+    () =>
+      jwtAuthEnabled({ JWT_AUTH_ENABLED: 'true', DEV_AUTH_ENABLED: 'true' }),
+    /overlap/,
+  );
 });

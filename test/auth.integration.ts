@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
 import { randomBytes } from 'node:crypto';
 import * as argon2 from 'argon2';
-import { Controller, Get, Module } from '@nestjs/common';
+import { Controller, Get, Module, UseGuards } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import type { DataSource } from 'typeorm';
@@ -13,6 +13,18 @@ import { AuthThrottleGuard } from '../dist/auth/auth-throttle.guard.js';
 import { jwtOptions } from '../dist/auth/auth.config.js';
 import { DATABASE } from '../dist/database/database.constants.js';
 import { User, RefreshSession } from '../dist/database/entities/index.js';
+import { JwtAuthGuard } from '../dist/auth/jwt-auth.guard.js';
+import { RolesGuard } from '../dist/auth/roles.guard.js';
+import { Roles } from '../dist/auth/roles.decorator.js';
+import { CurrentUser } from '../dist/auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../dist/auth/auth-request.js';
+import { AttendanceGuard } from '../dist/attendance/attendance.guard.js';
+import { AttendanceController } from '../dist/attendance/attendance.controller.js';
+import { AttendanceService } from '../dist/attendance/attendance.service.js';
+import { AttendanceRecordsController } from '../dist/attendance/me-attendance-records.controller.js';
+import { AttendanceHistoryService } from '../dist/attendance/attendance-history.service.js';
+import { ClassSessionRecordsController } from '../dist/attendance/class-session-records.controller.js';
+import { ClassSessionRecordsService } from '../dist/attendance/class-session-records.service.js';
 import { createValidationPipe } from '../dist/common/validation.pipe.js';
 
 export async function authIntegration(
@@ -41,6 +53,42 @@ export async function authIntegration(
     'open',
     Object.getOwnPropertyDescriptor(PublicController.prototype, 'open')!,
   );
+  class ProtectedController {
+    admin(current: AuthenticatedUser) {
+      return current;
+    }
+    student(current: AuthenticatedUser) {
+      return current;
+    }
+  }
+  Controller('protected-probe')(ProtectedController);
+  UseGuards(JwtAuthGuard, RolesGuard)(ProtectedController);
+  Roles('admin')(ProtectedController);
+  for (const method of ['admin', 'student'] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      ProtectedController.prototype,
+      method,
+    )!;
+    Get(method)(ProtectedController.prototype, method, descriptor);
+    CurrentUser()(ProtectedController.prototype, method, 0);
+  }
+  Roles('student')(
+    ProtectedController.prototype,
+    'student',
+    Object.getOwnPropertyDescriptor(ProtectedController.prototype, 'student')!,
+  );
+  class RolesOnlyController {
+    read() {
+      return {};
+    }
+  }
+  Controller('roles-only')(RolesOnlyController);
+  UseGuards(RolesGuard)(RolesOnlyController);
+  Get()(
+    RolesOnlyController.prototype,
+    'read',
+    Object.getOwnPropertyDescriptor(RolesOnlyController.prototype, 'read')!,
+  );
   class TestModule {}
   Module({
     imports: [
@@ -48,12 +96,26 @@ export async function authIntegration(
         jwtOptions({ JWT_SECRET: randomBytes(48).toString('hex') }),
       ),
     ],
-    controllers: [AuthController, PublicController],
+    controllers: [
+      AuthController,
+      PublicController,
+      ProtectedController,
+      RolesOnlyController,
+      AttendanceController,
+      AttendanceRecordsController,
+      ClassSessionRecordsController,
+    ],
     providers: [
       { provide: DATABASE, useValue: database },
       AuthService,
       AuthCookies,
       AuthThrottleGuard,
+      JwtAuthGuard,
+      RolesGuard,
+      AttendanceGuard,
+      AttendanceService,
+      AttendanceHistoryService,
+      ClassSessionRecordsService,
     ],
   })(TestModule);
   const app = await NestFactory.create(TestModule, { logger: false });
@@ -324,6 +386,144 @@ export async function authIntegration(
           .getRepository(User)
           .findOneByOrFail({ id: user.id });
         assert.equal(current.session_version, 1);
+      },
+    );
+    await t.test(
+      'opt-in guards expose verified identity, enforce roles and read current account state',
+      async () => {
+        const issued = await auth.login({ email, password: nextPassword });
+        const access = issued.response.accessToken;
+        assert.equal(
+          (await request('protected-probe/student')).response.status,
+          401,
+        );
+        assert.equal((await request('roles-only')).response.status, 401);
+        assert.equal(
+          (await request('protected-probe/admin', 'GET', undefined, access))
+            .response.status,
+          403,
+        );
+        const allowed = await request(
+          'protected-probe/student',
+          'GET',
+          undefined,
+          access,
+        );
+        assert.equal(allowed.response.status, 200);
+        assert.deepEqual(allowed.payload, { id: user.id, role: 'student' });
+        await database.getRepository(User).update(user.id, { role: 'admin' });
+        assert.equal(
+          (await request('protected-probe/admin', 'GET', undefined, access))
+            .response.status,
+          200,
+        );
+        assert.equal(
+          (await request('protected-probe/student', 'GET', undefined, access))
+            .response.status,
+          403,
+        );
+        await database
+          .getRepository(User)
+          .update(user.id, { role: 'student', must_change_password: true });
+        const blocked = await request(
+          'protected-probe/student',
+          'GET',
+          undefined,
+          access,
+        );
+        assert.equal(blocked.response.status, 403);
+        assert.equal(blocked.payload.error.code, 'PASSWORD_CHANGE_REQUIRED');
+        assert.equal(
+          (await request('auth/me', 'GET', undefined, access)).response.status,
+          200,
+        );
+        await database
+          .getRepository(User)
+          .update(user.id, { must_change_password: false, status: 'inactive' });
+        assert.equal(
+          (await request('protected-probe/student', 'GET', undefined, access))
+            .response.status,
+          401,
+        );
+        await database
+          .getRepository(User)
+          .update(user.id, { status: 'active' });
+        await auth.logout(issued.refreshToken);
+        assert.equal(
+          (await request('protected-probe/student', 'GET', undefined, access))
+            .response.status,
+          401,
+        );
+        assert.equal((await request('public-probe')).response.status, 200);
+      },
+    );
+    await t.test(
+      'existing attendance endpoints accept JWTs and preserve roles and check-in rules',
+      async () => {
+        const issued = await auth.login({ email, password: nextPassword });
+        const access = issued.response.accessToken;
+        assert.equal((await request('me/class-sessions')).response.status, 401);
+        assert.equal(
+          (await request('me/attendance-records', 'GET', undefined, access))
+            .response.status,
+          200,
+        );
+        assert.equal(
+          (await request('me/class-sessions', 'GET', undefined, access))
+            .response.status,
+          200,
+        );
+        assert.equal(
+          (await request('class-sessions/1/records', 'GET', undefined, access))
+            .response.status,
+          403,
+        );
+        // This valid Bearer request reaches domain authorization without a CSRF header.
+        // The test user has no enrolment, so the class must remain inaccessible.
+        const checkin = await request(
+          'class-sessions/1/check-ins',
+          'POST',
+          {
+            latitude: 0,
+            longitude: 0,
+            accuracy_m: 5,
+            reading_timestamp: new Date().toISOString(),
+          },
+          access,
+          false,
+        );
+        assert.equal(checkin.response.status, 404);
+        await database.getRepository(User).update(user.id, { role: 'admin' });
+        assert.equal(
+          (await request('me/attendance-records', 'GET', undefined, access))
+            .response.status,
+          403,
+        );
+        assert.equal(
+          (await request('class-sessions/1/records', 'GET', undefined, access))
+            .response.status,
+          200,
+        );
+        await database
+          .getRepository(User)
+          .update(user.id, { role: 'student', must_change_password: true });
+        const blocked = await request(
+          'me/class-sessions',
+          'GET',
+          undefined,
+          access,
+        );
+        assert.equal(blocked.response.status, 403);
+        assert.equal(blocked.payload.error.code, 'PASSWORD_CHANGE_REQUIRED');
+        await database
+          .getRepository(User)
+          .update(user.id, { must_change_password: false });
+        await auth.logout(issued.refreshToken);
+        assert.equal(
+          (await request('me/class-sessions', 'GET', undefined, access))
+            .response.status,
+          401,
+        );
       },
     );
     await t.test(

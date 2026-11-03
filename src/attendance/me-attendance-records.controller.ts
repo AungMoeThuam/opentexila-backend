@@ -2,11 +2,11 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiException } from '../common/api-exception';
 import { AttendanceHistoryService } from './attendance-history.service';
 import { AttendanceGuard } from './attendance.guard';
-import { CurrentUser } from './current-user.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import type { AttendanceCaller } from './attendance.rules';
 
 import { PersonalAttendanceQueryDto } from './dto/attendance-query.dto';
-import { Roles } from './roles.decorator';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller(['me/attendance-records', 'attendance/me'])
 @UseGuards(AttendanceGuard)

@@ -494,16 +494,13 @@ test('AttendanceController and DTO pipeline enforce authentication, authorizatio
   const pipe = createValidationPipe();
   async function invoke(
     query: Record<string, unknown>,
-    request: { attendanceUser?: AttendanceCaller },
+    request: { authUser?: AttendanceCaller },
   ) {
     const dto: PersonalAttendanceQueryDto = await pipe.transform(query, {
       type: 'query',
       metatype: PersonalAttendanceQueryDto,
     });
-    return controller.getPersonalAttendanceRecords(
-      dto,
-      request.attendanceUser!,
-    );
+    return controller.getPersonalAttendanceRecords(dto, request.authUser!);
   }
 
   await t.test('rejects unauthenticated requests with 401', async () => {
@@ -518,7 +515,7 @@ test('AttendanceController and DTO pipeline enforce authentication, authorizatio
       await assert.rejects(
         () =>
           invoke({}, {
-            attendanceUser: { id: 2, role },
+            authUser: { id: 2, role },
           } as any),
         (error) => error instanceof ApiException && error.getStatus() === 403,
       );
@@ -526,7 +523,7 @@ test('AttendanceController and DTO pipeline enforce authentication, authorizatio
   });
 
   const validReq: any = {
-    attendanceUser: {
+    authUser: {
       id: 3,
       role: 'student',
     },

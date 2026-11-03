@@ -31,7 +31,7 @@ For separate host processes, set backend `NODE_ENV=development`, `DEV_AUTH_ENABL
 - The setting defaults to false. When disabled, the development auth module and its endpoints are not registered. Production frontend builds omit the toolbar and development mode.
 - Sessions are random opaque HttpOnly, SameSite=Strict cookies backed by process memory, expire after eight hours, and disappear on API restart. They are separate from future production auth cookies and do not use localStorage.
 - `GET /auth/csrf` bootstraps the session. `POST /dev/auth/select-role` requires that session's CSRF token and accepts only an allowlisted role. Switching roles rotates both the cookie and CSRF token. `/auth/me` restores the selected profile; `/auth/logout` requires CSRF and destroys the session.
-- The middleware supplies `request.session` in the format used by the attendance guard. Other features should use a shared session guard with equivalent account/role checks when implemented.
+- The middleware supplies `request.session` in the format used by the attendance guard. JWT mode is a separate adapter; see [JWT authentication](JWT_AUTH.md) for opt-in feature guards and attendance integration.
 - The older `FRONTEND_MOCK_AUTH=true` mode remains an offline UI preview and blocks real APIs. Development sign-in takes precedence if both flags are enabled.
 - Geolocation is not bypassed. The existing demo venues use synthetic coordinates (0, 0). Real-device GPS will be outside those venues; use browser location emulation or intentionally configured local test venues for check-in testing. Sessions must also be in progress.
 

@@ -7,7 +7,7 @@ attendance protection and development role selection remain available.
 - [x] Batch 1: foundation, JWT configuration, typed DTOs and refresh-token storage.
 - [x] Batch 2: login, refresh rotation, current user, logout, password changes,
   login rate limiting and revocation.
-- [ ] Batch 3: opt-in JWT/role guards, current-user decorator and integration with
+- [x] Batch 3: opt-in JWT/role guards, current-user decorator and integration with
   development auth, resolving ownership of overlapping auth routes.
 - [ ] Batch 4: complete security, development compatibility and Docker checks;
   update the authentication API contract.
@@ -54,3 +54,24 @@ Batch 2 completed on 2026-11-03:
   session-version invalidation of both access and refresh tokens, concurrent
   refresh replay revocation, logout, and password changes across sessions.
 - No changes were made to the application's `.env` or database.
+
+
+Batch 3 completed on 2026-11-03:
+
+- Exported opt-in JwtAuthGuard and RolesGuard, shared Roles metadata, and a typed
+  CurrentUser decorator exposing only the verified user ID and current role.
+- Attendance imports JWT providers only in JWT mode, verifies Bearer credentials,
+  and retains its existing role and resource rules. Demo sessions and CSRF remain
+  supported in demo mode; JWT failure cannot fall back to a demo session.
+- Moved attendance's duplicate decorators into the shared auth module. No global
+  guard or new global middleware was added; undecorated routes remain public.
+- The full AppModule test exposed a host-startup compatibility issue: Node 22.15.1
+  cannot load TypeORM's TypeScript migrations without the type-stripping flag.
+  Added the flag to start/start:prod while retaining compiled dist/main.js.
+- Verified guard ordering, role overrides, current database roles, required
+  password changes, revocation, JWT attendance reads/check-in authorization,
+  demo-auth regression tests and the real AppModule in an isolated child process.
+- Full security/Docker review and final API-contract updates remain Batch 4.
+
+- Final checks passed: strict type checking, formatting, 74 unit/HTTP tests and
+  30 disposable MySQL integration tests. No application database or `.env` changes.

@@ -606,6 +606,49 @@ test(
       });
       await authIntegration(t, ds!);
       await t.test(
+        'real AppModule wires JWT attendance protection without protecting example routes',
+        () => {
+          const script = `
+          const assert = require('node:assert/strict');
+          const { NestFactory } = require('@nestjs/core');
+          const { AppModule } = require('./dist/app.module.js');
+          const { AuthService } = require('./dist/auth/auth.service.js');
+          const { createValidationPipe } = require('./dist/common/validation.pipe.js');
+          (async () => {
+            const app = await NestFactory.create(AppModule, { logger: ['error'], abortOnError: false });
+            try {
+              app.setGlobalPrefix('api/v1');
+              app.useGlobalPipes(createValidationPipe());
+              await app.listen(0, '127.0.0.1');
+              const base = await app.getUrl();
+              const login = await app.get(AuthService).login({ email: 'student.one@example.com', password: process.env.SEED_PASSWORD });
+              const call = (path, token) => fetch(base + '/api/v1/' + path, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+              assert.equal((await call('me/class-sessions')).status, 401);
+              assert.equal((await call('me/class-sessions', login.response.accessToken)).status, 200);
+              assert.equal((await call('examples/classrooms')).status, 200);
+              await app.get(AuthService).logout(login.refreshToken);
+              assert.equal((await call('me/class-sessions', login.response.accessToken)).status, 401);
+            } finally { await app.close(); }
+          })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+        `;
+          execFileSync(
+            process.execPath,
+            ['--experimental-strip-types', '--no-warnings', '-e', script],
+            {
+              env: {
+                ...process.env,
+                ...env,
+                JWT_AUTH_ENABLED: 'true',
+                DEV_AUTH_ENABLED: 'false',
+                JWT_SECRET: randomBytes(48).toString('hex'),
+              },
+              timeout: 20000,
+              stdio: 'pipe',
+            },
+          );
+        },
+      );
+      await t.test(
         'Nest exposes the shared database provider and closes the pool',
         async () => {
           Object.assign(process.env, env);

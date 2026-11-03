@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { AttendanceGuard } from './attendance.guard';
-import { CurrentUser } from './current-user.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import type { AttendanceCaller } from './attendance.rules';
 import {
   ClassSessionsQueryDto,

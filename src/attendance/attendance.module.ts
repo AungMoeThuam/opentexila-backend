@@ -1,3 +1,5 @@
+import { AuthModule } from '../auth/auth.module';
+import { jwtAuthEnabled } from '../auth/auth.config';
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { AttendanceController } from './attendance.controller';
@@ -11,6 +13,7 @@ import { ClassSessionRecordsController } from './class-session-records.controlle
 import { ClassSessionRecordsService } from './class-session-records.service';
 
 @Module({
+  imports: jwtAuthEnabled() ? [AuthModule] : [],
   controllers: [
     AttendanceController,
     AttendanceRecordsController,

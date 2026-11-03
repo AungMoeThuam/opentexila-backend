@@ -71,7 +71,7 @@ Set these in **backend/.env** or your shell (shell values take precedence):
 | `FRONTEND_MOCK_AUTH`                                    | `false`                              | Set `true` for isolated UI work; mock mode blocks real API requests |
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ROOT_PASSWORD` | See `.env.example`                   | MySQL initialization and application credentials                    |
 
-Attendance APIs and optional development sign-in are implemented. To use seeded accounts with real APIs, set `DEV_AUTH_ENABLED=true` and `FRONTEND_MOCK_AUTH=false`, then follow [development sign-in](DEVELOPMENT_AUTH.md). Production password authentication is still pending. Verify connectivity now with `http://localhost:5173/api/v1/examples/classrooms`; an empty `data` array on a new database is expected. For UI demos, set `FRONTEND_MOCK_AUTH=true`, run `npm run stack:up`, then use the developer role selector. Demo accounts are not automatically seeded.
+Attendance APIs and optional development sign-in are implemented. To use seeded accounts with real APIs, set `DEV_AUTH_ENABLED=true`, `JWT_AUTH_ENABLED=false` and `FRONTEND_MOCK_AUTH=false`, then follow [development sign-in](DEVELOPMENT_AUTH.md). JWT password authentication is implemented as a separate opt-in mode: set `JWT_AUTH_ENABLED=true`, `DEV_AUTH_ENABLED=false` and a random `JWT_SECRET`; see [JWT authentication](JWT_AUTH.md). The frontend JWT adapter remains separate work. Verify connectivity now with `http://localhost:5173/api/v1/examples/classrooms`; an empty `data` array on a new database is expected. For UI demos, set `FRONTEND_MOCK_AUTH=true`, run `npm run stack:up`, then use the developer role selector. Demo accounts are not automatically seeded.
 
 To update an existing frontend checkout, review and pull its changes yourself, then rerun the stack command. The launcher deliberately does not alter any existing checkout's Git state. Commit frontend work in the frontend repository and backend/infrastructure work here.
 
@@ -99,7 +99,7 @@ Keep host `DB_HOST=127.0.0.1` and `DB_PORT` equal to MySQL's published port for 
 - **Startup wait times out:** inspect `docker compose ps -a` and `docker compose logs`. Containers remain available for diagnosis; use `npm run stack:down` to stop them.
 - **API health:** the health check verifies Nest is listening after database initialization. It does not prove all feature APIs exist or continually verify MySQL queries.
 
-This is a local development setup. Services publish only on localhost. A deployment needs a production backend runtime, HTTPS and the completed authentication/session configuration.
+This is a local development setup. Services publish only on localhost. A deployment needs a production backend runtime, HTTPS and deployment-specific authentication settings and a shared limiter when running multiple instances.
 
 ## Verification
 
@@ -110,3 +110,11 @@ The current TypeScript tooling was re-verified on 2026-11-03 in an isolated Comp
 ## Consolidated database baseline
 
 The migration container applies the initial baseline and subsequent pending migrations, including `1793491200000-SessionVenueSnapshot.ts`. Existing volumes created with the older migration contents must be recreated separately before using this checkout. `stack:up` preserves volumes and does not perform this reset; old migration history can misleadingly report the rewritten baseline as applied. Read the [baseline setup guide](database-refactor-migration.md). No application database has been reset by this change.
+
+
+JWT authentication was verified on 2026-11-03 in a disposable Compose project:
+image builds, migrations, service health, proxied JWT login/refresh/profile,
+attendance authorization, CSRF, session persistence across backend restart and
+logout revocation passed. Source and build-config reloads passed. Switching to
+demo mode preserved role selection, profile, attendance and CSRF behavior. Test
+containers, network and volume were removed. See the [completed auth checklist](jwt-auth-plan.md).

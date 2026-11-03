@@ -242,6 +242,25 @@ export async function authIntegration(
       },
     );
     await t.test(
+      'forged refresh credentials cannot revoke a legitimate session',
+      async () => {
+        const issued = await auth.login({ email, password });
+        const [header, payload] = issued.refreshToken.split('.');
+        const forged = `${header}.${payload}.${'x'.repeat(43)}`;
+        await assert.rejects(auth.refresh(forged));
+        await assert.rejects(auth.logout(forged));
+        await assert.rejects(auth.refresh(issued.response.accessToken));
+        await assert.rejects(auth.logout(issued.response.accessToken));
+        assert.equal(
+          (await auth.authenticate(bearer(issued.response.accessToken))).user
+            .id,
+          user.id,
+        );
+        const rotated = await auth.refresh(issued.refreshToken);
+        await auth.logout(rotated.refreshToken);
+      },
+    );
+    await t.test(
       'refresh rotates credentials; replay revokes the session including access JWTs',
       async () => {
         const old = jar.get('ot_refresh')!;

@@ -1,6 +1,6 @@
 # Development sign-in with real APIs
 
-Use this adapter to develop attendance and other features before production authentication is available. It replaces password sign-in only. Role checks, enrolment permissions, account state, session version checks, geolocation rules and CSRF remain active. Actions change the local database.
+Use this adapter to develop attendance and other features without entering passwords. JWT authentication is available as a separate mode. It replaces password sign-in only. Role checks, enrolment permissions, account state, session version checks, geolocation rules and CSRF remain active. Actions change the local database.
 
 ## Shared Docker stack
 
@@ -8,6 +8,7 @@ In the backend's untracked `.env`:
 
 ```dotenv
 DEV_AUTH_ENABLED=true
+JWT_AUTH_ENABLED=false
 FRONTEND_MOCK_AUTH=false
 ```
 
@@ -35,7 +36,7 @@ For separate host processes, set backend `NODE_ENV=development`, `DEV_AUTH_ENABL
 - The older `FRONTEND_MOCK_AUTH=true` mode remains an offline UI preview and blocks real APIs. Development sign-in takes precedence if both flags are enabled.
 - Geolocation is not bypassed. The existing demo venues use synthetic coordinates (0, 0). Real-device GPS will be outside those venues; use browser location emulation or intentionally configured local test venues for check-in testing. Sessions must also be in progress.
 
-To return to normal authentication, set `DEV_AUTH_ENABLED=false`, leave `FRONTEND_MOCK_AUTH=false`, and rerun `npm run stack:up`. Normal sign-in still requires the separate production authentication feature.
+To return to normal authentication, set `DEV_AUTH_ENABLED=false`, leave `FRONTEND_MOCK_AUTH=false`, and rerun `npm run stack:up`. For backend JWT sign-in, also set `JWT_AUTH_ENABLED=true` and a random `JWT_SECRET`; see [JWT authentication](JWT_AUTH.md). The current frontend still uses its demo/cookie adapter; frontend JWT integration is separate work.
 
 ## Fresh check-in sessions
 

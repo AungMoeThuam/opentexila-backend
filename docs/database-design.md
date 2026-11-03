@@ -1,10 +1,10 @@
 # OpenTexila database design
 
-**Version 6 · 29 October 2026 · Minimal consolidated baseline.**
+**Version 7 · 3 November 2026 · Baseline and JWT refresh sessions.**
 
-The migrations `1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts` create this schema: six domain decorated TypeORM entities and seven application tables (the six domain tables plus `auth_sessions`). This is a fresh-database baseline, not an upgrade path for earlier development schemas. Development databases from an older, incompatible baseline must be recreated separately; databases using the current baseline apply subsequent migrations normally.
+The initial, venue-snapshot and `1793664000000-RefreshSessions.ts` migrations create six domain tables, `auth_refresh_sessions` and the preserved `auth_sessions` table. Seven decorated TypeORM entities represent the domain tables and refresh sessions. This is a fresh-database baseline, not an upgrade path for earlier development schemas. Development databases from an older, incompatible baseline must be recreated separately; databases using the current baseline apply subsequent migrations normally.
 
-See the [ER diagram](database-erd.md) and [baseline setup guide](database-refactor-migration.md). `users.role`, `users.status`, `class_sessions.state` and `attendance_records.status` are MySQL ENUMs. The application still needs authentication and attendance business services.
+See the [ER diagram](database-erd.md) and [baseline setup guide](database-refactor-migration.md). `users.role`, `users.status`, `class_sessions.state` and `attendance_records.status` are MySQL ENUMs. JWT authentication and attendance business services are implemented.
 
 ## Tables
 
@@ -16,9 +16,10 @@ See the [ER diagram](database-erd.md) and [baseline setup guide](database-refact
 | `enrolments`         | Which students belong to which class.                      | primary key `(class_id, student_id)`   |
 | `class_sessions`     | One class meeting with start, late and end time (UTC).     | unique `(class_id, starts_at)`         |
 | `attendance_records` | One row per student per class session.                     | primary key `(class_session_id, student_id)` |
-| `auth_sessions`      | Browser login sessions (infrastructure, no foreign keys).  | primary key `session_id`               |
+| `auth_sessions` | Preserved unused cookie-adapter table. | primary key `session_id` |
+| `auth_refresh_sessions` | Hashed JWT refresh credentials, expiry and revocation. | primary key `id`; FK `user_id` |
 
-Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession` and `AttendanceRecord`. Schemas are in `src/database/entities/`. Columns use **snake_case**.
+Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession`, `AttendanceRecord` and `RefreshSession`. Schemas are in `src/database/entities/`. Columns use **snake_case**.
 
 ## Design rules
 
@@ -43,7 +44,7 @@ Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession` and `Att
 | session_version      | unsigned integer, default 0                              |
 | created_at           | datetime(3), defaults to the database clock              |
 
-Accounts are created by an admin who sets a temporary password; there is no invitation or activation flow. `must_change_password` forces a password change at first login. Increment `session_version` on password reset, password change or deactivation; auth middleware must compare it on protected requests. The database does not hash passwords or implement authentication.
+Accounts are created by an admin who sets a temporary password; there is no invitation or activation flow. `must_change_password` forces a password change at first login. Increment `session_version` on password reset, password change or deactivation; auth guards compare it on protected requests. The database does not hash passwords or implement authentication.
 
 ### courses
 
@@ -100,7 +101,13 @@ When a session is created, insert one `pending` record per enrolled student. Whe
 
 `session_id VARCHAR(128) COLLATE utf8mb4_bin PRIMARY KEY`, `expires INT UNSIGNED` (Unix seconds), `data MEDIUMTEXT NULL`; expiry index included.
 
-The migration matches the [express-mysql-session schema](https://github.com/chill117/express-mysql-session/blob/master/schema.sql), using table name `auth_sessions`. Future middleware should use `createDatabaseTable: false` and `schema: { tableName: 'auth_sessions', columnNames: { session_id: 'session_id', expires: 'expires', data: 'data' } }`. The adapter/middleware are not installed or wired yet. No TypeORM entity is exposed for session payloads. Store user ID/session version and CSRF state as needed, never passwords or locations. Regenerate at login, destroy at logout and clean up expired rows.
+This baseline table is preserved for compatibility and is not used by JWT authentication or the in-memory development adapter. No TypeORM entity exposes its payloads.
+
+### auth_refresh_sessions — JWT sessions
+
+The `RefreshSession` entity stores `id CHAR(36)` (session UUID), `user_id` (restricted user foreign key), `token_hash CHAR(64)` (SHA-256, excluded from normal selects), `expires_at DATETIME(3)` and nullable `revoked_at DATETIME(3)`. User and expiry indexes support lookups. The latest refresh credential is hashed; raw access/refresh tokens are not stored.
+
+Refresh tokens are signed with a separate audience, and rotation replaces their stored hash within a transaction. Reuse revokes the session; password changes revoke every session for the user. Session rows remain until a future cleanup task removes expired records. See [authentication](api/auth.md) for the active contract.
 
 ## Indexes and checks
 
@@ -116,8 +123,8 @@ Check-in is allowed for a noncancelled class session with `starts_at <= now < en
 
 ## Implementation boundary
 
-Implemented: the initial baseline and session venue-snapshot migration, six decorated TypeORM entities, seven application tables, shared connection, guarded demo seeds, attendance APIs, development sign-in, sample APIs and Docker setup. TypeORM also maintains `schema_migrations`, which remains after initial-migration rollback.
+Implemented: three migrations, seven decorated TypeORM entities, eight application tables, shared connection, guarded demo seeds, attendance APIs, development sign-in, sample APIs and Docker setup. TypeORM also maintains `schema_migrations`, which remains after initial-migration rollback.
 
-Still required: production authentication/session handling, enrolment APIs, session creation/finalisation/cancellation services and real-device location testing. Attendance reads and check-in, session/account guards and development CSRF checks are implemented.
+Still required: admin account provisioning/reset, enrolment APIs, session creation/finalisation/cancellation services and real-device location testing. Attendance reads and check-in, session/account guards and development CSRF checks are implemented.
 
 Sample URLs remain `/api/v1/examples/classrooms` and `/api/v1/examples/classrooms/:id`, backed by `ClassSchema`. `SEED_MEETING_START` remains supported; seed output includes `class_id` and `class_session_ids`.

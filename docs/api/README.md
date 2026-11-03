@@ -1,13 +1,13 @@
 # OpenTexila API Documentation
 
-**Status: database foundation and development-only sample API implemented; feature API contracts finalised.** The backend connects to MySQL through a shared TypeORM provider. The [sample classroom API](examples.md) provides two working read routes in development. Authentication, enrolment and attendance APIs are specified in full across the modular feature documents below. Start with the [database design](../database-design.md) and [developer guide](../database-development.md).
+**Status: database foundation, opt-in JWT authentication, attendance APIs and development-only sample APIs are implemented. Enrolment APIs and admin account provisioning/reset remain planned.** The backend connects to MySQL through TypeORM. See each feature document for its implemented and planned routes.
 
 This documentation belongs to the backend repository. The separate frontend repository links to these files rather than duplicating the API contract.
 
 ## Feature references
 
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
-- [Authentication](auth.md) — invitations, activation, login, logout and session restoration.
+- [Authentication](auth.md) — JWT login, refresh, profile, logout and password changes.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
 - **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
 - **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
@@ -16,13 +16,14 @@ This documentation belongs to the backend repository. The separate frontend repo
 
 ## Master endpoint index
 
-All paths below are relative to `/api/v1`.
+All paths below are relative to `/api/v1`. Admin account management and enrolment rows are planned contracts, not implemented endpoints.
 
 | Domain         | Method   | Path                                        | Allowed roles                            | Purpose                                                         | Spec                                                                      |
 | -------------- | -------- | ------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| **Auth**       | `GET`    | `/auth/csrf`                                | Guest / Any                              | Initialise session and return a session-bound CSRF token        | [auth.md](auth.md#get-authcsrf)                                           |
-| **Auth**       | `POST`   | `/auth/login`                               | Guest                                    | Authenticate an active account and establish a cookie session   | [auth.md](auth.md#post-authlogin)                                         |
-| **Auth**       | `POST`   | `/auth/logout`                              | Any signed-in                            | Destroy the current server session and clear cookie             | [auth.md](auth.md#post-authlogout)                                        |
+| **Auth**       | `GET`    | `/auth/csrf`                                | Guest / Any                              | Issue a signed CSRF token and cookie        | [auth.md](auth.md#get-authcsrf)                                           |
+| **Auth**       | `POST`   | `/auth/login`                               | Guest                                    | Issue an access JWT and rotating refresh cookie   | [auth.md](auth.md#post-authlogin)                                         |
+| **Auth** | `POST` | `/auth/refresh` | Refresh cookie + CSRF | Rotate tokens and return current profile | [auth.md](auth.md#post-authrefresh) |
+| **Auth**       | `POST`   | `/auth/logout`                              | Any signed-in                            | Revoke the refresh session and clear cookies             | [auth.md](auth.md#post-authlogout)                                        |
 | **Auth**       | `GET`    | `/auth/me`                                  | Any signed-in                            | Restore the current user's safe profile and role                | [auth.md](auth.md#get-authme)                                             |
 | **Auth**       | `POST`   | `/auth/change-password`                     | Any signed-in                            | Change own password and clear `must_change_password`            | [auth.md](auth.md#post-authchange-password)                               |
 | **Auth**       | `POST`   | `/admin/users`                              | `admin`                                  | Create a student/lecturer account with a temporary password     | [auth.md](auth.md#post-adminusers)                                        |
@@ -53,7 +54,7 @@ Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`),
 ## Shared HTTP rules
 
 - **Base path & Content-Type**: `/api/v1`. Send and return JSON; mutations with a body use `Content-Type: application/json`.
-- **Authentication & CSRF**: Authenticate with the shared server-side HttpOnly cookie session (`credentials: 'include'`). Obtain `data.csrfToken` from `GET /auth/csrf` and send `X-CSRF-Token` on all mutations (`POST`, `PATCH`, `DELETE`), including `POST /auth/login`.
+- **Authentication & CSRF**: JWT mode uses `Authorization: Bearer <accessToken>` on protected feature APIs, `/auth/me` and password changes. Send cookies and `X-CSRF-Token` for login, refresh and logout; obtain the token from `/auth/csrf` and replace it after login/refresh. Demo mode uses its server-owned cookie session and CSRF on mutations. See [authentication](auth.md) for token lifetimes and mode selection. New feature routes opt into guards explicitly.
 - **Success envelopes**:
   - Single resource / mutation success (`200 OK` or `201 Created`):
     ```json
@@ -88,14 +89,14 @@ Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`),
 - **Date range filters**:
   - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`.
 - **Security & privacy**:
-  - Omit `password_hash`, `auth_sessions` payloads, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
+  - Omit `password_hash`, `auth_sessions` payloads, refresh-token hashes, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
   - Never include SQL queries or stack traces in error responses.
   - Set `Cache-Control: no-store` on authenticated and CSRF responses.
-  - While `users.must_change_password` is `true`, only `GET /auth/csrf`, `GET /auth/me`, `POST /auth/change-password`, and `POST /auth/logout` are permitted; all other authenticated endpoints return `403 PASSWORD_CHANGE_REQUIRED`.
+  - While `users.must_change_password` is `true`, authentication endpoints remain available (including login and refresh); protected feature endpoints return `403 PASSWORD_CHANGE_REQUIRED`.
 
 ## Shared error envelope (all non-2xx responses)
 
-All feature endpoints return errors in the following envelope (the development-only `/examples/classrooms` routes retain NestJS default errors; see [examples.md](examples.md#errors)):
+Implemented feature controllers/guards return errors in the following envelope. The development-only `/examples/classrooms` routes and malformed JSON rejected before auth controller dispatch retain NestJS default errors; see [examples.md](examples.md#errors) and [authentication](auth.md#errors-and-rate-limiting).
 
 ```json
 {
@@ -122,7 +123,7 @@ All feature endpoints return errors in the following envelope (the development-o
 | `401` | `UNAUTHENTICATED`          | Missing, expired, or invalidated authentication session                             |
 | `401` | `INVALID_CREDENTIALS`      | Wrong email/password or inactive account on login                                   |
 | `403` | `FORBIDDEN`                | Authenticated user's role cannot perform this operation                             |
-| `403` | `ACCOUNT_INACTIVE`         | Authenticated account's `status` is `inactive` (if session not yet cleared)         |
+| `403` | `ACCOUNT_INACTIVE`         | Inactive demo-session account; JWT mode rejects it as 401 UNAUTHENTICATED         |
 | `403` | `PASSWORD_CHANGE_REQUIRED` | User has `must_change_password = true` and called a non-exempt endpoint             |
 | `403` | `CSRF_INVALID`             | Missing or invalid `X-CSRF-Token` header on a mutation                              |
 | `403` | `NOT_ELIGIBLE`             | Student is not in the class session's materialised attendance roster                |

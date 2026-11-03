@@ -1,8 +1,8 @@
 # OpenTexila database ER diagram
 
-**Version 6 · 29 October 2026 · Minimal consolidated baseline + session venue snapshot.** This diagram matches the decorated TypeORM entities and migrations (`1793059200000-InitialSchema.ts` and `1793491200000-SessionVenueSnapshot.ts`). See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
+**Version 7 · 3 November 2026 · Baseline, venue snapshot and JWT refresh sessions.** This diagram matches the decorated TypeORM entities and migrations (`1793059200000-InitialSchema.ts`, `1793491200000-SessionVenueSnapshot.ts` and `1793664000000-RefreshSessions.ts`). See [database design](database-design.md) and the [baseline setup guide](database-refactor-migration.md).
 
-Seven application tables are shown; TypeORM's `schema_migrations` table is omitted. View in a Mermaid-capable preview. Older generated PNGs, if present, are obsolete; use this Markdown diagram.
+Eight application tables are shown; TypeORM's `schema_migrations` table is omitted. View in a Mermaid-capable preview. Older generated PNGs, if present, are obsolete; use this Markdown diagram.
 
 ```mermaid
 erDiagram
@@ -13,6 +13,7 @@ erDiagram
     classes ||--o{ class_sessions : "class_id"
     class_sessions ||--o{ attendance_records : "class_session_id"
     users ||--o{ attendance_records : "student_id"
+    users ||--o{ auth_refresh_sessions : "user_id"
 
     users {
         int id PK
@@ -64,6 +65,13 @@ erDiagram
         datetime checked_in_at "nullable"
         decimal distance_m "10,2; nullable"
     }
+    auth_refresh_sessions {
+        char id PK "36; UUID"
+        int user_id FK
+        char token_hash "64; SHA-256"
+        datetime expires_at "indexed"
+        datetime revoked_at "nullable"
+    }
     auth_sessions {
         varchar session_id PK "128"
         int expires "Unix seconds; indexed"
@@ -71,7 +79,7 @@ erDiagram
     }
 ```
 
-`PK` = primary key; `FK` = foreign key; `UK` = unique key. All `int` fields are unsigned; `id` fields auto-increment. All `datetime` fields are `DATETIME(3)` in UTC. `auth_sessions` is infrastructure owned by the session middleware and has no foreign keys.
+`PK` = primary key; `FK` = foreign key; `UK` = unique key. All `int` fields are unsigned; integer `id` fields auto-increment; refresh-session IDs are UUIDs. All `datetime` fields are `DATETIME(3)` in UTC. `auth_sessions` is preserved unused infrastructure with no foreign keys. JWT authentication uses `auth_refresh_sessions`.
 
 ## Constraints that the relationship lines do not show
 

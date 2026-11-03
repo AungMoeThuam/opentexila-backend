@@ -42,3 +42,12 @@ test('JWT endpoint activation is explicit and prevents duplicate development rou
     /overlap/,
   );
 });
+
+test('JWT verification rejects unsigned tokens and alternate signing algorithms', async () => {
+  const jwt = new JwtService(jwtOptions({ JWT_SECRET: 'a'.repeat(48) }));
+  const payload = { sub: '1', sid: 'session', sessionVersion: 0 };
+  const alternate = await jwt.signAsync(payload, { algorithm: 'HS384' });
+  await assert.rejects(jwt.verifyAsync(alternate));
+  const unsigned = `${Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.`;
+  await assert.rejects(jwt.verifyAsync(unsigned));
+});

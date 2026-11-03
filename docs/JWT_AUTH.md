@@ -53,7 +53,7 @@ call `/auth/csrf` again. CSRF tokens expire after one hour and are signed and bo
 to the current refresh cookie. Refresh cookies expire seven days after login;
 rotation does not extend that deadline.
 
-Only SHA-256 hashes of refresh tokens are persisted. Their high-entropy secrets
+Refresh tokens are signed JWTs with a separate audience and random nonce; only their SHA-256 hashes are persisted. Signature verification happens before refresh replay or logout can revoke a session. Their high-entropy secrets
 are generated server-side. Passwords use Argon2id. JWT verification pins HS256,
 issuer and audience, checks expiration, and reads current user/session state.
 Inactive accounts, revoked/expired sessions and stale session versions are

@@ -1,330 +1,127 @@
 # Authentication & Account Onboarding API
 
-[API overview](README.md) · [Classes & Enrolments](enrolments.md) · [Attendance](attendance.md) · [Database design](../database-design.md)
+[API overview](README.md) · [Attendance](attendance.md) · [JWT setup and guards](../JWT_AUTH.md)
 
-**Status: the original cookie-session contract below is planned. The opt-in JWT login, refresh, profile, logout and password-change endpoints are now implemented; see [JWT authentication](../JWT_AUTH.md) for their current contract. Admin provisioning/reset endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: JWT login, refresh, current profile, logout and password change are implemented. Admin account provisioning/reset remain planned.** Paths are relative to `/api/v1`.
 
-## Account and session lifecycle
-
-1. **Initial setup**: An administrator account is provisioned during setup or demo seeding (`users.role = 'admin'`).
-2. **Admin account provisioning (`POST /admin/users`)**: An administrator creates a student or lecturer (`teacher`) account, assigns the role, and sets an initial temporary password. The backend stores only an Argon2id hash in `users.password_hash` and sets `users.must_change_password = true`. There is no email invitation or token activation table.
-3. **Login (`POST /auth/login`)**: The user signs in with email and password, receives an `HttpOnly` session cookie backed by `auth_sessions`, and receives their safe profile payload.
-4. **Mandatory password change (`POST /auth/change-password`)**: While `must_change_password` is `true`, the user must change their password before accessing enrolment or attendance endpoints. Changing the password sets `must_change_password = false` and increments `users.session_version`.
-5. **Session restoration & logout (`GET /auth/me`, `POST /auth/logout`)**: The frontend restores the current identity on page load via `GET /auth/me` and destroys the session on `POST /auth/logout`.
+Enable `JWT_AUTH_ENABLED=true`, set a random `JWT_SECRET`, and keep `DEV_AUTH_ENABLED=false`. These flags select the auth adapter, not global route protection. Unrelated feature endpoints remain public until a guard is explicitly applied. Existing attendance routes are guarded. The [demo adapter](../DEVELOPMENT_AUTH.md) remains available as a separate development mode; it does not use the JWT contract below. The frontend JWT adapter is separate work.
 
 ## Endpoint summary
 
-| Method | Path | Access | Purpose |
+| Method | Path | Credential / CSRF | Success |
 | --- | --- | --- | --- |
-| `GET` | `/auth/csrf` | Guest or signed-in | Initialise/retrieve a session-bound CSRF token |
-| `POST` | `/auth/login` | Guest | Authenticate an active user and establish a server session |
-| `POST` | `/auth/logout` | Signed-in user | Destroy the current server session and clear the session cookie |
-| `GET` | `/auth/me` | Signed-in user | Return the current user's safe profile and role |
-| `POST` | `/auth/change-password` | Signed-in user | Change own password, clear `must_change_password`, bump `session_version` |
-| `POST` | `/admin/users` | `admin` | Create a `student` or `teacher` account with a temporary password |
-| `POST` | `/admin/users/:id/reset-password` | `admin` | Set a new temporary password, set `must_change_password = true`, bump `session_version` |
+| GET | `/auth/csrf` | No identity required | 200, signed CSRF token and HttpOnly cookie |
+| POST | `/auth/login` | CSRF cookie + `X-CSRF-Token` | 200, access JWT, profile, CSRF token; refresh cookie |
+| POST | `/auth/refresh` | Refresh cookie + CSRF | 200, rotated tokens and current profile |
+| GET | `/auth/me` | Bearer access JWT | 200, current safe profile |
+| POST | `/auth/logout` | CSRF; refresh cookie if present | 204, session revoked and cookies cleared |
+| POST | `/auth/change-password` | Bearer access JWT | 204, password changed and all logins revoked |
 
----
+## Token lifecycle
 
-## Endpoint specifications
+Access JWTs expire after 15 minutes. Send `Authorization: Bearer <accessToken>` for profile, password changes and protected feature endpoints. Keep access tokens in memory. Cookie credentials alone do not authenticate those endpoints.
+
+Refresh tokens are separately signed JWTs with a distinct audience and a random nonce. They are sent only through an HttpOnly cookie, and only their SHA-256 hashes are persisted in `auth_refresh_sessions`. Rotation replaces the stored hash; a previously issued signed token used again revokes that session, including its latest access/refresh tokens. A forged or wrong-purpose token is rejected before it can revoke a session. Serialize refresh calls, including across browser tabs; do not automatically replay a refresh after an ambiguous network failure.
+
+A refresh session expires seven days after login; rotation does not extend it. Access checks read current user/session state, so logout, account deactivation, session expiry or a changed `session_version` take effect without waiting for JWT expiry. Password changes revoke every session. Expired/revoked session rows are retained; automatic database cleanup is not implemented.
+
+CSRF tokens are signed, expire after one hour and are bound to the current refresh cookie (or an anonymous state before login). Send the cookie and matching `X-CSRF-Token` for login, refresh and logout. Replace your in-memory CSRF token after login/refresh. Re-bootstrap with `/auth/csrf` when needed. Bearer-only operations do not require CSRF.
+
+Cookies are HttpOnly, SameSite=Strict, Path=/ with no Domain. Production uses Secure cookies named `__Host-ot_refresh` and `__Host-ot_csrf`; development names are `ot_refresh` and `ot_csrf`. Production therefore requires HTTPS. CORS is not enabled; the current browser setup uses the same-origin Vite proxy.
 
 ### `GET /auth/csrf`
 
-Initialises an anonymous or authenticated cookie session if one does not exist and returns the CSRF token required in the `X-CSRF-Token` header for all mutations (`POST`, `PATCH`, `DELETE`).
-
-- **Access**: Guest or any signed-in user (allowed even when `must_change_password = true`).
-- **Query / body**: None.
-
-#### Success response — `200 OK`
+No request body. Sets a signed CSRF cookie and returns:
 
 ```json
-{
-  "data": {
-    "csrfToken": "b7f5c2e9d8a14f3b9c0e1a2d3f4b5c6d"
-  }
-}
+{ "data": { "csrfToken": "<signed-csrf-token>" } }
 ```
 
----
+This endpoint does not sign in a user or create a database session.
 
 ### `POST /auth/login`
 
-Authenticates an active user with email and password, regenerates the server session ID to prevent session fixation, sets the `HttpOnly` session cookie, and returns the user's safe profile.
-
-- **Access**: Guest (requires `X-CSRF-Token` from `GET /auth/csrf`).
-- **Headers**: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`.
-
-#### Request body
+Headers: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`, plus the CSRF cookie.
 
 ```json
-{
-  "email": "student.one@example.com",
-  "password": "DemoPassword123!"
-}
+{ "email": "student.one@example.com", "password": "<password>" }
 ```
 
-| Field | Type | Required | Validation |
-| --- | --- | --- | --- |
-| `email` | `string` | Yes | Trimmed, valid email format, max 255 chars (matched case-insensitively) |
-| `password` | `string` | Yes | Non-empty string, max 255 chars |
+Email must be valid and at most 254 characters; password must be a string of 1–1024 characters. Unknown fields are stripped. Email lookup is case-insensitive; passwords are never trimmed. Invalid credentials and inactive accounts receive the same `401 INVALID_CREDENTIALS` response.
 
-#### Success response — `200 OK`
+Success sets refresh and replacement CSRF cookies:
 
 ```json
 {
   "data": {
-    "id": 3,
-    "name": "Student One",
-    "email": "student.one@example.com",
-    "role": "student",
-    "status": "active",
-    "must_change_password": false
+    "accessToken": "<access-jwt>",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "id": 3,
+      "name": "Student One",
+      "email": "student.one@example.com",
+      "role": "student",
+      "must_change_password": false
+    },
+    "csrfToken": "<replacement-csrf-token>"
   }
 }
 ```
 
-If the user signed in with an admin-issued temporary password, `must_change_password` is `true` and the frontend redirects them to `/change-password`.
+`must_change_password: true` still permits login, profile, refresh and password change. The feature JWT guard blocks other protected operations until the password is changed. There is no public registration endpoint; demo accounts come from the development seed.
 
-#### Error responses
+### `POST /auth/refresh`
 
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `400` | `BAD_REQUEST` | Malformed JSON body |
-| `401` | `INVALID_CREDENTIALS` | Unknown email, wrong password, or `status = 'inactive'` (generic message to prevent account enumeration) |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
-| `422` | `VALIDATION_ERROR` | Missing/invalid `email` or empty `password` |
-| `429` | `RATE_LIMITED` | Too many login attempts |
-
-Example `401 Unauthorized`:
-
-```json
-{
-  "error": {
-    "code": "INVALID_CREDENTIALS",
-    "message": "Invalid email or password.",
-    "fields": {}
-  }
-}
-```
-
----
-
-### `POST /auth/logout`
-
-Invalidates and deletes the caller's current row in `auth_sessions` and clears the session cookie.
-
-- **Access**: Any signed-in user (allowed even when `must_change_password = true`).
-- **Headers**: `X-CSRF-Token: <csrfToken>`.
-- **Request body**: None.
-
-#### Success response — `204 No Content`
-
-Empty body.
-
-#### Error responses
-
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `401` | `UNAUTHENTICATED` | No active session cookie |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
-
----
+No body. Send the current refresh cookie, CSRF cookie and `X-CSRF-Token`. Returns the same shape as login and replaces both cookies. Missing, expired, revoked or replayed refresh credentials return `401 UNAUTHENTICATED`; replay revocation is committed before the error is returned. Database-backed sessions survive backend restarts when the database and signing secret are retained.
 
 ### `GET /auth/me`
 
-Returns the safe profile of the currently authenticated user. Validates that the user's `status` is `'active'` and that the session's `session_version` matches `users.session_version`.
+Requires a Bearer access JWT. Returns `{ "data": { ...profile } }` using exactly the safe profile fields in the login example. A cookie alone, a refresh/CSRF token used as a Bearer token, or an invalid/revoked access token returns `401 UNAUTHENTICATED`.
 
-- **Access**: Any signed-in user (allowed even when `must_change_password = true`).
-- **Query / body**: None.
+### `POST /auth/logout`
 
-#### Success response — `200 OK`
-
-```json
-{
-  "data": {
-    "id": 3,
-    "name": "Student One",
-    "email": "student.one@example.com",
-    "role": "student",
-    "status": "active",
-    "must_change_password": false
-  }
-}
-```
-
-#### Error responses
-
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `401` | `UNAUTHENTICATED` | Missing, expired, or invalidated session (including mismatched `session_version`) |
-| `403` | `ACCOUNT_INACTIVE` | Account `status` is `inactive` |
-
----
+No body. Requires valid CSRF. With a valid signed refresh cookie, revokes that session and clears both cookies (204). A valid stale refresh credential can revoke its session too. With no refresh cookie, clears cookies without creating a session. Malformed, forged or expired refresh credentials return 401. Other sessions remain active.
 
 ### `POST /auth/change-password`
 
-Changes the signed-in user's own password, clears `must_change_password` to `false`, increments `users.session_version` to invalidate other sessions, and rotates/updates the current session so the user stays signed in.
-
-- **Access**: Any signed-in user (allowed when `must_change_password = true`).
-- **Headers**: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`.
-
-#### Request body
+Headers: `Content-Type: application/json`, `Authorization: Bearer <accessToken>`.
 
 ```json
-{
-  "current_password": "TempPassword123!",
-  "new_password": "NewSecurePassword456!"
-}
+{ "currentPassword": "<current-password>", "newPassword": "<new-password>" }
 ```
 
-| Field | Type | Required | Validation |
-| --- | --- | --- | --- |
-| `current_password` | `string` | Yes | Must match current `users.password_hash` |
-| `new_password` | `string` | Yes | Min 8 chars, max 255 chars, must differ from `current_password` |
+The current password must be 1–1024 characters and match the stored Argon2 hash. The new password must be 12–1024 characters and differ from the current password. Success stores an Argon2id hash, clears `must_change_password`, increments `session_version`, revokes all refresh sessions, clears cookies and returns 204. Discard the old access token and sign in again.
 
-#### Success response — `200 OK`
+## Errors and rate limiting
+
+Controller/guard errors use the shared envelope:
 
 ```json
-{
-  "data": {
-    "id": 3,
-    "name": "Student One",
-    "email": "student.one@example.com",
-    "role": "student",
-    "status": "active",
-    "must_change_password": false
-  }
-}
+{ "error": { "code": "UNAUTHENTICATED", "message": "A valid sign-in is required.", "fields": {} } }
 ```
 
-#### Error responses
-
-| HTTP | `error.code` | When |
+| HTTP | Code | Meaning |
 | --- | --- | --- |
-| `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
-| `422` | `VALIDATION_ERROR` | `current_password` is incorrect, or `new_password` fails password policy / matches `current_password` |
+| 401 | `INVALID_CREDENTIALS` | Incorrect login/current password or inactive login account |
+| 401 | `UNAUTHENTICATED` | Missing, invalid, expired or revoked credential |
+| 403 | `CSRF_INVALID` | Missing, forged, expired or mismatched CSRF credential |
+| 403 | `PASSWORD_CHANGE_REQUIRED` | Feature guard requires a password change |
+| 403 | `FORBIDDEN` | Role guard denies a feature operation |
+| 422 | `VALIDATION_ERROR` | Invalid DTO fields or unchanged new password |
+| 429 | `RATE_LIMITED` | Auth operation limit reached; includes `Retry-After` seconds |
+| 500 | `INTERNAL_ERROR` | Authentication services unavailable; internal details are not exposed |
 
-Example `422 Unprocessable Entity`:
+Login is limited to 10 attempts/minute per IP and normalized email; password changes to 10/minute per IP; other auth operations to 60/minute per IP per operation. The bounded limiter is per-process, resets on restart and ignores forwarded IP headers. Multi-instance deployments need a shared limiter. Malformed JSON rejected before controller dispatch uses Nest's parser error response. Successful auth responses and handled controller/guard errors are not cacheable.
 
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Please correct the highlighted fields.",
-    "fields": {
-      "current_password": "Current password is incorrect.",
-      "new_password": "New password must be at least 8 characters long."
-    }
-  }
-}
-```
+## Planned account administration (not implemented)
 
----
+The following routes are design targets only and currently have no backend handlers.
 
 ### `POST /admin/users`
 
-Creates a new `student` or `teacher` (Lecturer) account with an administrator-assigned temporary password. Sets `status = 'active'` and `must_change_password = true`.
-
-- **Access**: `admin` only (requires `must_change_password = false`).
-- **Headers**: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`.
-
-#### Request body
-
-```json
-{
-  "name": "Student Twenty-Three",
-  "email": "student23@example.com",
-  "role": "student",
-  "temporary_password": "TempPassword123!"
-}
-```
-
-| Field | Type | Required | Validation |
-| --- | --- | --- | --- |
-| `name` | `string` | Yes | Non-empty trimmed string, max 200 chars |
-| `email` | `string` | Yes | Valid email address, max 255 chars, unique in `users` |
-| `role` | `string` | Yes | `'student'` or `'teacher'` |
-| `temporary_password` | `string` | Yes | Min 8 chars, max 255 chars; hashed with Argon2id, never returned or logged |
-
-#### Success response — `201 Created`
-
-```json
-{
-  "data": {
-    "id": 27,
-    "name": "Student Twenty-Three",
-    "email": "student23@example.com",
-    "role": "student",
-    "status": "active",
-    "must_change_password": true
-  }
-}
-```
-
-#### Error responses
-
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `FORBIDDEN` | Caller is not an `admin` |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
-| `409` | `EMAIL_ALREADY_EXISTS` | `email` is already registered in `users` |
-| `422` | `VALIDATION_ERROR` | Invalid `name`, `email`, `role`, or `temporary_password` |
-
-Example `409 Conflict`:
-
-```json
-{
-  "error": {
-    "code": "EMAIL_ALREADY_EXISTS",
-    "message": "An account with this email address already exists.",
-    "fields": {
-      "email": "This email address is already in use."
-    }
-  }
-}
-```
-
----
+An admin would create a student or teacher account using `name`, `email`, `role` and `temporary_password`. The password would be hashed with Argon2id, and `must_change_password` set to true. No invitation/activation flow or public self-registration is planned here.
 
 ### `POST /admin/users/:id/reset-password`
 
-Sets a new temporary password for an existing user account, sets `must_change_password = true`, and increments `users.session_version` to immediately invalidate all existing sessions for that user.
-
-- **Access**: `admin` only.
-- **Path parameters**: `id` — positive integer `users.id`.
-- **Headers**: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`.
-
-#### Request body
-
-```json
-{
-  "temporary_password": "ResetTempPassword123!"
-}
-```
-
-#### Success response — `200 OK`
-
-```json
-{
-  "data": {
-    "id": 3,
-    "name": "Student One",
-    "email": "student.one@example.com",
-    "role": "student",
-    "status": "active",
-    "must_change_password": true
-  }
-}
-```
-
-#### Error responses
-
-| HTTP | `error.code` | When |
-| --- | --- | --- |
-| `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `FORBIDDEN` | Caller is not an `admin` |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
-| `404` | `RESOURCE_NOT_FOUND` | User `:id` does not exist |
-| `422` | `VALIDATION_ERROR` | Invalid `:id` or `temporary_password` fails policy |
+An admin would set a temporary password, require a subsequent password change, increment `session_version` and revoke all refresh sessions. Implement role checks and validation with the endpoint before exposing it.

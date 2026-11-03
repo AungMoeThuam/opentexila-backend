@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
-**Status: student schedule, detail, check-in, roster materialisation, student history and the lecturer roster are implemented. Every route requires the verified server session (`AttendanceGuard`); production sign-in comes from the separate authentication feature, and local development uses the dev sign-in described in [DEVELOPMENT_AUTH.md](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: student schedule, detail, check-in, roster materialisation, student history and the lecturer roster are implemented. Every route uses `AttendanceGuard`, accepting Bearer JWTs in JWT mode or a verified demo session in development mode. See [authentication](auth.md) and [development sign-in](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 
@@ -174,7 +174,7 @@ Validates the authenticated student's browser geolocation reading against the cl
 
 - **Access**: Eligible `student` only.
 - **Path parameters**: `classSessionId` — positive integer `class_sessions.id`.
-- **Headers**: `Content-Type: application/json`, `X-CSRF-Token: <csrfToken>`.
+- **Headers**: `Content-Type: application/json`, plus `Authorization: Bearer <accessToken>` in JWT mode; in demo mode send the session cookie and `X-CSRF-Token`.
 
 #### Request body
 
@@ -220,7 +220,7 @@ First acceptance updates the materialised `(class_session_id, student_id)` row f
 | `400` | `BAD_REQUEST` | Malformed JSON body |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
 | `403` | `FORBIDDEN` | Caller role is not `student` |
-| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` |
+| `403` | `CSRF_INVALID` | Missing or invalid `X-CSRF-Token` in demo mode |
 | `403` | `NOT_ELIGIBLE` | Student has no eligible roster record for this class session |
 | `404` | `RESOURCE_NOT_FOUND` | Class session does not exist or is outside the student's scope |
 | `409` | `CLASS_NOT_STARTED` | Check-in attempted before `starts_at` |
@@ -436,20 +436,13 @@ Automatic finalisation is an internal backend service/worker (`feat/attendance-f
 
 ## Implementation and integration notes
 
-`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Teacher schedule scoping is included in the shared list handler; lecturer records remain separate work. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
+`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Teacher schedule scoping is included in the shared list handler; lecturer roster reads are also implemented. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
 
 ### Authentication dependency
 
-Production cookie/session middleware and authentication endpoints are not yet implemented. For local feature development, the opt-in [development sign-in adapter](../DEVELOPMENT_AUTH.md) provides real cookie sessions backed by seeded accounts. Attendance fails closed with `401 UNAUTHENTICATED` unless production auth or the explicitly enabled local adapter supplies a valid server-side `request.session`. Identity headers and client-supplied user IDs are never accepted.
+In JWT mode, `AttendanceGuard` delegates to the opt-in JWT guard, which verifies the Bearer access token and current account/session state. In demo mode it validates the server-owned session, expiry, session version and CSRF for mutations. Missing or invalid credentials fail closed; client-supplied identity headers and user IDs are never accepted.
 
-The integration contract consumed by `AttendanceGuard` is:
-
-- `session.userId`: positive integer user ID.
-- `session.sessionVersion`: integer matching the current database user's `session_version`.
-- `session.cookie.expires`: future expiry provided by trusted session middleware.
-- `session.csrfToken`: nonempty session-bound token, compared to `X-CSRF-Token` for POST.
-
-The auth owner must populate these fields only after validating the signed cookie and loading its unexpired server-side session. Alternatively, adapt the guard to the shared auth module when that module lands. The guard reloads the user, rejects inactive accounts and mandatory password changes, and sets `Cache-Control: no-store`. HTTP tests inject trusted session fixtures only in the test application; deployed endpoints never use these fixtures.
+Both modes check account status, mandatory password changes and roles, populate the shared `{ id, role }` identity, and retain service-level ownership, enrolment and location checks. Bearer-authenticated check-ins do not require CSRF; demo-cookie check-ins do. Responses use `Cache-Control: no-store`. See [JWT integration](../JWT_AUTH.md#attendance-modes).
 
 ### Location policy
 

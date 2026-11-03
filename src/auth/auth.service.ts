@@ -119,35 +119,80 @@ export class AuthService implements OnModuleInit {
       )
         throw credentialsError();
       const id = randomUUID();
-      const refreshToken = `${id}.${current.session_version}.${randomBytes(32).toString('hex')}`;
       const session = manager.create(RefreshSession, {
         id,
         user_id: user.id,
-        token_hash: tokenHash(refreshToken),
+        token_hash: '',
         expires_at: new Date(Date.now() + REFRESH_LIFETIME),
         revoked_at: null,
       });
+      const refreshToken = await this.signRefresh(current, session);
+      session.token_hash = tokenHash(refreshToken);
       await manager.save(session);
       return this.issue(current, session, refreshToken);
     });
   }
 
-  private refreshId(token: string | undefined): string {
+  private validateClaims(claims: AccessTokenClaims): void {
+    const id = Number(claims.sub);
     if (
-      !token ||
-      !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.(0|[1-9][0-9]{0,9})\.[a-f0-9]{64}$/.test(
-        token,
-      )
+      typeof claims.sub !== 'string' ||
+      !/^[1-9]\d*$/.test(claims.sub) ||
+      !Number.isSafeInteger(id) ||
+      id > 4294967295 ||
+      typeof claims.sid !== 'string' ||
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+        claims.sid,
+      ) ||
+      !Number.isSafeInteger(claims.sessionVersion) ||
+      claims.sessionVersion < 0 ||
+      claims.sessionVersion > 4294967295
     )
       throw unauthenticated();
-    return token.slice(0, 36);
+  }
+
+  private async signRefresh(
+    user: User,
+    session: RefreshSession,
+  ): Promise<string> {
+    return this.jwt.signAsync(
+      {
+        sub: String(user.id),
+        sid: session.id,
+        sessionVersion: user.session_version,
+        nonce: randomBytes(32).toString('hex'),
+      },
+      {
+        audience: 'opentexila-refresh',
+        expiresIn: Math.max(
+          1,
+          Math.ceil((+session.expires_at - Date.now()) / 1000),
+        ),
+      },
+    );
+  }
+
+  private async refreshClaims(
+    token: string | undefined,
+  ): Promise<AccessTokenClaims> {
+    if (!token) throw unauthenticated();
+    try {
+      const claims = await this.jwt.verifyAsync<AccessTokenClaims>(token, {
+        audience: 'opentexila-refresh',
+      });
+      this.validateClaims(claims);
+      return claims;
+    } catch {
+      throw unauthenticated();
+    }
   }
 
   async refresh(token: string | undefined): Promise<IssuedTokens> {
-    const id = this.refreshId(token);
+    const claims = await this.refreshClaims(token);
+    const id = claims.sid;
     const existing = await this.database
       .getRepository(RefreshSession)
-      .findOneBy({ id });
+      .findOneBy({ id, user_id: Number(claims.sub) });
     if (!existing) throw unauthenticated();
     const result = await this.database.transaction(async (manager) => {
       // All auth mutations lock user before session, including password revocation.
@@ -167,7 +212,7 @@ export class AuthService implements OnModuleInit {
         +session.expires_at <= Date.now()
       )
         return null;
-      if (Number(token!.split('.')[1]) !== user.session_version) return null;
+      if (claims.sessionVersion !== user.session_version) return null;
       if (
         !timingSafeEqual(
           Buffer.from(session.token_hash),
@@ -179,7 +224,7 @@ export class AuthService implements OnModuleInit {
         await manager.save(session);
         return null;
       }
-      const next = `${id}.${user.session_version}.${randomBytes(32).toString('hex')}`;
+      const next = await this.signRefresh(user, session);
       session.token_hash = tokenHash(next);
       await manager.save(session);
       return this.issue(user, session, next);
@@ -199,15 +244,8 @@ export class AuthService implements OnModuleInit {
     } catch {
       throw unauthenticated();
     }
+    this.validateClaims(claims);
     const id = Number(claims.sub);
-    if (
-      typeof claims.sub !== 'string' ||
-      !/^[1-9]\d*$/.test(claims.sub) ||
-      !Number.isSafeInteger(id) ||
-      typeof claims.sid !== 'string' ||
-      !Number.isSafeInteger(claims.sessionVersion)
-    )
-      throw unauthenticated();
     const session = await this.database
       .getRepository(RefreshSession)
       .findOneBy({ id: claims.sid, user_id: id });
@@ -230,14 +268,15 @@ export class AuthService implements OnModuleInit {
 
   async logout(token: string | undefined): Promise<void> {
     if (!token) return;
-    const id = this.refreshId(token);
+    const claims = await this.refreshClaims(token);
+    const id = claims.sid;
     const existing = await this.database
       .getRepository(RefreshSession)
-      .findOneBy({ id });
+      .findOneBy({ id, user_id: Number(claims.sub) });
     if (!existing) return;
     await this.database.transaction(async (manager) => {
       await this.userForUpdate(manager, existing.user_id);
-      // A stale refresh cookie also revokes this session, just like replay on refresh.
+      // Only a signed refresh credential may revoke this session, including a stale one.
       await manager.update(RefreshSession, { id }, { revoked_at: new Date() });
     });
   }

@@ -9,7 +9,7 @@ attendance protection and development role selection remain available.
   login rate limiting and revocation.
 - [x] Batch 3: opt-in JWT/role guards, current-user decorator and integration with
   development auth, resolving ownership of overlapping auth routes.
-- [ ] Batch 4: complete security, development compatibility and Docker checks;
+- [x] Batch 4: complete security, development compatibility and Docker checks;
   update the authentication API contract.
 
 Batch 1 completed on 2026-11-03:
@@ -75,3 +75,34 @@ Batch 3 completed on 2026-11-03:
 
 - Final checks passed: strict type checking, formatting, 74 unit/HTTP tests and
   30 disposable MySQL integration tests. No application database or `.env` changes.
+
+
+Batch 4 completed on 2026-11-03:
+
+- Security review found that an unverified refresh-token secret could revoke a
+  session by its ID. Refresh credentials are now signed JWTs with a distinct
+  audience and random nonce, verified before refresh or logout can alter state.
+  Only hashes remain stored; the database schema is unchanged. Credentials from
+  the previous unsigned format require a new login.
+- Added regressions for forged refresh credentials, access/refresh token-purpose
+  separation, unsigned/wrong-algorithm JWTs, production cookie attributes,
+  expired/mismatched CSRF and duplicate cookie injection.
+- Passed strict type checking, formatting, 77 unit/HTTP tests and 31 disposable
+  MySQL integration tests (108 total). Relative documentation links were checked.
+- Built the current Compose stack from temporary source copies, synthetic
+  credentials and an isolated volume. Verified JWT login through Vite's proxy,
+  CSRF, profile, attendance authorization, refresh rotation, session survival
+  after restart, logout revocation, and source/build-config reloads.
+- Switched the disposable stack to demo mode and verified role selection, CSRF,
+  profile, attendance and logout without a JWT secret. Removed and verified the
+  absence of all test containers, network and database volume afterward.
+- The Docker smoke harness was corrected to seed from the host (as documented)
+  and rediscover ephemeral host ports after restart. No application `.env`,
+  database or frontend source was changed.
+- Replaced the stale authentication contract and updated API, Docker, database
+  and development guides to distinguish implemented JWT behavior from planned
+  admin provisioning/reset and enrolment work.
+
+All four authentication batches are complete. Frontend JWT integration, admin
+account provisioning/reset, production packaging, shared multi-instance rate
+limiting and expired-session cleanup remain outside this implementation.

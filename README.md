@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Optional [development sign-in](docs/DEVELOPMENT_AUTH.md) is available for seeded accounts. Production authentication and enrolment APIs are still to be built.
+NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Optional [development sign-in](docs/DEVELOPMENT_AUTH.md) is available for seeded accounts. Opt-in [JWT authentication](docs/JWT_AUTH.md) is implemented. Enrolment and admin account provisioning/reset APIs remain planned; frontend JWT integration is separate work.
 
 ## Start the whole stack
 
@@ -93,7 +93,7 @@ database/
 test/database.integration.test.ts
 ```
 
-Six domain tables and one adapter-owned `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
+Six domain tables, the JWT `auth_refresh_sessions` table and the preserved unused `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.
 
 Application source in `src/` is written in strict TypeScript and compiled with `tsc`. Run `npm run typecheck` to build automatically and then check application code, migrations, seeds, scripts and tests. Node runs the application from `dist/main.js`; generated `.js` files are expected build output. Migrations, seeds, launcher scripts and tests are `.ts` files executed with Node type stripping. They use syntax that does not need code generation and import compiled application modules from `dist/` where needed. The application uses `tsc` for NestJS/TypeORM decorators and emitted metadata.
 
@@ -115,4 +115,4 @@ Development databases created from an older, incompatible baseline need separate
 
 Attendance follows `class_sessions` automatically. Timing and cancellation live only on that table. The role, status and state fields use ENUMs as listed in the database design. Students enter a class and check in with location. There is no session code or manual lecturer opening action. Attendance reads, pending-roster materialisation and location check-in are implemented. Scheduling, cancellation and automatic finalisation still require feature implementation.
 
-The existing Multer override remains in place. Docker supports local development; production authentication/session handling and deployment configuration remain to be implemented.
+The existing Multer override remains in place. Docker supports local development; production deployment configuration and a shared rate limiter for multiple instances remain separate work.

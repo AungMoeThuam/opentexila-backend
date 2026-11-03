@@ -36,11 +36,11 @@ test('configuration fails before connecting when required values or ports are in
   );
 });
 
-test('TypeORM resolves every JS schema relation without duplicate FK columns or exposed secrets', async () => {
+test('TypeORM resolves every entity relation without duplicate FK columns or exposed secrets', async () => {
   const ds = new DataSource(databaseOptions(env));
   // Build metadata only: no connection, SQL or external database.
   await (ds as any).buildMetadatas();
-  assert.equal(ds.entityMetadatas.length, 6);
+  assert.equal(ds.entityMetadatas.length, 7);
   for (const entity of ds.entityMetadatas) {
     assert.equal(
       new Set(entity.columns.map((c) => c.databaseName)).size,
@@ -55,6 +55,7 @@ test('TypeORM resolves every JS schema relation without duplicate FK columns or 
   const column = (name: string, field: string) =>
     ds.getMetadata(name).columns.find((c) => c.propertyName === field)!;
   assert.equal(column('User', 'password_hash').isSelect, false);
+  assert.equal(column('RefreshSession', 'token_hash').isSelect, false);
   assert.equal(column('Class', 'course_id').isNullable, false);
   assert.equal(column('Class', 'section').isNullable, false);
   for (const name of ['code', 'name', 'subject'])

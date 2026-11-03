@@ -1,3 +1,4 @@
+import { RefreshSession } from './refresh-session.schema';
 import { Course, CourseSchema, CourseEntity } from './course.schema';
 import {
   User,
@@ -26,6 +27,7 @@ import {
 } from './attendance-record.schema';
 
 export {
+  RefreshSession,
   Course,
   CourseSchema,
   CourseEntity,
@@ -51,6 +53,7 @@ export {
 };
 
 export const entities = [
+  RefreshSession,
   Course,
   User,
   Class,

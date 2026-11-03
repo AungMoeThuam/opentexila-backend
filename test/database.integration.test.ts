@@ -101,12 +101,13 @@ test(
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
-          assert.equal((await ds!.runMigrations()).length, 2);
+          assert.equal((await ds!.runMigrations()).length, 3);
           assert.equal((await ds!.runMigrations()).length, 0);
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
+          await ds!.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds!.runMigrations()).length, 2);
+          assert.equal((await ds!.runMigrations()).length, 3);
           assert.deepEqual(
             await tableNames(),
             [
@@ -118,6 +119,7 @@ test(
               'class_sessions',
               'attendance_records',
               'auth_sessions',
+              'auth_refresh_sessions',
             ].sort(),
           );
           migrationsReady = true;
@@ -623,7 +625,8 @@ test(
         async () => {
           const count = await ds!.getRepository('AttendanceRecord').count();
           await ds!.undoLastMigration();
-          assert.equal((await ds!.runMigrations()).length, 1);
+          await ds!.undoLastMigration();
+          assert.equal((await ds!.runMigrations()).length, 2);
           const [row] = await ds!.query(
             `SELECT s.room_label, s.latitude, s.longitude, s.radius_m,
           c.room_label AS class_room, c.latitude AS class_latitude
@@ -643,8 +646,9 @@ test(
         async () => {
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
+          await ds!.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds!.runMigrations()).length, 2);
+          assert.equal((await ds!.runMigrations()).length, 3);
           await seedDemo(ds!, env);
           assert.ok(
             (await ds!.getRepository('AttendanceRecord').count()) > 100,

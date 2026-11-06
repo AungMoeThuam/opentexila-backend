@@ -1,3 +1,4 @@
+import { EnrolmentsModule } from './enrolments/enrolments.module';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from './database/database.module';
 import { ExamplesModule } from './examples/examples.module';
@@ -11,6 +12,7 @@ import { devAuthEnabled } from './dev/dev-auth';
   imports: [
     DatabaseModule,
     AttendanceModule,
+    EnrolmentsModule,
     ...(jwtAuthEnabled() ? [AuthModule] : []),
     ...(devAuthEnabled() ? [DevAuthModule] : []),
     ...(process.env.NODE_ENV === 'development' ? [ExamplesModule] : []),

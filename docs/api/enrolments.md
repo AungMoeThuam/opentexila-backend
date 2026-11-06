@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Attendance](attendance.md) · [Database design](../database-design.md)
 
-**Status: planned contract; database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: `GET /me/classes` implemented for students and lecturers; other endpoints below remain planned. Database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Domain overview
 
@@ -34,7 +34,7 @@ Returns a paginated list of class offerings ordered by `classes.id ASC`.
   - `page` (optional, default `1`, integer `1`–`10000`)
   - `limit` (optional, default `20`, integer `1`–`100`)
   - `courseId` (optional, positive integer matching `courses.id`)
-  - `term` (optional, exact non-empty string such as `"2026-S2"`)
+  - `term` (optional, exact non-empty string of at most 50 characters such as `"2026-S2"`)
 
 #### Success response — `200 OK`
 
@@ -82,14 +82,14 @@ Returns the classes belonging to the signed-in user, ordered by `classes.id ASC`
 - For `student`: classes where the student has a row in `enrolments` (`(class_id, student_id)`).
 - For `teacher`: classes assigned to the lecturer (`classes.teacher_id = user.id`).
 
-Never accepts a `studentId` or `userId` parameter.
+Identity always comes from the verified JWT or development session. Unknown query fields, including `studentId` and `userId`, are stripped and cannot override identity. Responses use `Cache-Control: no-store`.
 
 - **Access**: `student` or `teacher` (`admin` receives `403 FORBIDDEN` and uses `GET /classes` instead).
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
   - `limit` (optional, default `20`, integer `1`–`100`)
   - `courseId` (optional, positive integer matching `courses.id`)
-  - `term` (optional, exact non-empty string such as `"2026-S2"`)
+  - `term` (optional, exact non-empty string of at most 50 characters such as `"2026-S2"`)
 
 #### Success response — `200 OK`
 

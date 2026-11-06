@@ -27,6 +27,11 @@ import { ClassSessionRecordsService } from './class-session-records.service';
     ClassSessionRecordsService,
     { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
   ],
-  exports: [AttendanceService, AttendanceHistoryService, RosterService],
+  exports: [
+    AttendanceService,
+    AttendanceHistoryService,
+    RosterService,
+    AttendanceGuard,
+  ],
 })
 export class AttendanceModule {}

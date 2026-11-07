@@ -17,7 +17,7 @@ const MINUTE_MS = 60000;
 interface UserFixture {
   name: string;
   email: string;
-  role: 'student' | 'teacher' | 'admin';
+  role: 'student' | 'lecturer' | 'admin';
 }
 
 interface CourseFixture {
@@ -29,7 +29,7 @@ interface ClassFixture {
   courseCode: string;
   section: string;
   term: string;
-  teacherEmail: string;
+  lecturerEmail: string;
   room_label: string;
   latitude: string;
   longitude: string;
@@ -49,19 +49,19 @@ interface PastOutcome {
 // [0] admin, [1] Lecturer One, [2] Student One, [3] Student Two.
 const USER_FIXTURES: UserFixture[] = [
   { name: 'Admin Demo', email: 'admin.demo@example.com', role: 'admin' },
-  { name: 'Lecturer One', email: 'lecturer.one@example.com', role: 'teacher' },
+  { name: 'Lecturer One', email: 'lecturer.one@example.com', role: 'lecturer' },
   { name: 'Student One', email: 'student.one@example.com', role: 'student' },
   { name: 'Student Two', email: 'student.two@example.com', role: 'student' },
-  { name: 'Lecturer Two', email: 'lecturer.two@example.com', role: 'teacher' },
+  { name: 'Lecturer Two', email: 'lecturer.two@example.com', role: 'lecturer' },
   {
     name: 'Lecturer Three',
     email: 'lecturer.three@example.com',
-    role: 'teacher',
+    role: 'lecturer',
   },
   {
     name: 'Lecturer Four',
     email: 'lecturer.four@example.com',
-    role: 'teacher',
+    role: 'lecturer',
   },
   {
     name: 'Student Three',
@@ -149,7 +149,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS30043',
     section: 'A',
     term: '2026-S2',
-    teacherEmail: 'lecturer.one@example.com',
+    lecturerEmail: 'lecturer.one@example.com',
     room_label: 'Demo room 1 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -171,7 +171,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS30043',
     section: 'B',
     term: '2026-S2',
-    teacherEmail: 'lecturer.two@example.com',
+    lecturerEmail: 'lecturer.two@example.com',
     room_label: 'Demo room 2 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -191,7 +191,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS20007',
     section: 'A',
     term: '2026-S2',
-    teacherEmail: 'lecturer.two@example.com',
+    lecturerEmail: 'lecturer.two@example.com',
     room_label: 'Demo room 3 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -211,7 +211,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS20007',
     section: 'B',
     term: '2026-S2',
-    teacherEmail: 'lecturer.three@example.com',
+    lecturerEmail: 'lecturer.three@example.com',
     room_label: 'Demo room 4 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -231,7 +231,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS10009',
     section: 'A',
     term: '2026-S2',
-    teacherEmail: 'lecturer.three@example.com',
+    lecturerEmail: 'lecturer.three@example.com',
     room_label: 'Demo room 5 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -253,7 +253,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS10009',
     section: 'B',
     term: '2026-S2',
-    teacherEmail: 'lecturer.four@example.com',
+    lecturerEmail: 'lecturer.four@example.com',
     room_label: 'Demo room 6 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -272,7 +272,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS20031',
     section: 'A',
     term: '2026-S2',
-    teacherEmail: 'lecturer.four@example.com',
+    lecturerEmail: 'lecturer.four@example.com',
     room_label: 'Demo room 7 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -292,7 +292,7 @@ const CLASS_FIXTURES: ClassFixture[] = [
     courseCode: 'COS20019',
     section: 'A',
     term: '2026-S2',
-    teacherEmail: 'lecturer.one@example.com',
+    lecturerEmail: 'lecturer.one@example.com',
     room_label: 'Demo room 8 (synthetic location)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -448,9 +448,9 @@ export async function seedDemo(
 
     for (const [index, plan] of CLASS_FIXTURES.entries()) {
       const course = courseByCode.get(plan.courseCode);
-      const teacher = userByEmail.get(plan.teacherEmail);
-      if (!course || !teacher)
-        throw new Error('Seed class references an unknown course or teacher.');
+      const lecturer = userByEmail.get(plan.lecturerEmail);
+      if (!course || !lecturer)
+        throw new Error('Seed class references an unknown course or lecturer.');
       let classroom = await classes.findOneBy({
         course_id: course.id,
         section: plan.section,
@@ -461,7 +461,7 @@ export async function seedDemo(
           course_id: course.id,
           section: plan.section,
           term: plan.term,
-          teacher_id: teacher.id,
+          lecturer_id: lecturer.id,
           room_label: plan.room_label,
           latitude: plan.latitude,
           longitude: plan.longitude,

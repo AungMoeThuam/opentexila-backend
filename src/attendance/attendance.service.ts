@@ -86,7 +86,7 @@ function authorise(
 ) {
   if (
     (user.role === 'student' && !enrolled && !record) ||
-    (user.role === 'teacher' && classroom.teacher_id !== user.id)
+    (user.role === 'lecturer' && classroom.lecturer_id !== user.id)
   )
     fail(404, 'RESOURCE_NOT_FOUND', 'The requested resource was not found.');
 }
@@ -103,7 +103,7 @@ async function sessionDto(
   >('SELECT id, code, name FROM courses WHERE id = ?', [classroom.course_id]);
   const [lecturer] = await manager.query<Pick<UserEntity, 'id' | 'name'>[]>(
     'SELECT id, name FROM users WHERE id = ?',
-    [classroom.teacher_id],
+    [classroom.lecturer_id],
   );
   if (!course || !lecturer) throw new Error('Class relations are missing.');
   return {
@@ -134,11 +134,11 @@ export class AttendanceService {
     user: AttendanceCaller,
     query: ListQueryResult,
   ): Promise<PaginatedResponse<ClassSessionDto>> {
-    requireRole(user, ['student', 'teacher']);
+    requireRole(user, ['student', 'lecturer']);
     const parameters: unknown[] = [user.id];
     const filters = [
-      user.role === 'teacher'
-        ? 'c.teacher_id = ?'
+      user.role === 'lecturer'
+        ? 'c.lecturer_id = ?'
         : '(EXISTS (SELECT 1 FROM enrolments e WHERE e.class_id = s.class_id AND e.student_id = ?) OR EXISTS (SELECT 1 FROM attendance_records a WHERE a.class_session_id = s.id AND a.student_id = ?))',
     ];
     if (user.role === 'student') parameters.push(user.id);
@@ -191,7 +191,7 @@ export class AttendanceService {
     user: AttendanceCaller,
     id: number,
   ): Promise<DataResponse<ClassSessionDetailDto>> {
-    requireRole(user, ['student', 'teacher', 'admin']);
+    requireRole(user, ['student', 'lecturer', 'admin']);
     return this.database.transaction(async (manager) => {
       const { session, classroom } = await lockClassSession(manager, id);
       let { enrolled, record } = await membership(manager, session, user);

@@ -10,7 +10,7 @@ See the [ER diagram](database-erd.md) and [baseline setup guide](database-refact
 
 | Table                | Purpose                                                    | Key / unique rules                     |
 | -------------------- | ---------------------------------------------------------- | -------------------------------------- |
-| `users`              | Students, lecturers (role `teacher`) and admins.           | `email` unique                         |
+| `users`              | Students, lecturers (role `lecturer`) and admins.           | `email` unique                         |
 | `courses`            | What is taught (code and name), stored once.               | `code` unique                          |
 | `classes`            | One offering of a course: a term, a section and a lecturer. | unique `(course_id, term, section)`    |
 | `enrolments`         | Which students belong to which class.                      | primary key `(class_id, student_id)`   |
@@ -38,7 +38,7 @@ Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession`, `Attend
 | name                 | varchar(150), nonblank                                   |
 | email                | varchar(254), lowercase and trimmed, unique              |
 | password_hash        | varchar(255), required; excluded from ordinary SELECTs   |
-| role                 | ENUM('student','teacher','admin'), required              |
+| role                 | ENUM('student','lecturer','admin'), required              |
 | status               | ENUM('active','inactive'), default 'active'              |
 | must_change_password | boolean, default true                                    |
 | session_version      | unsigned integer, default 0                              |
@@ -60,7 +60,7 @@ Accounts are created by an admin who sets a temporary password; there is no invi
 | course_id            | required `courses.id` FK                      |
 | section              | uppercase trimmed ASCII varchar(30), nonempty |
 | term                 | varchar(50); academic period, e.g. `2026-S2`  |
-| teacher_id           | required user FK (the lecturer)               |
+| lecturer_id           | required user FK (the lecturer)               |
 | room_label           | varchar(100)                                  |
 | latitude / longitude | decimal(9,6), within -90..90 / -180..180      |
 | radius_m             | positive decimal(10,2); check-in radius       |

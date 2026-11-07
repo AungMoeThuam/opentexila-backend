@@ -6,7 +6,7 @@ import {
   Index,
 } from 'typeorm';
 
-export type UserRole = 'student' | 'teacher' | 'admin';
+export type UserRole = 'student' | 'lecturer' | 'admin';
 export type UserStatus = 'active' | 'inactive';
 
 @Entity('users')
@@ -27,7 +27,7 @@ export class User {
 
   @Column({
     type: 'enum',
-    enum: ['student', 'teacher', 'admin'],
+    enum: ['student', 'lecturer', 'admin'],
     collation: 'utf8mb4_0900_as_cs',
   })
   role!: UserRole;

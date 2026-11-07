@@ -68,13 +68,13 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
     session_version: 0,
     password_hash: 'never expose',
   };
-  const teacher: Record<string, any> = {
+  const lecturer: Record<string, any> = {
     ...student,
     id: 2,
     email: 'lecturer.one@example.com',
-    role: 'teacher',
+    role: 'lecturer',
   };
-  const users = [student, teacher];
+  const users = [student, lecturer];
   class TestDatabase {}
   Global()(TestDatabase);
   Module({
@@ -183,7 +183,7 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
     3,
   );
   assert.equal(
-    (await request('/dev/auth/select-role', 'POST', { role: 'teacher' }))
+    (await request('/dev/auth/select-role', 'POST', { role: 'lecturer' }))
       .status,
     403,
   ); // old CSRF is invalid after rotation
@@ -203,12 +203,12 @@ test('real cookie flow: bootstrap, select seeded role, guard access, rotate, log
     409,
   ); // missing seed: no arbitrary fallback
   assert.equal(
-    (await request('/dev/auth/select-role', 'POST', { role: 'teacher' }))
+    (await request('/dev/auth/select-role', 'POST', { role: 'lecturer' }))
       .status,
     200,
   );
-  assert.equal((await (await request('/auth/me')).json()).data.role, 'teacher');
-  teacher.session_version++;
+  assert.equal((await (await request('/auth/me')).json()).data.role, 'lecturer');
+  lecturer.session_version++;
   assert.equal((await request('/auth/me')).status, 401);
   assert.equal((await request('/me/class-sessions')).status, 401);
   token = (await (await request('/auth/csrf')).json()).data.csrfToken;

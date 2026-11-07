@@ -30,7 +30,7 @@ test('sample HTTP routes validate input, paginate and allowlist responses', asyn
             subject: 'Legacy subject',
             course: { ...fixture.course, created_at: 'private extra field' },
             latitude: '0.000000',
-            teacher_id: 99,
+            lecturer_id: 99,
           },
         ],
         21,

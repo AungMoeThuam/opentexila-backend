@@ -46,8 +46,8 @@ test('AttendanceRecordsController and DTO pipeline enforce authentication, autho
     );
   });
 
-  await t.test('rejects teacher and admin with 403', async () => {
-    for (const role of ['teacher', 'admin'] as const) {
+  await t.test('rejects lecturer and admin with 403', async () => {
+    for (const role of ['lecturer', 'admin'] as const) {
       await assert.rejects(
         () =>
           invoke({}, {

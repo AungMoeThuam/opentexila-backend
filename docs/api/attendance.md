@@ -15,10 +15,10 @@
 
 | Method | Path | Access | Related issues | Purpose |
 | --- | --- | --- | --- | --- |
-| `GET` | `/me/class-sessions` | `student`, `teacher` | Backend `#10`, `#12` / Frontend `#7`, `#9` | List scheduled class sessions for enrolled or assigned classes |
-| `GET` | `/class-sessions/:classSessionId` | Authorised `student`, `teacher`, `admin` | Backend `#10` / Frontend `#7` | Class session detail, availability, and student check-in eligibility |
+| `GET` | `/me/class-sessions` | `student`, `lecturer` | Backend `#10`, `#12` / Frontend `#7`, `#9` | List scheduled class sessions for enrolled or assigned classes |
+| `GET` | `/class-sessions/:classSessionId` | Authorised `student`, `lecturer`, `admin` | Backend `#10` / Frontend `#7` | Class session detail, availability, and student check-in eligibility |
 | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Backend `#10` / Frontend `#7` | Validate browser location and record `present` or `late` |
-| `GET` | `/class-sessions/:classSessionId/records` | Assigned `teacher`, `admin` | Backend `#12` / Frontend `#9` | Read-only attendance roster for a class session |
+| `GET` | `/class-sessions/:classSessionId/records` | Assigned `lecturer`, `admin` | Backend `#12` / Frontend `#9` | Read-only attendance roster for a class session |
 | `GET` | `/me/attendance-records` | `student` | Backend `#11` / Frontend `#8` | Personal attendance history across class sessions |
 
 ---
@@ -29,11 +29,11 @@
 
 Returns a paginated list of class sessions ordered by `starts_at ASC, id ASC`:
 - For `student`: sessions in classes the student is enrolled in (or where the student has a materialised `attendance_records` row), including `my_attendance`.
-- For `teacher`: sessions in classes assigned to the lecturer (`classes.teacher_id = user.id`), with `my_attendance: null`.
+- For `lecturer`: sessions in classes assigned to the lecturer (`classes.lecturer_id = user.id`), with `my_attendance: null`.
 
-Shared handler owned by the check-in workflow (`#10`) and extended with teacher scoping by the lecturer roster workflow (`#12`).
+Shared handler owned by the check-in workflow (`#10`) and extended with lecturer scoping by the lecturer roster workflow (`#12`).
 
-- **Access**: `student` or `teacher`.
+- **Access**: `student` or `lecturer`.
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
   - `limit` (optional, default `20`, integer `1`–`100`)
@@ -87,14 +87,14 @@ Shared handler owned by the check-in workflow (`#10`) and extended with teacher 
 ```
 
 - `availability` is derived from server time: `"cancelled"` when `state = 'cancelled'`; otherwise `"upcoming"` before `starts_at`, `"in_progress"` when `starts_at <= server_now < ends_at`, and `"ended"` when `server_now >= ends_at`.
-- `my_attendance` is `null` for teachers, or `null` for students before a record is materialised. A pending record has `status: "pending"`, `checked_in_at: null`, and `distance_m: null`.
+- `my_attendance` is `null` for lecturers, or `null` for students before a record is materialised. A pending record has `status: "pending"`, `checked_in_at: null`, and `distance_m: null`.
 
 #### Error responses
 
 | HTTP | `error.code` | When |
 | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `FORBIDDEN` | Caller role is not `student` or `teacher` |
+| `403` | `FORBIDDEN` | Caller role is not `student` or `lecturer` |
 | `422` | `VALIDATION_ERROR` | Invalid `page`, `limit`, `classId`, `from`, `to`, or `from >= to` |
 
 ---
@@ -103,7 +103,7 @@ Shared handler owned by the check-in workflow (`#10`) and extended with teacher 
 
 Returns the detail of a single class session, including `check_in: { allowed, reason }` so the student UI knows whether to enable the check-in button or display why check-in is unavailable.
 
-- **Access**: Enrolled `student` (or student with a record in the session), assigned `teacher`, or `admin`.
+- **Access**: Enrolled `student` (or student with a record in the session), assigned `lecturer`, or `admin`.
 - **Path parameters**: `classSessionId` — positive integer `class_sessions.id`.
 
 #### Success response — `200 OK`
@@ -263,7 +263,7 @@ Example `422 Unprocessable Entity` (`OUTSIDE_ALLOWED_AREA`):
 
 Returns the read-only attendance roster for a single class session ordered by `student_id ASC`, alongside session and class `context`. Triggers overdue finalisation catch-up if the session has ended.
 
-- **Access**: Assigned `teacher` (`classes.teacher_id = user.id`) or `admin`.
+- **Access**: Assigned `lecturer` (`classes.lecturer_id = user.id`) or `admin`.
 - **Path parameters**: `classSessionId` — positive integer `class_sessions.id`.
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
@@ -326,7 +326,7 @@ Returns the read-only attendance roster for a single class session ordered by `s
 | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
 | `403` | `FORBIDDEN` | Caller is a `student` |
-| `404` | `RESOURCE_NOT_FOUND` | Session does not exist or caller is a `teacher` not assigned to this class |
+| `404` | `RESOURCE_NOT_FOUND` | Session does not exist or caller is a `lecturer` not assigned to this class |
 | `422` | `VALIDATION_ERROR` | Invalid `classSessionId`, `page`, `limit`, or unknown `status` |
 
 ---
@@ -436,7 +436,7 @@ Automatic finalisation is an internal backend service/worker (`feat/attendance-f
 
 ## Implementation and integration notes
 
-`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Teacher schedule scoping is included in the shared list handler; lecturer roster reads are also implemented. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
+`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Lecturer schedule scoping is included in the shared list handler; lecturer roster reads are also implemented. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
 
 ### Authentication dependency
 

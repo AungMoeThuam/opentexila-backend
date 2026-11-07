@@ -8,7 +8,7 @@ import { MyClassesService } from './my-classes.service';
 
 @Controller('me/classes')
 @UseGuards(AttendanceGuard)
-@Roles('student', 'teacher')
+@Roles('student', 'lecturer')
 export class MyClassesController {
   constructor(private readonly classes: MyClassesService) {}
 

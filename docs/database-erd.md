@@ -7,7 +7,7 @@ Eight application tables are shown; TypeORM's `schema_migrations` table is omitt
 ```mermaid
 erDiagram
     courses ||--o{ classes : "course_id"
-    users ||--o{ classes : "teacher_id"
+    users ||--o{ classes : "lecturer_id"
     users ||--o{ enrolments : "student_id"
     classes ||--o{ enrolments : "class_id"
     classes ||--o{ class_sessions : "class_id"
@@ -20,7 +20,7 @@ erDiagram
         varchar name "150"
         varchar email UK "254; lowercase and trimmed"
         varchar password_hash "255; hidden from default selects"
-        enum role "student, teacher, admin"
+        enum role "student, lecturer, admin"
         enum status "active, inactive; default active"
         bool must_change_password "default true"
         int session_version "default 0"
@@ -36,7 +36,7 @@ erDiagram
         int course_id FK
         varchar section "30; uppercase and trimmed"
         varchar term "50; unique with course_id and section"
-        int teacher_id FK
+        int lecturer_id FK
         varchar room_label "100"
         decimal latitude "9,6"
         decimal longitude "9,6"

@@ -203,7 +203,7 @@ export async function attendanceIntegration(
       },
     );
     await t.test(
-      'student and teacher schedules are scoped and paginated, historical roster retains access',
+      'student and lecturer schedules are scoped and paginated, historical roster retains access',
       async () => {
         const list = await service.list(student, {
           page: 1,
@@ -225,17 +225,17 @@ export async function attendanceIntegration(
           classId: classroom.id,
         });
         assert.equal(empty.meta.total, 0);
-        const teacher = await service.list(
-          { id: classroom.teacher_id, role: 'teacher' },
+        const lecturer = await service.list(
+          { id: classroom.lecturer_id, role: 'lecturer' },
           { page: 1, limit: 20, classId: classroom.id },
         );
-        assert.equal(teacher.meta.total, sessions.length);
-        assert.ok(teacher.data.every((s: any) => s.my_attendance === null));
-        const foreignTeacher = await service.list(
-          { id: 4294967295, role: 'teacher' },
+        assert.equal(lecturer.meta.total, sessions.length);
+        assert.ok(lecturer.data.every((s: any) => s.my_attendance === null));
+        const foreignLecturer = await service.list(
+          { id: 4294967295, role: 'lecturer' },
           { page: 1, limit: 20, classId: classroom.id },
         );
-        assert.equal(foreignTeacher.meta.total, 0);
+        assert.equal(foreignLecturer.meta.total, 0);
         const row = await ds
           .getRepository('ClassSession')
           .findOneBy({ id: current.id });

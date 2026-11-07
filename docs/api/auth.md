@@ -120,7 +120,7 @@ The following routes are design targets only and currently have no backend handl
 
 ### `POST /admin/users`
 
-An admin would create a student or teacher account using `name`, `email`, `role` and `temporary_password`. The password would be hashed with Argon2id, and `must_change_password` set to true. No invitation/activation flow or public self-registration is planned here.
+An admin would create a student or lecturer account using `name`, `email`, `role` and `temporary_password`. The password would be hashed with Argon2id, and `must_change_password` set to true. No invitation/activation flow or public self-registration is planned here.
 
 ### `POST /admin/users/:id/reset-password`
 

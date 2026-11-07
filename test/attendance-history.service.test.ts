@@ -33,7 +33,7 @@ function makeRecord({
         term: '2026-S2',
         room_label: 'EN401',
         course: { id: classId, code, name: 'Test Course' },
-        teacher: { id: 2, name: 'Test Lecturer', email: 'secret@example.com' },
+        lecturer: { id: 2, name: 'Test Lecturer', email: 'secret@example.com' },
       },
     },
   };

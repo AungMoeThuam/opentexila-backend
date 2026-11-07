@@ -16,7 +16,7 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
   const state = {
     user: {
       id: 2,
-      role: 'teacher',
+      role: 'lecturer',
       status: 'active',
       session_version: 0,
       must_change_password: false,

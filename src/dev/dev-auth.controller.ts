@@ -21,8 +21,8 @@ import { DevCsrfGuard } from './dev-auth.guard';
 import { DevAuthExceptionFilter } from './dev-auth.filter';
 
 export class SelectDevRoleDto {
-  @IsIn(['student', 'teacher', 'admin'], {
-    message: 'Select student, teacher or admin.',
+  @IsIn(['student', 'lecturer', 'admin'], {
+    message: 'Select student, lecturer or admin.',
   })
   role!: UserRole;
 }

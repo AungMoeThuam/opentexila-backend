@@ -13,7 +13,7 @@ import { User, type UserEntity } from './user.schema';
 @Index('uq_classes_course_term_section', ['course_id', 'term', 'section'], {
   unique: true,
 })
-@Index('ix_classes_teacher', ['teacher_id'])
+@Index('ix_classes_lecturer', ['lecturer_id'])
 export class Class {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
   id!: number;
@@ -33,7 +33,7 @@ export class Class {
   term!: string;
 
   @Column({ type: 'int', unsigned: true })
-  teacher_id!: number;
+  lecturer_id!: number;
 
   @Column({ type: 'varchar', length: 100 })
   room_label!: string;
@@ -52,8 +52,8 @@ export class Class {
     onUpdate: 'RESTRICT',
     nullable: false,
   })
-  @JoinColumn({ name: 'teacher_id' })
-  teacher?: UserEntity;
+  @JoinColumn({ name: 'lecturer_id' })
+  lecturer?: UserEntity;
 
   @ManyToOne(() => Course, {
     onDelete: 'RESTRICT',

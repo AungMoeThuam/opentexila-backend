@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { Global, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { EnrolmentsModule } from '../../dist/enrolments/enrolments.module.js';
 import { AttendanceModule } from '../../dist/attendance/attendance.module.js';
 import { DATABASE } from '../../dist/database/database.constants.js';
 import { createValidationPipe } from '../../dist/common/validation.pipe.js';
@@ -52,8 +53,13 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
     exports: [DATABASE],
   })(TestDatabaseModule);
   class TestAppModule {}
-  Module({ imports: [TestDatabaseModule, AttendanceModule] })(TestAppModule);
-  const app = await NestFactory.create(TestAppModule, { logger: false });
+  Module({ imports: [TestDatabaseModule, AttendanceModule, EnrolmentsModule] })(
+    TestAppModule,
+  );
+  const app = await NestFactory.create(TestAppModule, {
+    logger: false,
+    abortOnError: false,
+  });
   app.use((request: any, _response: any, next: () => void) => {
     request.session = state.signedIn ? validSession() : undefined;
     next();

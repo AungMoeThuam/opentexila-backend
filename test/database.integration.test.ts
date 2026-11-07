@@ -7,6 +7,7 @@ import { DataSource, type QueryRunner } from 'typeorm';
 import mysql from 'mysql2/promise';
 import argon2 from 'argon2';
 import { NestFactory } from '@nestjs/core';
+import { MyClassesService } from '../dist/enrolments/my-classes.service.js';
 import { databaseOptions } from '../dist/database/database-options.js';
 import { DATABASE } from '../dist/database/database.constants.js';
 import { ClassroomsExampleService } from '../dist/examples/classrooms-example.service.js';
@@ -445,6 +446,60 @@ test(
               ),
             1062,
           );
+        },
+      );
+      await t.test(
+        'my classes scopes current membership and teacher assignment',
+        async () => {
+          const service = new MyClassesService(ds!);
+          for (const role of ['student', 'teacher'] as const) {
+            const account = fixtures.accounts.find((a: any) => a.role === role);
+            const expected = await ds!.query(
+              role === 'student'
+                ? 'SELECT c.id FROM classes c JOIN enrolments e ON e.class_id=c.id WHERE e.student_id=? ORDER BY c.id'
+                : 'SELECT id FROM classes WHERE teacher_id=? ORDER BY id',
+              [account.id],
+            );
+            const result = await service.list(
+              { id: account.id, role },
+              { page: 1, limit: 100 },
+            );
+            assert.deepEqual(
+              result.data.map((c) => c.id),
+              expected.map((c: any) => c.id),
+            );
+            assert.equal(result.meta.total, expected.length);
+            assert.ok(result.data.length > 0);
+            const first = result.data[0];
+            const filtered = await service.list(
+              { id: account.id, role },
+              {
+                page: 1,
+                limit: 1,
+                courseId: first.course.id,
+                term: first.term,
+              },
+            );
+            assert.equal(filtered.data[0].id, first.id);
+            const page2 = await service.list(
+              { id: account.id, role },
+              { page: 2, limit: 1 },
+            );
+            assert.deepEqual(
+              page2.data.map((c) => c.id),
+              expected.slice(1, 2).map((c: any) => c.id),
+            );
+            const empty = await service.list(
+              { id: account.id, role },
+              { page: 1, limit: 20, term: 'no-such-term' },
+            );
+            assert.deepEqual(empty.meta, {
+              page: 1,
+              limit: 20,
+              total: 0,
+              totalPages: 0,
+            });
+          }
         },
       );
       await t.test('lecturer attendance routes read real data', async () => {

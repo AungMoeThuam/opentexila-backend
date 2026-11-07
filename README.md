@@ -90,7 +90,7 @@ src/database/
 database/
   migrations/                 # Versioned TypeScript migrations executed with Node type stripping
   seeds/demo.ts               # Local demo fixtures
-test/database.integration.test.ts
+test/database.integration.ts
 ```
 
 Six domain tables, the JWT `auth_refresh_sessions` table and the preserved unused `auth_sessions` table are created, plus TypeORM's `schema_migrations` bookkeeping table, which remains after reverting the application migration. See the [migration notes](docs/course-section-migration-plan.md#migration-operation-and-rollback-limits). Dates are UTC `DATETIME(3)`, IDs are unsigned integers, and decimal columns are returned as strings.

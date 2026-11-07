@@ -95,7 +95,7 @@ The backend application in `src/` is written in TypeScript and compiled with `ts
 3. **Create the controller.** Validate every query, param and body value at runtime. Take the acting user from the validated server session, never from a client-supplied user ID in the body, query or path. Validate resource IDs separately and authorize access to them.
 4. **Register the module** and add it to `imports` in [app.module.ts](../src/app.module.ts).
 5. **Return only allowlisted fields.** Never return an entity or `SELECT *` result directly.
-6. **Add tests** in `test/`, and add the file to the `test` script in `package.json`.
+6. **Add unit/HTTP tests** as `test/*.test.ts`; `npm test` discovers them automatically. Add MySQL feature checks as `test/*.integration.ts` helpers and call them from `test/database.integration.ts`.
 
 ### TypeScript and request validation
 

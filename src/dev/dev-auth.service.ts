@@ -10,7 +10,7 @@ export const DEV_COOKIE_NAME = 'ot_dev_session';
 const LIFETIME_MS = 8 * 60 * 60 * 1000;
 const accounts: Readonly<Record<UserRole, string>> = {
   student: 'student.one@example.com',
-  teacher: 'lecturer.one@example.com',
+  lecturer: 'lecturer.one@example.com',
   admin: 'admin.demo@example.com',
 };
 

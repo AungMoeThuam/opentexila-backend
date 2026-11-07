@@ -22,11 +22,11 @@ export interface ClassSummaryDto {
   room_label: string;
 }
 
-// Needs the `course` and `teacher` relations loaded on the class.
+// Needs the `course` and `lecturer` relations loaded on the class.
 export function toClassSummary(classroom: ClassEntity): ClassSummaryDto {
-  const { course, teacher } = classroom;
-  if (!course || !teacher)
-    throw new Error('Class summary requires course and teacher relations.');
+  const { course, lecturer } = classroom;
+  if (!course || !lecturer)
+    throw new Error('Class summary requires course and lecturer relations.');
   return {
     id: classroom.id,
     course: {
@@ -36,7 +36,7 @@ export function toClassSummary(classroom: ClassEntity): ClassSummaryDto {
     },
     section: classroom.section,
     term: classroom.term,
-    lecturer: { id: teacher.id, name: teacher.name },
+    lecturer: { id: lecturer.id, name: lecturer.name },
     room_label: classroom.room_label,
   };
 }

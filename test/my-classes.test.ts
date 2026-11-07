@@ -13,7 +13,7 @@ test('my classes HTTP validation, permissions and query scoping', async (t) => {
       room_label: 'EN402',
       latitude: 3,
       course: { id: 1, code: 'COS30043', name: 'Interface Design' },
-      teacher: { id: 2, name: 'Lecturer', email: 'private@example.com' },
+      lecturer: { id: 2, name: 'Lecturer', email: 'private@example.com' },
     },
   ];
   const builder: any = {};
@@ -56,7 +56,7 @@ test('my classes HTTP validation, permissions and query scoping', async (t) => {
     calls.some(
       (c) =>
         c[0] === 'where' &&
-        c[1] === 'class.teacher_id = :userId' &&
+        c[1] === 'class.lecturer_id = :userId' &&
         c[2].userId === 2,
     ),
   );

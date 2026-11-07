@@ -7,7 +7,7 @@
 ## Domain overview
 
 - **`courses`** stores shared course identity (`id`, `code`, `name`).
-- **`classes`** stores one offering of a course in a term and section (`id`, `course_id`, `teacher_id`, `section`, `term`, `room_label`, `latitude`, `longitude`, `radius_m`), unique on `(course_id, term, section)`.
+- **`classes`** stores one offering of a course in a term and section (`id`, `course_id`, `lecturer_id`, `section`, `term`, `room_label`, `latitude`, `longitude`, `radius_m`), unique on `(course_id, term, section)`.
 - **`enrolments`** stores current student membership in a class using composite primary key `(class_id, student_id)`.
 - Removing an enrolment deletes the `(class_id, student_id)` row from `enrolments` without deleting any materialised `attendance_records` on past or started `class_sessions` (`attendance_records` references `class_sessions` and `users`, not `enrolments`).
 
@@ -16,8 +16,8 @@
 | Method | Path | Access | Related issues | Purpose |
 | --- | --- | --- | --- | --- |
 | `GET` | `/classes` | `admin` | Backend `#7` / Frontend `#4` | List classes so an admin can select a class to manage enrolments |
-| `GET` | `/me/classes` | `student`, `teacher` | Backend `#8` / Frontend `#5` | List the signed-in student's enrolled classes or lecturer's assigned classes |
-| `GET` | `/classes/:classId/enrolments` | `admin`, assigned `teacher` | Backend `#7`, `#9` / Frontend `#4`, `#6` | Read the student roster of a class alongside class context |
+| `GET` | `/me/classes` | `student`, `lecturer` | Backend `#8` / Frontend `#5` | List the signed-in student's enrolled classes or lecturer's assigned classes |
+| `GET` | `/classes/:classId/enrolments` | `admin`, assigned `lecturer` | Backend `#7`, `#9` / Frontend `#4`, `#6` | Read the student roster of a class alongside class context |
 | `POST` | `/classes/:classId/enrolments` | `admin` | Backend `#7` / Frontend `#4` | Add an active student to a class |
 | `DELETE` | `/classes/:classId/enrolments/:studentId` | `admin` | Backend `#7` / Frontend `#4` | Remove a student from a class (`204 No Content`) |
 
@@ -80,11 +80,11 @@ Returns a paginated list of class offerings ordered by `classes.id ASC`.
 
 Returns the classes belonging to the signed-in user, ordered by `classes.id ASC`:
 - For `student`: classes where the student has a row in `enrolments` (`(class_id, student_id)`).
-- For `teacher`: classes assigned to the lecturer (`classes.teacher_id = user.id`).
+- For `lecturer`: classes assigned to the lecturer (`classes.lecturer_id = user.id`).
 
 Identity always comes from the verified JWT or development session. Unknown query fields, including `studentId` and `userId`, are stripped and cannot override identity. Responses use `Cache-Control: no-store`.
 
-- **Access**: `student` or `teacher` (`admin` receives `403 FORBIDDEN` and uses `GET /classes` instead).
+- **Access**: `student` or `lecturer` (`admin` receives `403 FORBIDDEN` and uses `GET /classes` instead).
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
   - `limit` (optional, default `20`, integer `1`–`100`)
@@ -135,7 +135,7 @@ Identity always comes from the verified JWT or development session. Unknown quer
 
 Returns the paginated student roster for a class ordered by `student_id ASC`, together with `context.class`. Shared handler for both admin enrolment management (Issue `#7`) and lecturer class roster viewing (Issue `#9`).
 
-- **Access**: `admin`, or `teacher` where `classes.teacher_id = user.id`.
+- **Access**: `admin`, or `lecturer` where `classes.lecturer_id = user.id`.
 - **Path parameters**: `classId` — positive integer `classes.id`.
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
@@ -190,7 +190,7 @@ An empty roster still returns `context.class` with `data: []`, `total: 0`, `tota
 | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
 | `403` | `FORBIDDEN` | Caller is a `student` |
-| `404` | `RESOURCE_NOT_FOUND` | Class `:classId` does not exist, or caller is a `teacher` not assigned to this class |
+| `404` | `RESOURCE_NOT_FOUND` | Class `:classId` does not exist, or caller is a `lecturer` not assigned to this class |
 | `422` | `VALIDATION_ERROR` | Invalid `classId`, `page`, or `limit` |
 
 ---

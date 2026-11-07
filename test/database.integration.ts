@@ -269,7 +269,7 @@ test(
         'ENUM columns and table shapes match the target schema',
         async () => {
           for (const [table, column, expected, defaultValue] of [
-            ['users', 'role', "enum('student','teacher','admin')", null],
+            ['users', 'role', "enum('student','lecturer','admin')", null],
             ['users', 'status', "enum('active','inactive')", 'active'],
             [
               'class_sessions',
@@ -449,15 +449,15 @@ test(
         },
       );
       await t.test(
-        'my classes scopes current membership and teacher assignment',
+        'my classes scopes current membership and lecturer assignment',
         async () => {
           const service = new MyClassesService(ds!);
-          for (const role of ['student', 'teacher'] as const) {
+          for (const role of ['student', 'lecturer'] as const) {
             const account = fixtures.accounts.find((a: any) => a.role === role);
             const expected = await ds!.query(
               role === 'student'
                 ? 'SELECT c.id FROM classes c JOIN enrolments e ON e.class_id=c.id WHERE e.student_id=? ORDER BY c.id'
-                : 'SELECT id FROM classes WHERE teacher_id=? ORDER BY id',
+                : 'SELECT id FROM classes WHERE lecturer_id=? ORDER BY id',
               [account.id],
             );
             const result = await service.list(
@@ -508,7 +508,7 @@ test(
           fixtures.accounts.find((account: any) => account.email === email).id;
         const lecturer: AttendanceCaller = {
           id: accountId('lecturer.one@example.com'),
-          role: 'teacher',
+          role: 'lecturer',
         };
         const placeholders = (values: unknown[]) =>
           values.map(() => '?').join(',');
@@ -517,7 +517,7 @@ test(
         const mine = await ds!.query(
           `SELECT s.id, s.class_id, s.starts_at FROM class_sessions s
              JOIN classes c ON c.id = s.class_id
-             WHERE c.teacher_id = ? ORDER BY s.starts_at, s.id`,
+             WHERE c.lecturer_id = ? ORDER BY s.starts_at, s.id`,
           [lecturer.id],
         );
         assert.ok(mine.length > 0 && mine.length <= 100);
@@ -577,7 +577,7 @@ test(
         // A session of another lecturer looks like a missing session.
         const [foreign] = await ds!.query(
           `SELECT s.id FROM class_sessions s JOIN classes c ON c.id = s.class_id
-             WHERE c.teacher_id <> ? LIMIT 1`,
+             WHERE c.lecturer_id <> ? LIMIT 1`,
           [lecturer.id],
         );
         await assert.rejects(
@@ -587,14 +587,14 @@ test(
 
         // A cancelled session: empty roster, context kept.
         const [cancelled] = await ds!.query(
-          `SELECT s.id, c.teacher_id FROM class_sessions s
+          `SELECT s.id, c.lecturer_id FROM class_sessions s
              JOIN classes c ON c.id = s.class_id
              WHERE s.state = 'cancelled' LIMIT 1`,
         );
         assert.ok(cancelled, 'the seed should contain a cancelled session');
         const owner: AttendanceCaller = {
-          id: cancelled.teacher_id,
-          role: 'teacher',
+          id: cancelled.lecturer_id,
+          role: 'lecturer',
         };
         const empty = await rosters.list(owner, cancelled.id, {
           page: 1,

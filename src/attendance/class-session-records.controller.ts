@@ -11,7 +11,7 @@ import { Roles } from '../auth/roles.decorator';
 
 @Controller('class-sessions')
 @UseGuards(AttendanceGuard)
-@Roles('teacher', 'admin')
+@Roles('lecturer', 'admin')
 export class ClassSessionRecordsController {
   constructor(public readonly records: ClassSessionRecordsService) {}
 

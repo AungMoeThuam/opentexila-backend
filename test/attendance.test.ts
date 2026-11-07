@@ -115,7 +115,7 @@ test('availability and eligibility use precise time boundaries and reason priori
   assert.equal(
     rules.eligibility(
       { ...session, state: 'cancelled' },
-      { role: 'teacher' },
+      { role: 'lecturer' },
       false,
       null,
       start,
@@ -123,7 +123,7 @@ test('availability and eligibility use precise time boundaries and reason priori
     'CLASS_CANCELLED',
   );
   assert.equal(
-    rules.eligibility(session, { role: 'teacher' }, false, null, start).reason,
+    rules.eligibility(session, { role: 'lecturer' }, false, null, start).reason,
     'ROLE_NOT_STUDENT',
   );
   assert.equal(
@@ -233,7 +233,7 @@ function databaseFixture(now = start) {
       return [
         {
           id: 1,
-          teacher_id: 2,
+          lecturer_id: 2,
           course_id: 1,
           section: 'A',
           term: '2026-S2',
@@ -369,15 +369,15 @@ test('resource authorization, roster creation, and safe snapshot DTOs', async ()
   assert.equal(result.data.class.room_label, 'Original room');
   assert.equal(JSON.stringify(result).includes('latitude'), false);
   assert.equal(
-    (await service.detail({ id: 2, role: 'teacher' }, 30)).data.my_attendance,
+    (await service.detail({ id: 2, role: 'lecturer' }, 30)).data.my_attendance,
     null,
   );
   await assert.rejects(
-    service.detail({ id: 8, role: 'teacher' }, 30),
+    service.detail({ id: 8, role: 'lecturer' }, 30),
     code('RESOURCE_NOT_FOUND'),
   );
   await assert.rejects(
-    service.checkIn({ id: 2, role: 'teacher' }, 30, validReading()),
+    service.checkIn({ id: 2, role: 'lecturer' }, 30, validReading()),
     code('FORBIDDEN'),
   );
   state.enrolled = false;

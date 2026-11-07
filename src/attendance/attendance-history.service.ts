@@ -55,7 +55,7 @@ export class AttendanceHistoryService {
       .innerJoinAndSelect('ar.classSession', 's')
       .innerJoinAndSelect('s.class', 'c')
       .innerJoinAndSelect('c.course', 'co')
-      .innerJoinAndSelect('c.teacher', 't')
+      .innerJoinAndSelect('c.lecturer', 't')
       .where('ar.student_id = :studentId', { studentId });
 
     if (!includeCancelled) {

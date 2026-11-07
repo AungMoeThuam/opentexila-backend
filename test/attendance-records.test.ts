@@ -20,7 +20,7 @@ const classSession = (overrides: Record<string, any> = {}) => ({
       code: 'COS30043',
       name: 'Interface Design and Development',
     },
-    teacher: { id: 2, name: 'Lecturer One' },
+    lecturer: { id: 2, name: 'Lecturer One' },
   },
   ...overrides,
 });
@@ -110,7 +110,7 @@ test('lecturer session roster over HTTP', async (t) => {
       assert.equal(JSON.stringify(body).includes('distance'), false);
       assert.deepEqual(sessionCalls.at(-1).where, {
         id: 30,
-        class: { teacher_id: 2 },
+        class: { lecturer_id: 2 },
       });
       assert.deepEqual(recordCalls.at(-1).where, { class_session_id: 30 });
       assert.deepEqual(recordCalls.at(-1).order, { student_id: 'ASC' });
@@ -133,7 +133,7 @@ test('lecturer session roster over HTTP', async (t) => {
   await t.test('the caller id scopes the session lookup', async () => {
     app.state.user = { ...app.state.user, id: 9 };
     await get('/30/records');
-    assert.equal(sessionCalls.at(-1).where.class.teacher_id, 9);
+    assert.equal(sessionCalls.at(-1).where.class.lecturer_id, 9);
     app.state.user = { ...app.state.user, id: 2 };
   });
 
@@ -179,7 +179,7 @@ test('lecturer session roster over HTTP', async (t) => {
       const adminRes = await get('/30/records');
       assert.equal(adminRes.status, 200);
       assert.deepEqual(sessionCalls.at(-1).where, { id: 30 });
-      app.state.user = { ...app.state.user, id: 2, role: 'teacher' };
+      app.state.user = { ...app.state.user, id: 2, role: 'lecturer' };
     },
   );
 

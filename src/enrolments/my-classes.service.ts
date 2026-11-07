@@ -13,7 +13,7 @@ export class MyClassesService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}
 
   async list(user: AuthenticatedUser, query: MyClassesQueryDto) {
-    if (!['student', 'teacher'].includes(user.role))
+    if (!['student', 'lecturer'].includes(user.role))
       throw new ApiException(
         403,
         'FORBIDDEN',
@@ -23,9 +23,9 @@ export class MyClassesService {
       .getRepository(Class)
       .createQueryBuilder('class')
       .innerJoinAndSelect('class.course', 'course')
-      .innerJoinAndSelect('class.teacher', 'teacher');
-    if (user.role === 'teacher') {
-      builder.where('class.teacher_id = :userId', { userId: user.id });
+      .innerJoinAndSelect('class.lecturer', 'lecturer');
+    if (user.role === 'lecturer') {
+      builder.where('class.lecturer_id = :userId', { userId: user.id });
     } else {
       builder.where(
         'EXISTS (SELECT 1 FROM enrolments e WHERE e.class_id = class.id AND e.student_id = :userId)',

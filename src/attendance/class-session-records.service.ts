@@ -31,7 +31,7 @@ const sessionFields: FindOptionsSelect<ClassSessionEntity> = {
     term: true,
     room_label: true,
     course: { id: true, code: true, name: true },
-    teacher: { id: true, name: true },
+    lecturer: { id: true, name: true },
   },
 };
 
@@ -79,7 +79,7 @@ export class ClassSessionRecordsService {
     classSessionId: number,
     query: SessionRecordsQueryDto,
   ): Promise<SessionRosterResponseDto> {
-    if (user.role !== 'teacher' && user.role !== 'admin') {
+    if (user.role !== 'lecturer' && user.role !== 'admin') {
       throw new ApiException(
         403,
         'FORBIDDEN',
@@ -92,10 +92,10 @@ export class ClassSessionRecordsService {
     // A session of another lecturer looks the same as a missing session.
     const session = await this.classSessions.findOne({
       select: sessionFields,
-      relations: { class: { course: true, teacher: true } },
+      relations: { class: { course: true, lecturer: true } },
       where: {
         id,
-        ...(user.role === 'teacher' && { class: { teacher_id: user.id } }),
+        ...(user.role === 'lecturer' && { class: { lecturer_id: user.id } }),
       },
     });
     if (!session) throw notFound('Class session not found.');

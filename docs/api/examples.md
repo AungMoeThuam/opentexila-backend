@@ -56,7 +56,7 @@ An empty database returns `data: []`, `total: 0`, `totalPages: 0`. A page beyond
 
 Accepts a positive integer ID from 1 to 4294967295. Returns `200 OK` with `{ "data": { ... } }` using the same classroom fields above. A missing classroom returns `404 Not Found`.
 
-Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Coordinates, geofence configuration, teacher information and other entity fields are excluded. Class rows do not contain course code/name/subject duplicates.
+Only classroom `id`, `section`, `term`, `room_label`, and nested `course: { id, code, name }` are returned. The service loads the course relation and explicitly maps its fields. Coordinates, geofence configuration, lecturer information and other entity fields are excluded. Class rows do not contain course code/name/subject duplicates.
 
 This replaces the earlier flat classroom payload. Clients should use `course.code` and `course.name`, and display the separate `section`. Apply the consolidated initial migration to a fresh database before running this API. Existing old development databases need separate recreation; see the [baseline setup guide](../database-refactor-migration.md).
 

@@ -10,7 +10,7 @@ import { createValidationPipe } from '../../dist/common/validation.pipe.js';
 // Starts the attendance routes with fake repositories keyed by entity name
 // (for example `ClassSession`). Tests change the fake methods after start.
 // A trusted fixture middleware signs the caller in as `state.user`; set
-// `state.session = undefined` to simulate a signed-out request and change
+// `state.signedIn = false` to simulate a signed-out request and change
 // `state.user` to simulate account changes.
 export async function startAttendanceApp(repositories: Record<string, any>) {
   const state = {
@@ -21,7 +21,6 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
       session_version: 0,
       must_change_password: false,
     },
-    session: undefined as any,
     signedIn: true,
   };
   const validSession = () => ({

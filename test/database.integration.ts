@@ -12,7 +12,7 @@ import { databaseOptions } from '../dist/database/database-options.js';
 import { DATABASE } from '../dist/database/database.constants.js';
 import { ClassroomsExampleService } from '../dist/examples/classrooms-example.service.js';
 import { ClassSessionRecordsService } from '../dist/attendance/class-session-records.service.js';
-import { AttendanceHistoryService } from '../dist/attendance/attendance-history.service.js';
+import { attendanceHistoryIntegration } from './attendance-history.integration.ts';
 import type { AttendanceCaller } from '../dist/attendance/attendance.rules.js';
 import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
@@ -604,61 +604,7 @@ test(
         assert.equal(empty.context.class_state, 'cancelled');
         assert.equal(empty.meta.totalPages, 0);
       });
-      await t.test('student attendance history reads real data', async () => {
-        const history = new AttendanceHistoryService(ds!);
-        const [{ student_id: studentId }] = await ds!.query(
-          `SELECT student_id FROM attendance_records
-             GROUP BY student_id ORDER BY COUNT(*) DESC, student_id LIMIT 1`,
-        );
-        const expected = await ds!.query(
-          `SELECT r.class_session_id AS id, r.status FROM attendance_records r
-             JOIN class_sessions s ON s.id = r.class_session_id
-             WHERE r.student_id = ? AND s.state <> 'cancelled'
-             ORDER BY s.starts_at DESC, r.class_session_id DESC`,
-          [studentId],
-        );
-        assert.ok(expected.length > 0);
-        const result = await history.getPersonalAttendanceRecords({
-          studentId,
-          limit: 100,
-        });
-        assert.deepEqual(
-          result.data.map((row: any) => row.class_session_id),
-          expected.map((row: any) => row.id),
-        );
-        assert.equal(result.meta.total, expected.length);
-        for (const row of result.data) {
-          assert.equal(row.student_id, studentId);
-          assert.deepEqual(Object.keys(row.class.lecturer!).sort(), [
-            'id',
-            'name',
-          ]);
-          assert.ok(
-            row.class.course.code && row.class.section && row.class.term,
-          );
-          assert.equal(typeof row.starts_at, 'string');
-        }
-        const filtered = await history.getPersonalAttendanceRecords({
-          studentId,
-          classId: result.data[0].class.id,
-          status: result.data[0].status,
-          limit: 100,
-        });
-        assert.ok(filtered.data.length > 0);
-        assert.ok(
-          filtered.data.every(
-            (row: any) =>
-              row.class.id === result.data[0].class.id &&
-              row.status === result.data[0].status,
-          ),
-        );
-        const withCancelled = await history.getPersonalAttendanceRecords({
-          studentId,
-          includeCancelled: true,
-          limit: 100,
-        });
-        assert.ok(withCancelled.meta.total >= result.meta.total);
-      });
+      await attendanceHistoryIntegration(t, ds!);
       await authIntegration(t, ds!);
       await t.test(
         'real AppModule wires JWT attendance protection without protecting example routes',

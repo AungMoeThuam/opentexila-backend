@@ -1,7 +1,7 @@
 {
   "name": "opentexila-backend",
   "version": "0.0.1",
-  "description": "OpenTexila classroom management API — TypeScript NestJS backend.",
+  "description": "OpenTexila classroom management API \u2014 TypeScript NestJS backend.",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
@@ -24,8 +24,8 @@
     "db:status": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env node_modules/typeorm/cli.js migration:show -d dist/database/data-source.js",
     "db:revert": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env node_modules/typeorm/cli.js migration:revert -d dist/database/data-source.js",
     "db:seed": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env database/seeds/demo.ts",
-    "test:db": "npm run build && node --experimental-strip-types --no-warnings --test test/database.integration.test.ts",
-    "test": "npm run build && node --experimental-strip-types --no-warnings --test test/auth.unit.test.ts test/auth-cookies.test.ts test/database.unit.test.ts test/attendance.unit.test.ts test/examples.test.ts test/stack.test.ts test/attendance.test.ts test/dev-auth.test.ts test/common.test.ts test/attendance-records.test.ts test/my-classes.test.ts",
+    "test:db": "npm run build && node --experimental-strip-types --no-warnings --test test/database.integration.ts",
+    "test": "npm run build && node --experimental-strip-types --no-warnings --test test/*.test.ts",
     "format": "prettier --write \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
     "db:seed:attendance": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env scripts/create-attendance-demo.ts"

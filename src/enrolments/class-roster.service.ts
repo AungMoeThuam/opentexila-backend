@@ -27,7 +27,8 @@ export interface ClassRosterResponseDto {
 export class ClassRosterService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}
 
-  // Read-only roster of one class for its assigned lecturer.
+  // Read-only roster of one class: any class for an admin, only the assigned
+  // lecturer's own classes for a lecturer.
   async list(
     user: AuthenticatedUser,
     classId: number,
@@ -36,7 +37,10 @@ export class ClassRosterService {
     // A class of another lecturer looks the same as a missing class.
     const classroom = await this.database.getRepository(Class).findOne({
       relations: { course: true, lecturer: true },
-      where: { id: classId, lecturer_id: user.id },
+      where:
+        user.role === 'admin'
+          ? { id: classId }
+          : { id: classId, lecturer_id: user.id },
     });
     if (!classroom)
       throw new ApiException(404, 'RESOURCE_NOT_FOUND', 'Class not found.');

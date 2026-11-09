@@ -41,16 +41,26 @@ async function start() {
   };
 }
 
-test('students and admins cannot read a class roster', async (t) => {
+test('students cannot read a class roster', async (t) => {
   const { app, calls, get } = await start();
   t.after(() => app.close());
-  for (const role of ['student', 'admin']) {
-    app.state.user = { ...app.state.user, id: 3, role };
-    const response = await get();
-    assert.equal(response.status, 403, role);
-    assert.equal((await response.json()).error.code, 'FORBIDDEN');
-  }
+  app.state.user = { ...app.state.user, id: 3, role: 'student' };
+  const response = await get();
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'FORBIDDEN');
   assert.equal(calls.length, 0);
+});
+
+test('admins read the roster of any class', async (t) => {
+  const { app, calls, get } = await start();
+  t.after(() => app.close());
+  app.state.user = { ...app.state.user, id: 9, role: 'admin' };
+  const response = await get();
+  assert.equal(response.status, 200);
+  const [, classQuery] = calls.find((c) => c[0] === 'Class.findOne');
+  assert.deepEqual(classQuery.where, { id: 1 });
+  const [, rosterQuery] = calls.find((c) => c[0] === 'Enrolment.findAndCount');
+  assert.deepEqual(rosterQuery.where, { class_id: 1 });
 });
 
 test('assigned lecturer reads the roster with class context', async (t) => {

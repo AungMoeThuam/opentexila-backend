@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Attendance](attendance.md) · [Database design](../database-design.md)
 
-**Status: `GET /me/classes` implemented for students and lecturers; other endpoints below remain planned. Database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: `GET /me/classes` and `GET /classes/:classId/enrolments` (assigned lecturers only) implemented; other endpoints below remain planned. Database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Domain overview
 
@@ -135,7 +135,7 @@ Identity always comes from the verified JWT or development session. Unknown quer
 
 Returns the paginated student roster for a class ordered by `student_id ASC`, together with `context.class`. Shared handler for both admin enrolment management (Issue `#7`) and lecturer class roster viewing (Issue `#9`).
 
-- **Access**: `admin`, or `lecturer` where `classes.lecturer_id = user.id`.
+- **Access**: `admin`, or `lecturer` where `classes.lecturer_id = user.id`. **Currently only the assigned `lecturer` is implemented**; `admin` receives `403 FORBIDDEN` until Issue `#7` adds the admin path to this handler.
 - **Path parameters**: `classId` — positive integer `classes.id`.
 - **Query parameters**:
   - `page` (optional, default `1`, integer `1`–`10000`)
@@ -189,7 +189,7 @@ An empty roster still returns `context.class` with `data: []`, `total: 0`, `tota
 | HTTP | `error.code` | When |
 | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `FORBIDDEN` | Caller is a `student` |
+| `403` | `FORBIDDEN` | Caller is a `student` (or, until Issue `#7`, an `admin`) |
 | `404` | `RESOURCE_NOT_FOUND` | Class `:classId` does not exist, or caller is a `lecturer` not assigned to this class |
 | `422` | `VALIDATION_ERROR` | Invalid `classId`, `page`, or `limit` |
 

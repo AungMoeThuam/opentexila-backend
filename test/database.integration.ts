@@ -8,6 +8,7 @@ import mysql from 'mysql2/promise';
 import argon2 from 'argon2';
 import { NestFactory } from '@nestjs/core';
 import { MyClassesService } from '../dist/enrolments/my-classes.service.js';
+import { ClassRosterService } from '../dist/enrolments/class-roster.service.js';
 import { databaseOptions } from '../dist/database/database-options.js';
 import { DATABASE } from '../dist/database/database.constants.js';
 import { ClassroomsExampleService } from '../dist/examples/classrooms-example.service.js';
@@ -501,6 +502,103 @@ test(
               total: 0,
               totalPages: 0,
             });
+          }
+        },
+      );
+      await t.test(
+        'class roster lists real enrolments for the assigned lecturer only',
+        async () => {
+          const service = new ClassRosterService(ds!);
+          const [{ id: lecturerId, class_id: classId }] = await ds!.query(
+            `SELECT c.lecturer_id AS id, c.id AS class_id FROM classes c
+               JOIN enrolments e ON e.class_id = c.id
+               GROUP BY c.id, c.lecturer_id HAVING COUNT(*) > 1
+               ORDER BY c.id LIMIT 1`,
+          );
+          const expected = await ds!.query(
+            'SELECT student_id FROM enrolments WHERE class_id = ? ORDER BY student_id',
+            [classId],
+          );
+          const lecturer = { id: lecturerId, role: 'lecturer' } as any;
+          const all = await service.list(lecturer, classId, {
+            page: 1,
+            limit: 100,
+          });
+          assert.deepEqual(
+            all.data.map((row) => row.student_id),
+            expected.map((row: any) => row.student_id),
+          );
+          assert.equal(all.meta.total, expected.length);
+          assert.equal(all.context.class.id, classId);
+          assert.equal(all.context.class.lecturer.id, lecturerId);
+          const second = await service.list(lecturer, classId, {
+            page: 2,
+            limit: 1,
+          });
+          assert.deepEqual(
+            second.data.map((row) => row.student_id),
+            [expected[1].student_id],
+          );
+
+          // Inactive students stay on the roster.
+          const inactiveId = expected[0].student_id;
+          await ds!.query("UPDATE users SET status='inactive' WHERE id=?", [
+            inactiveId,
+          ]);
+          try {
+            const withInactive = await service.list(lecturer, classId, {
+              page: 1,
+              limit: 100,
+            });
+            assert.equal(withInactive.meta.total, expected.length);
+            assert.equal(withInactive.data[0].student_id, inactiveId);
+          } finally {
+            await ds!.query("UPDATE users SET status='active' WHERE id=?", [
+              inactiveId,
+            ]);
+          }
+
+          // Another lecturer cannot tell the class exists.
+          const [other] = await ds!.query(
+            "SELECT id FROM users WHERE role='lecturer' AND id <> ? LIMIT 1",
+            [lecturerId],
+          );
+          await assert.rejects(
+            service.list({ id: other.id, role: 'lecturer' } as any, classId, {
+              page: 1,
+              limit: 20,
+            }),
+            { status: 404 },
+          );
+          await assert.rejects(
+            service.list(lecturer, 4294967295, { page: 1, limit: 20 }),
+            { status: 404 },
+          );
+
+          // A class with no students keeps its context.
+          const created = await ds!.query(
+            `INSERT INTO classes(course_id,lecturer_id,section,term,room_label,latitude,longitude,radius_m)
+               SELECT course_id,lecturer_id,'ZZ',term,room_label,latitude,longitude,radius_m
+               FROM classes WHERE id=?`,
+            [classId],
+          );
+          try {
+            const empty = await service.list(lecturer, created.insertId, {
+              page: 1,
+              limit: 20,
+            });
+            assert.deepEqual(empty.data, []);
+            assert.deepEqual(empty.meta, {
+              page: 1,
+              limit: 20,
+              total: 0,
+              totalPages: 0,
+            });
+            assert.equal(empty.context.class.id, created.insertId);
+          } finally {
+            await ds!.query('DELETE FROM classes WHERE id=?', [
+              created.insertId,
+            ]);
           }
         },
       );

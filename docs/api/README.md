@@ -11,6 +11,7 @@ This documentation belongs to the backend repository. The separate frontend repo
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
 - **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
 - **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
+- **[Courses & Class Management](courses-classes.md)** — Admin course list/create/edit (`GET`/`POST /courses`, `PATCH /courses/:courseId`), active lecturer options (`GET /lecturers`), and class create/detail/edit (`POST /classes`, `GET`/`PATCH /classes/:classId`) including lecturer assignment and attendance location.
 - **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), and the internal finalisation service contract.
 - **[Sample Classroom API](examples.md)** — Implemented development-only list/detail endpoints (`GET /examples/classrooms`, `GET /examples/classrooms/:id`) and a reference controller/service/test pattern for teammates.
 
@@ -29,6 +30,13 @@ All paths below are relative to `/api/v1`. Admin account management and enrolmen
 | **Auth**       | `POST`   | `/admin/users`                              | `admin`                                  | Create a student/lecturer account with a temporary password     | [auth.md](auth.md#post-adminusers)                                        |
 | **Auth**       | `POST`   | `/admin/users/:id/reset-password`           | `admin`                                  | Set a new temporary password and bump `session_version`         | [auth.md](auth.md#post-adminusersidreset-password)                        |
 | **Enrolments** | `GET`    | `/classes`                                  | `admin`                                  | List classes with course, section, term, lecturer and room      | [enrolments.md](enrolments.md#get-classes)                                |
+| **Courses**    | `GET`    | `/courses`                                  | `admin`                                  | Paginated course list and course selector                       | [courses-classes.md](courses-classes.md#get-courses)                      |
+| **Courses**    | `POST`   | `/courses`                                  | `admin`                                  | Create a course                                                 | [courses-classes.md](courses-classes.md#post-courses)                     |
+| **Courses**    | `PATCH`  | `/courses/:courseId`                        | `admin`                                  | Edit a course's code or name                                    | [courses-classes.md](courses-classes.md#patch-coursescourseid)            |
+| **Courses**    | `GET`    | `/lecturers`                                | `admin`                                  | Active lecturer options for class assignment                    | [courses-classes.md](courses-classes.md#get-lecturers)                    |
+| **Courses**    | `POST`   | `/classes`                                  | `admin`                                  | Create a class offering                                         | [courses-classes.md](courses-classes.md#post-classes)                     |
+| **Courses**    | `GET`    | `/classes/:classId`                         | `admin`                                  | Class detail including attendance location                      | [courses-classes.md](courses-classes.md#get-classesclassid)               |
+| **Courses**    | `PATCH`  | `/classes/:classId`                         | `admin`                                  | Edit a class offering, lecturer or attendance location          | [courses-classes.md](courses-classes.md#patch-classesclassid)             |
 | **Enrolments** | `GET`    | `/me/classes`                               | `student`, `lecturer`                     | List student's enrolled classes or lecturer's assigned classes  | [enrolments.md](enrolments.md#get-meclasses)                              |
 | **Enrolments** | `GET`    | `/classes/:classId/enrolments`              | `admin`, assigned `lecturer`              | List enrolled students for a class with class context           | [enrolments.md](enrolments.md#get-classesclassidenrolments)               |
 | **Enrolments** | `POST`   | `/classes/:classId/enrolments`              | `admin`                                  | Enrol an active student into a class                            | [enrolments.md](enrolments.md#post-classesclassidenrolments)              |
@@ -130,11 +138,15 @@ Implemented feature controllers/guards return errors in the following envelope. 
 | `404` | `RESOURCE_NOT_FOUND`       | Target resource does not exist or is outside the caller's authorised scope          |
 | `409` | `EMAIL_ALREADY_EXISTS`     | Creating a user with an email that already exists in `users`                        |
 | `409` | `ENROLMENT_ALREADY_EXISTS` | Student is already enrolled in the target class (`(class_id, student_id)`)          |
+| `409` | `COURSE_CODE_TAKEN`        | Creating or renaming a course to a code that already exists                         |
+| `409` | `CLASS_SECTION_TAKEN`      | Course/term/section combination already exists                                      |
+| `409` | `CLASS_HAS_SESSIONS`       | Changing a class's course, term or section after class sessions exist               |
 | `409` | `CLASS_NOT_STARTED`        | Check-in attempted before `class_sessions.starts_at`                                |
 | `409` | `CLASS_ENDED`              | Check-in attempted at or after `class_sessions.ends_at`                             |
 | `409` | `CLASS_CANCELLED`          | Check-in attempted on a class session with `state = 'cancelled'`                    |
 | `422` | `VALIDATION_ERROR`         | Invalid path ID, query parameter, body field, unknown status, or invalid date range |
 | `422` | `STUDENT_NOT_ELIGIBLE`     | Target user for enrolment is not an active `student`                                |
+| `422` | `LECTURER_NOT_ELIGIBLE`    | Assigned user is missing, inactive or not a `lecturer`                              |
 | `422` | `LOCATION_STALE`           | Geolocation `reading_timestamp` fails freshness/future-time policy                  |
 | `422` | `LOCATION_INACCURATE`      | Geolocation `accuracy_m` exceeds the service accuracy threshold                     |
 | `422` | `OUTSIDE_ALLOWED_AREA`     | Geolocation distance exceeds the class session's `radius_m` geofence                |
@@ -157,6 +169,6 @@ Example `404 Not Found`:
 
 When implementing or updating an endpoint:
 
-1. Verify that its method, path, role guard, query/body validation, success DTO, and error codes match its feature document ([`auth.md`](auth.md), [`enrolments.md`](enrolments.md), or [`attendance.md`](attendance.md)).
+1. Verify that its method, path, role guard, query/body validation, success DTO, and error codes match its feature document ([`auth.md`](auth.md), [`enrolments.md`](enrolments.md), [`courses-classes.md`](courses-classes.md), or [`attendance.md`](attendance.md)).
 2. Coordinate any contract adjustments with the paired frontend issue/owner before merging.
 3. Update the status banner in the feature document once the endpoint is merged and verified by automated tests.

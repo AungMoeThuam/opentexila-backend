@@ -14,6 +14,7 @@ import { ClassroomsExampleService } from '../dist/examples/classrooms-example.se
 import { ClassSessionRecordsService } from '../dist/attendance/class-session-records.service.js';
 import { attendanceHistoryIntegration } from './attendance-history.integration.ts';
 import { enrolmentsIntegration } from './enrolments.integration.ts';
+import { coursesIntegration } from './courses.integration.ts';
 import type { AttendanceCaller } from '../dist/attendance/attendance.rules.js';
 import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
@@ -607,6 +608,7 @@ test(
       });
       await attendanceHistoryIntegration(t, ds!);
       await enrolmentsIntegration(t, ds!, fixtures);
+      await coursesIntegration(t, ds!, fixtures);
       await authIntegration(t, ds!);
       await t.test(
         'real AppModule wires JWT attendance protection without protecting example routes',

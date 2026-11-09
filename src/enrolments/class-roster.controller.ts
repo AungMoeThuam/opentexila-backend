@@ -9,7 +9,7 @@ import { ClassRosterService } from './class-roster.service';
 
 @Controller('classes')
 @UseGuards(AttendanceGuard)
-@Roles('lecturer')
+@Roles('admin', 'lecturer')
 export class ClassRosterController {
   constructor(private readonly roster: ClassRosterService) {}
 

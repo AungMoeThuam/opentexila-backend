@@ -11,8 +11,12 @@ import { createValidationPipe } from '../../dist/common/validation.pipe.js';
 // (for example `ClassSession`). Tests change the fake methods after start.
 // A trusted fixture middleware signs the caller in as `state.user`; set
 // `state.signedIn = false` to simulate a signed-out request and change
-// `state.user` to simulate account changes.
-export async function startAttendanceApp(repositories: Record<string, any>) {
+// `state.user` to simulate account changes. `options.modules` adds feature
+// modules; `options.database` adds fake DataSource methods such as `query`.
+export async function startAttendanceApp(
+  repositories: Record<string, any>,
+  options: { modules?: any[]; database?: Record<string, any> } = {},
+) {
   const state = {
     user: {
       id: 2,
@@ -41,20 +45,29 @@ export async function startAttendanceApp(repositories: Record<string, any>) {
               typeof schema === 'string'
                 ? schema
                 : (schema.options?.name ?? schema.name);
-            if (name === 'User') return { findOneBy: async () => state.user };
+            if (name === 'User') {
+              if (repositories.User) return repositories.User;
+              return { findOneBy: async () => state.user };
+            }
             const repository = repositories[name];
             assert.ok(repository, `No fake repository for ${name}`);
             return repository;
           },
+          ...options.database,
         },
       },
     ],
     exports: [DATABASE],
   })(TestDatabaseModule);
   class TestAppModule {}
-  Module({ imports: [TestDatabaseModule, AttendanceModule, EnrolmentsModule] })(
-    TestAppModule,
-  );
+  Module({
+    imports: [
+      TestDatabaseModule,
+      AttendanceModule,
+      EnrolmentsModule,
+      ...(options.modules ?? []),
+    ],
+  })(TestAppModule);
   const app = await NestFactory.create(TestAppModule, {
     logger: false,
     abortOnError: false,

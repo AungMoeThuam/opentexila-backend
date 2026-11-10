@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AttendanceCaller } from './attendance.rules';
 
 import { PersonalAttendanceQueryDto } from './dto/attendance-query.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { Roles } from '../auth/roles.decorator';
 
 @Controller(['me/attendance-records', 'attendance/me'])
@@ -37,6 +38,34 @@ export class AttendanceRecordsController {
 
     return this.attendanceService.getPersonalAttendanceRecords({
       ...query,
+      studentId: user.id,
+    });
+  }
+
+  @Get('classes')
+  async getHistoryClassOptions(
+    @Query() query: PaginationQueryDto,
+    @CurrentUser() user: AttendanceCaller,
+  ) {
+    if (!user) {
+      throw new ApiException(
+        401,
+        'UNAUTHENTICATED',
+        'Authentication required.',
+      );
+    }
+
+    if (user.role !== 'student') {
+      throw new ApiException(
+        403,
+        'FORBIDDEN',
+        'Only students can access personal attendance records.',
+      );
+    }
+
+    return this.attendanceService.listHistoryClassOptions({
+      page: query.page,
+      limit: query.limit,
       studentId: user.id,
     });
   }

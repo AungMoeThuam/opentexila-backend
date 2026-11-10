@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
-**Status: student schedule, detail, check-in, roster materialisation, student history and the lecturer roster are implemented. Every route uses `AttendanceGuard`, accepting Bearer JWTs in JWT mode or a verified demo session in development mode. See [authentication](auth.md) and [development sign-in](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: student schedule, detail, check-in, roster materialisation, student history, history class options and the lecturer roster are implemented. Every route uses `AttendanceGuard`, accepting Bearer JWTs in JWT mode or a verified demo session in development mode. See [authentication](auth.md) and [development sign-in](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 
@@ -20,6 +20,7 @@
 | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Backend `#10` / Frontend `#7` | Validate browser location and record `present` or `late` |
 | `GET` | `/class-sessions/:classSessionId/records` | Assigned `lecturer`, `admin` | Backend `#12` / Frontend `#9` | Read-only attendance roster for a class session |
 | `GET` | `/me/attendance-records` | `student` | Backend `#11` / Frontend `#8` | Personal attendance history across class sessions |
+| `GET` | `/me/attendance-records/classes` | `student` | Backend `#17` / Frontend `#14` | Classes the student can pick in the attendance-history filter |
 
 ---
 
@@ -393,6 +394,62 @@ Returns the authenticated student's personal attendance history ordered by `clas
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
 | `403` | `FORBIDDEN` | Caller is not a `student` |
 | `422` | `VALIDATION_ERROR` | Invalid `page`, `limit`, `classId`, `from`, `to`, `status`, or `includeCancelled` |
+
+---
+
+### `GET /me/attendance-records/classes`
+
+Returns the classes a student can choose in the attendance-history class filter. A class appears when the student has a **current enrolment** in it, or **any saved attendance record** for one of its class sessions, including records on cancelled sessions. Former classes therefore stay available after an enrolment is removed. Each class appears once, however many records it has. `GET /me/classes` (Backend `#8`) is unchanged and still lists current enrolments only.
+
+- **Access**: `student` only. The student comes from the verified sign-in; no `studentId` is accepted.
+- **Ordering**: `term DESC, course.code ASC, section ASC, classes.id ASC`.
+- **Query parameters**:
+  - `page` (optional, default `1`, integer `1`–`10000`)
+  - `limit` (optional, default `20`, integer `1`–`100`)
+- The controller also answers on the legacy alias `/attendance/me/classes`; use `/me/attendance-records/classes`.
+- The options never depend on the history filters. Other query parameters, including `classId`, `from`, `to`, `status` and `includeCancelled`, are ignored.
+
+#### Success response — `200 OK`
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "course": {
+        "id": 1,
+        "code": "COS30043",
+        "name": "Interface Design and Development"
+      },
+      "section": "A",
+      "term": "2026-S2",
+      "lecturer": {
+        "id": 2,
+        "name": "Lecturer Demo"
+      },
+      "room_label": "EN402"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "totalPages": 1
+  }
+}
+```
+
+- `data` items use the same class summary as `GET /me/classes` and the `class` field of history rows.
+- A student with no enrolments and no records gets `data: []` and `meta.total: 0`.
+- A class known only from cancelled-session records is listed, but `GET /me/attendance-records?classId=…` returns no rows for it until `includeCancelled=true` is sent.
+
+#### Error responses
+
+| HTTP | `error.code` | When |
+| --- | --- | --- |
+| `401` | `UNAUTHENTICATED` | Missing or expired session |
+| `403` | `FORBIDDEN` | Caller is not a `student` |
+| `422` | `VALIDATION_ERROR` | Invalid `page` or `limit` |
 
 ---
 

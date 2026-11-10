@@ -269,3 +269,126 @@ test('student attendance history requires a signed-in student', async (t) => {
   // The guard lets a student reach the service (the fake database is offline).
   assert.equal((await get()).status, 503);
 });
+
+test('student history class options over HTTP', async (t) => {
+  const calls: any[] = [];
+  let rows: any[] = [
+    {
+      id: 7,
+      section: 'A',
+      term: '2026-S2',
+      room_label: 'EN402',
+      latitude: 3,
+      course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+      lecturer: { id: 2, name: 'Lecturer', email: 'private@example.com' },
+    },
+  ];
+  const builder: any = {};
+  for (const method of [
+    'innerJoinAndSelect',
+    'where',
+    'andWhere',
+    'orderBy',
+    'addOrderBy',
+    'skip',
+    'take',
+  ])
+    builder[method] = (...args: any[]) => {
+      calls.push([method, ...args]);
+      return builder;
+    };
+  builder.getManyAndCount = async () => [rows, rows.length];
+  const app = await startAttendanceApp(
+    {
+      ClassSession: {},
+      AttendanceRecord: {},
+      Class: { createQueryBuilder: () => builder },
+    },
+    { database: { isInitialized: true } },
+  );
+  t.after(() => app.close());
+  app.state.user = { ...app.state.user, id: 3, role: 'student' };
+  const get = (query = '') =>
+    fetch(`${app.base}/me/attendance-records/classes${query}`);
+
+  await t.test(
+    'returns class summaries scoped to the verified student',
+    async () => {
+      const response = await get('?page=2&limit=5&studentId=999');
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const body = await response.json();
+      assert.deepEqual(body.data, [
+        {
+          id: 7,
+          course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+          section: 'A',
+          term: '2026-S2',
+          lecturer: { id: 2, name: 'Lecturer' },
+          room_label: 'EN402',
+        },
+      ]);
+      assert.deepEqual(body.meta, {
+        page: 2,
+        limit: 5,
+        total: 1,
+        totalPages: 1,
+      });
+      assert.ok(calls.some((c) => c[0] === 'skip' && c[1] === 5));
+      assert.ok(calls.some((c) => c[0] === 'take' && c[1] === 5));
+      const scoped = calls.filter(
+        (c) => c[0] === 'where' || c[0] === 'andWhere',
+      );
+      assert.ok(scoped.length > 0);
+      assert.ok(
+        scoped.every((c) => c[2]?.studentId === 3),
+        'every predicate must bind the verified student id',
+      );
+    },
+  );
+
+  await t.test('history filters never narrow the options', async () => {
+    calls.length = 0;
+    const response = await get(
+      '?classId=1&status=absent&from=2026-01-01T00:00:00Z&includeCancelled=true',
+    );
+    assert.equal(response.status, 200);
+    const predicates = JSON.stringify(
+      calls.filter((c) => c[0] === 'where' || c[0] === 'andWhere'),
+    );
+    assert.equal(predicates.includes('classId'), false);
+    assert.equal(predicates.includes('status'), false);
+  });
+
+  await t.test('empty result', async () => {
+    rows = [];
+    const response = await get();
+    assert.deepEqual(await response.json(), {
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    });
+  });
+
+  await t.test('rejects invalid pagination before querying', async () => {
+    for (const query of ['page=0', 'page=10001', 'limit=0', 'limit=101']) {
+      calls.length = 0;
+      const response = await get('?' + query);
+      assert.equal(response.status, 422, query);
+      assert.equal((await response.json()).error.code, 'VALIDATION_ERROR');
+      assert.equal(calls.length, 0);
+    }
+  });
+
+  await t.test('rejects non-students and signed-out callers', async () => {
+    for (const role of ['lecturer', 'admin']) {
+      app.state.user = { ...app.state.user, role };
+      const response = await get();
+      assert.equal(response.status, 403, role);
+      assert.equal((await response.json()).error.code, 'FORBIDDEN');
+    }
+    app.state.signedIn = false;
+    const response = await get();
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'UNAUTHENTICATED');
+  });
+});

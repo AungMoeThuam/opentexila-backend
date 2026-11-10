@@ -1,6 +1,14 @@
 import { applyDecorators } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsIn, IsString, Length, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsString,
+  Length,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { QueryInteger } from '../../common/dto/query-integer.decorator';
 
 // Roles an admin may create. Admin accounts are never created through the API.
@@ -44,4 +52,19 @@ export class ResetPasswordDto {
 export class UserParamsDto {
   @QueryInteger(4294967295)
   userId!: number;
+}
+
+const ROLES = ['student', 'lecturer', 'admin'] as const;
+
+// Optional filters for GET /admin/users. Page and limit come from the base class.
+export class ListUsersQueryDto extends PaginationQueryDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @Transform(trimmed)
+  @IsString({ message: 'search must be 1 to 100 characters.' })
+  @Length(1, 100, { message: 'search must be 1 to 100 characters.' })
+  search?: string;
+
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsIn(ROLES, { message: 'role must be student, lecturer or admin.' })
+  role?: (typeof ROLES)[number];
 }

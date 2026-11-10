@@ -4,8 +4,14 @@ import { IsNull, type DataSource } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
 import { RefreshSession, User, type UserRole } from '../database/entities';
 import { ApiException, notFound } from '../common/api-exception';
+import { pageMeta } from '../common/query-reader';
 import { duplicateKey } from '../courses/class-management.rules';
-import type { CreateUserDto, ResetPasswordDto } from './dto/admin-user.dto';
+import { likePattern } from '../courses/courses.service';
+import type {
+  CreateUserDto,
+  ListUsersQueryDto,
+  ResetPasswordDto,
+} from './dto/admin-user.dto';
 
 export interface AdminUserDto {
   id: number;
@@ -47,6 +53,38 @@ const hashPassword = (password: string): Promise<string> =>
 @Injectable()
 export class AdminUsersService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}
+
+  // Search is a literal, case-insensitive substring of the name or email.
+  async listUsers(query: ListUsersQueryDto) {
+    const builder = this.database
+      .getRepository(User)
+      .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.name',
+        'user.email',
+        'user.role',
+        'user.status',
+        'user.must_change_password',
+      ]);
+    if (query.role !== undefined)
+      builder.andWhere('user.role = :role', { role: query.role });
+    if (query.search !== undefined)
+      builder.andWhere(
+        '(user.name LIKE :pattern OR user.email LIKE :pattern)',
+        { pattern: likePattern(query.search) },
+      );
+    const [users, total] = await builder
+      .orderBy('user.name', 'ASC')
+      .addOrderBy('user.id', 'ASC')
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit)
+      .getManyAndCount();
+    return {
+      data: users.map(toAdminUser),
+      meta: pageMeta(query.page, query.limit, total),
+    };
+  }
 
   async createUser(body: CreateUserDto): Promise<{ data: AdminUserDto }> {
     const values = {

@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Attendance](attendance.md) · [JWT setup and guards](../JWT_AUTH.md)
 
-**Status: JWT login, refresh, current profile, logout, password change, and admin account creation and password reset are implemented.** Paths are relative to `/api/v1`.
+**Status: JWT login, refresh, current profile, logout, password change, and admin account creation, password reset and user listing are implemented.** Paths are relative to `/api/v1`.
 
 Enable `JWT_AUTH_ENABLED=true`, set a random `JWT_SECRET`, and keep `DEV_AUTH_ENABLED=false`. These flags select the auth adapter, not global route protection. Unrelated feature endpoints remain public until a guard is explicitly applied. Existing attendance routes are guarded. The [demo adapter](../DEVELOPMENT_AUTH.md) remains available as a separate development mode; it does not use the JWT contract below. The frontend JWT adapter is separate work.
 
@@ -16,6 +16,7 @@ Enable `JWT_AUTH_ENABLED=true`, set a random `JWT_SECRET`, and keep `DEV_AUTH_EN
 | GET | `/auth/me` | Bearer access JWT | 200, current safe profile |
 | POST | `/auth/logout` | CSRF; refresh cookie if present | 204, session revoked and cookies cleared |
 | POST | `/auth/change-password` | Bearer access JWT | 204, password changed and all logins revoked |
+| GET | `/admin/users` | Admin | 200, one page of users with `meta` |
 | POST | `/admin/users` | Admin | 201, new student or lecturer account |
 | POST | `/admin/users/:userId/reset-password` | Admin | 204, temporary password set and all logins revoked |
 
@@ -120,6 +121,39 @@ Login is limited to 10 attempts/minute per IP and normalized email; password cha
 
 There is no public registration. Only an admin creates accounts, and the user must change the temporary password at first sign-in. Both endpoints use the same guard as the other admin features (`AttendanceGuard` with `@Roles('admin')`), so they also apply the JWT/demo-session checks, CSRF in demo mode, and `PASSWORD_CHANGE_REQUIRED`. Responses use `Cache-Control: no-store`. Passwords are never returned, logged or trimmed.
 
+### `GET /admin/users`
+
+Lists accounts so an admin can find a user, for example before a password reset.
+
+| Query | Rule | Default |
+| --- | --- | --- |
+| `search` | 1–100 characters after trimming. Case-insensitive substring of `name` or `email`. `%` and `_` match literally. | none |
+| `role` | `student`, `lecturer` or `admin` | all roles |
+| `page` | Integer, 1–10000 | `1` |
+| `limit` | Integer, 1–100 | `20` |
+
+Results are sorted by `name` A to Z, then `id`, so pages stay stable.
+
+Success: **200 OK**
+
+```json
+{
+  "data": [
+    {
+      "id": 12,
+      "name": "Student Two",
+      "email": "student.two@example.com",
+      "role": "student",
+      "must_change_password": true,
+      "is_active": true
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+No match returns `"data": []` with `"total": 0`. Password hashes and session data are never returned. Errors are 401, 403 (`FORBIDDEN` or `PASSWORD_CHANGE_REQUIRED`) and 422 `VALIDATION_ERROR` for a bad query value.
+
 ### `POST /admin/users`
 
 ```json
@@ -177,4 +211,4 @@ Success: **204 No Content** with no body. Passwords of `admin` accounts cannot b
 | 409 | `EMAIL_ALREADY_EXISTS` | Create: the email is in use. `fields.email` has the message. |
 | 422 | `VALIDATION_ERROR` | A field or `userId` is not valid. `fields` names each one. |
 
-Listing, editing, deactivating and deleting users, and email invitations are not part of this API.
+Editing, deactivating and deleting users, and email invitations are not part of this API.

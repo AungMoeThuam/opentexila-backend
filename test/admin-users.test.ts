@@ -33,6 +33,25 @@ test('admin account provisioning HTTP permissions, validation and responses', as
     return { identifiers: [{ id: 12 }] };
   };
   let target: any = null;
+  let listRows: any[] = [];
+  const builderCalls: any[] = [];
+  const listBuilder = () => {
+    const fake: any = {};
+    for (const method of [
+      'select',
+      'andWhere',
+      'orderBy',
+      'addOrderBy',
+      'skip',
+      'take',
+    ])
+      fake[method] = (...args: any[]) => {
+        builderCalls.push([method, ...args]);
+        return fake;
+      };
+    fake.getManyAndCount = async () => [listRows, listRows.length];
+    return fake;
+  };
   const updates: { entity: string; criteria: any; values: any }[] = [];
 
   const app = await startAttendanceApp(
@@ -46,6 +65,7 @@ test('admin account provisioning HTTP permissions, validation and responses', as
         findOneBy: async ({ id }: any) =>
           id === app.state.user.id ? app.state.user : null,
         insert: (values: any) => insert(values),
+        createQueryBuilder: () => listBuilder(),
       },
     },
     {
@@ -265,4 +285,131 @@ test('admin account provisioning HTTP permissions, validation and responses', as
       assert.deepEqual(updates, []);
     },
   );
+
+  await t.test('GET /admin/users is limited to signed-in admins', async () => {
+    for (const role of ['student', 'lecturer']) {
+      app.state.user = { ...admin(), role };
+      const response = await send('GET', '/admin/users');
+      assert.equal(response.status, 403, role);
+      assert.equal((await response.json()).error.code, 'FORBIDDEN');
+    }
+    app.state.user = { ...admin(), must_change_password: true };
+    let response = await send('GET', '/admin/users');
+    assert.equal(response.status, 403);
+    assert.equal(
+      (await response.json()).error.code,
+      'PASSWORD_CHANGE_REQUIRED',
+    );
+    app.state.user = admin();
+    app.state.signedIn = false;
+    response = await send('GET', '/admin/users');
+    assert.equal(response.status, 401);
+    app.state.signedIn = true;
+  });
+
+  await t.test(
+    'GET /admin/users lists users without private fields',
+    async () => {
+      listRows = [
+        {
+          id: 12,
+          name: 'Student Two',
+          email: 'student.two@example.com',
+          role: 'student',
+          status: 'active',
+          must_change_password: true,
+          password_hash: 'must-not-appear',
+          session_version: 4,
+        },
+      ];
+      builderCalls.length = 0;
+      const response = await send('GET', '/admin/users');
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(await response.json(), {
+        data: [
+          {
+            id: 12,
+            name: 'Student Two',
+            email: 'student.two@example.com',
+            role: 'student',
+            must_change_password: true,
+            is_active: true,
+          },
+        ],
+        meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      });
+      assert.deepEqual(
+        builderCalls.filter(([m]) => ['skip', 'take'].includes(m)),
+        [
+          ['skip', 0],
+          ['take', 20],
+        ],
+      );
+      assert.deepEqual(
+        builderCalls.filter(([m]) => m === 'orderBy' || m === 'addOrderBy'),
+        [
+          ['orderBy', 'user.name', 'ASC'],
+          ['addOrderBy', 'user.id', 'ASC'],
+        ],
+      );
+    },
+  );
+
+  await t.test(
+    'GET /admin/users applies filters, escapes search and pages',
+    async () => {
+      listRows = [
+        {
+          id: 3,
+          name: 'A',
+          email: 'a@x.io',
+          role: 'lecturer',
+          status: 'inactive',
+          must_change_password: false,
+        },
+      ];
+      builderCalls.length = 0;
+      const response = await send(
+        'GET',
+        '/admin/users?search=%2050%25_%20&role=lecturer&page=3&limit=10',
+      );
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.data[0].is_active, false);
+      assert.equal(body.meta.page, 3);
+      assert.equal(body.meta.limit, 10);
+      const wheres = builderCalls.filter(([m]) => m === 'andWhere');
+      assert.deepEqual(wheres[0], [
+        'andWhere',
+        'user.role = :role',
+        { role: 'lecturer' },
+      ]);
+      assert.deepEqual(wheres[1][2], { pattern: '%50\\%\\_%' });
+      assert.deepEqual(
+        builderCalls.filter(([m]) => ['skip', 'take'].includes(m)),
+        [
+          ['skip', 20],
+          ['take', 10],
+        ],
+      );
+    },
+  );
+
+  await t.test('GET /admin/users validates the query', async () => {
+    for (const [field, query] of [
+      ['limit', 'limit=0'],
+      ['limit', 'limit=101'],
+      ['page', 'page=0'],
+      ['role', 'role=teacher'],
+      ['search', 'search='],
+      ['search', `search=${'a'.repeat(101)}`],
+    ]) {
+      const response = await send('GET', `/admin/users?${query}`);
+      assert.equal(response.status, 422, query);
+      const error = (await response.json()).error;
+      assert.equal(error.code, 'VALIDATION_ERROR');
+      assert.ok(error.fields[field], `${field} message`);
+    }
+  });
 });

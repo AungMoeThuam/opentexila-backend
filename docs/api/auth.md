@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Attendance](attendance.md) · [JWT setup and guards](../JWT_AUTH.md)
 
-**Status: JWT login, refresh, current profile, logout and password change are implemented. Admin account provisioning/reset remain planned.** Paths are relative to `/api/v1`.
+**Status: JWT login, refresh, current profile, logout, password change, and admin account creation and password reset are implemented.** Paths are relative to `/api/v1`.
 
 Enable `JWT_AUTH_ENABLED=true`, set a random `JWT_SECRET`, and keep `DEV_AUTH_ENABLED=false`. These flags select the auth adapter, not global route protection. Unrelated feature endpoints remain public until a guard is explicitly applied. Existing attendance routes are guarded. The [demo adapter](../DEVELOPMENT_AUTH.md) remains available as a separate development mode; it does not use the JWT contract below. The frontend JWT adapter is separate work.
 
@@ -16,6 +16,8 @@ Enable `JWT_AUTH_ENABLED=true`, set a random `JWT_SECRET`, and keep `DEV_AUTH_EN
 | GET | `/auth/me` | Bearer access JWT | 200, current safe profile |
 | POST | `/auth/logout` | CSRF; refresh cookie if present | 204, session revoked and cookies cleared |
 | POST | `/auth/change-password` | Bearer access JWT | 204, password changed and all logins revoked |
+| POST | `/admin/users` | Admin | 201, new student or lecturer account |
+| POST | `/admin/users/:userId/reset-password` | Admin | 204, temporary password set and all logins revoked |
 
 ## Token lifecycle
 
@@ -114,14 +116,65 @@ Controller/guard errors use the shared envelope:
 
 Login is limited to 10 attempts/minute per IP and normalized email; password changes to 10/minute per IP; other auth operations to 60/minute per IP per operation. The bounded limiter is per-process, resets on restart and ignores forwarded IP headers. Multi-instance deployments need a shared limiter. Malformed JSON rejected before controller dispatch uses Nest's parser error response. Successful auth responses and handled controller/guard errors are not cacheable.
 
-## Planned account administration (not implemented)
+## Admin account administration
 
-The following routes are design targets only and currently have no backend handlers.
+There is no public registration. Only an admin creates accounts, and the user must change the temporary password at first sign-in. Both endpoints use the same guard as the other admin features (`AttendanceGuard` with `@Roles('admin')`), so they also apply the JWT/demo-session checks, CSRF in demo mode, and `PASSWORD_CHANGE_REQUIRED`. Responses use `Cache-Control: no-store`. Passwords are never returned, logged or trimmed.
 
 ### `POST /admin/users`
 
-An admin would create a student or lecturer account using `name`, `email`, `role` and `temporary_password`. The password would be hashed with Argon2id, and `must_change_password` set to true. No invitation/activation flow or public self-registration is planned here.
+```json
+{
+  "name": "Student Two",
+  "email": "student.two@example.com",
+  "role": "student",
+  "temporary_password": "<temporary-password>"
+}
+```
 
-### `POST /admin/users/:id/reset-password`
+| Field | Rule |
+| --- | --- |
+| `name` | 1–100 characters after trimming |
+| `email` | Valid email, at most 254 characters. Trimmed and stored in lower case. Must be unique in any letter case. |
+| `role` | `student` or `lecturer`. `admin` is rejected. |
+| `temporary_password` | String of 12–1024 characters. Stored as an Argon2id hash. |
 
-An admin would set a temporary password, require a subsequent password change, increment `session_version` and revoke all refresh sessions. Implement role checks and validation with the endpoint before exposing it.
+Unknown fields are stripped, so `status`, `must_change_password` and similar fields cannot be set by the caller. The account is created `active` with `must_change_password: true`.
+
+Success: **201 Created**
+
+```json
+{
+  "data": {
+    "id": 12,
+    "name": "Student Two",
+    "email": "student.two@example.com",
+    "role": "student",
+    "must_change_password": true,
+    "is_active": true
+  }
+}
+```
+
+### `POST /admin/users/:userId/reset-password`
+
+```json
+{ "temporary_password": "<temporary-password>" }
+```
+
+`userId` is an integer from 1 to 4294967295. The temporary password follows the same rule as above. In one transaction the server stores the new Argon2id hash, sets `must_change_password` to `true`, adds 1 to `session_version` and revokes every open refresh session of that user. The user row is locked before the sessions, as in the other auth changes.
+
+Success: **204 No Content** with no body. Passwords of `admin` accounts cannot be reset here.
+
+### Errors
+
+| HTTP | Code | When |
+| --- | --- | --- |
+| 401 | `UNAUTHENTICATED` | No valid access token or session |
+| 403 | `FORBIDDEN` | The caller is not an admin, or the target of a reset is an admin account |
+| 403 | `PASSWORD_CHANGE_REQUIRED` | The calling admin must change their own password first |
+| 403 | `CSRF_INVALID` | Demo-session mode only: missing or wrong CSRF token |
+| 404 | `RESOURCE_NOT_FOUND` | Reset: no user with this `userId` |
+| 409 | `EMAIL_ALREADY_EXISTS` | Create: the email is in use. `fields.email` has the message. |
+| 422 | `VALIDATION_ERROR` | A field or `userId` is not valid. `fields` names each one. |
+
+Listing, editing, deactivating and deleting users, and email invitations are not part of this API.

@@ -125,5 +125,50 @@ export async function adminUsersIntegration(t: TestContext, ds: DataSource) {
       );
       assert.equal((await row(result.insertId)).password_hash, 'x');
     });
+
+    await t.test('list searches, filters and pages real rows', async () => {
+      const find = (query: any) =>
+        service.listUsers({ page: 1, limit: 100, ...query });
+      const byName = await find({ search: suffix.toUpperCase() });
+      assert.deepEqual(
+        byName.data.map((user) => user.email).sort(),
+        [
+          `provisioned-${suffix}@example.com`,
+          `provisioning-admin-${suffix}@example.com`,
+        ].sort(),
+      );
+      const provisioned = byName.data.find((user) => user.id === userId)!;
+      assert.deepEqual(provisioned, {
+        id: userId,
+        name: 'Provisioned Student',
+        email,
+        role: 'student',
+        must_change_password: true,
+        is_active: true,
+      });
+      assert.equal(JSON.stringify(byName).includes('password_hash'), false);
+      const admins = await find({ search: suffix, role: 'admin' });
+      assert.deepEqual(
+        admins.data.map((user) => user.role),
+        ['admin'],
+      );
+      // LIKE wildcards are literal, so `%` and `_` match nothing here.
+      assert.equal((await find({ search: '%' })).meta.total, 0);
+      assert.equal((await find({ search: '_' })).meta.total, 0);
+      const students = await find({ role: 'student' });
+      const paged = await service.listUsers({
+        page: 2,
+        limit: 1,
+        role: 'student',
+      });
+      assert.equal(paged.meta.total, students.meta.total);
+      assert.equal(paged.meta.totalPages, students.meta.total);
+      assert.equal(paged.data[0]?.id, students.data[1]?.id);
+      const names = students.data.map((user) => user.name);
+      assert.deepEqual(
+        names,
+        [...names].sort((a, b) => a.localeCompare(b)),
+      );
+    });
   });
 }

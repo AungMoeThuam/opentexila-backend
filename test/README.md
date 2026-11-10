@@ -12,8 +12,8 @@ Do not run build-backed test commands simultaneously: each build replaces `dist/
 
 - `attendance-history.service.test.ts`: response mapping, private-field exclusion, empty results and explicit failures. Repository results are stubbed; the stub does not parse SQL.
 - `attendance-history.controller.test.ts`: DTO validation and forwarding the verified identity to the service. Direct controller tests do not prove HTTP guard wiring.
-- `attendance-records.test.ts`: real HTTP routing, guard behaviour and safe errors with fake repositories.
-- `attendance-history.integration.ts`: real MySQL history filtering, student isolation, ordering, paging, date boundaries and cancelled records.
+- `attendance-records.test.ts`: real HTTP routing, guard behaviour and safe errors with fake repositories, including `GET /me/attendance-records/classes`. Its fake query builder only proves the verified student id reaches the query; the SQL itself is verified against MySQL.
+- `attendance-history.integration.ts`: real MySQL history filtering, student isolation, ordering, paging, date boundaries and cancelled records, plus the history class-filter options (current, former and cancelled-only classes, dedupe across pages, ordering and isolation).
 - `attendance.test.ts` and `attendance.integration.ts`: attendance rules, request handling, transactions and concurrency at their respective levels.
 - Authentication, cookies, database configuration, migrations, seeds, development auth and stack tests retain their separate coverage.
 

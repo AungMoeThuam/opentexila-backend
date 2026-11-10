@@ -9,7 +9,10 @@ import {
   AttendanceRecordSchema,
   AttendanceStatus,
 } from '../database/entities/attendance-record.schema';
+import { Class } from '../database/entities';
+import { pageMeta } from '../common/query-reader';
 import { toClassSummary, toIso } from './class-summary';
+import type { ClassSummaryDto } from './class-summary';
 import type {
   PaginatedResponse,
   PersonalAttendanceRecordDto,
@@ -26,9 +29,56 @@ export interface PersonalAttendanceQuery {
   includeCancelled?: boolean;
 }
 
+export interface HistoryClassOptionsQuery {
+  studentId: number;
+  page?: number;
+  limit?: number;
+}
+
 @Injectable()
 export class AttendanceHistoryService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}
+
+  // Classes a student can pick in the history filter: current Enrolments plus
+  // any Class with a saved Attendance record (former or cancelled-only). The
+  // EXISTS predicates keep one row per Class, so pages never repeat a Class.
+  async listHistoryClassOptions({
+    studentId,
+    page = 1,
+    limit = 20,
+  }: HistoryClassOptionsQuery): Promise<PaginatedResponse<ClassSummaryDto>> {
+    if (!this.database?.isInitialized) {
+      throw new ServiceUnavailableException(
+        'Attendance database is unavailable.',
+      );
+    }
+
+    const [classes, total] = await this.database
+      .getRepository(Class)
+      .createQueryBuilder('class')
+      .innerJoinAndSelect('class.course', 'course')
+      .innerJoinAndSelect('class.lecturer', 'lecturer')
+      .where(
+        `(EXISTS (SELECT 1 FROM enrolments e
+                  WHERE e.class_id = class.id AND e.student_id = :studentId)
+          OR EXISTS (SELECT 1 FROM attendance_records ar
+                     JOIN class_sessions s ON s.id = ar.class_session_id
+                     WHERE s.class_id = class.id AND ar.student_id = :studentId))`,
+        { studentId },
+      )
+      .orderBy('class.term', 'DESC')
+      .addOrderBy('course.code', 'ASC')
+      .addOrderBy('class.section', 'ASC')
+      .addOrderBy('class.id', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data: classes.map(toClassSummary),
+      meta: pageMeta(page, limit, total),
+    };
+  }
 
   async getPersonalAttendanceRecords({
     studentId,

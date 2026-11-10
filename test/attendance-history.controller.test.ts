@@ -13,6 +13,13 @@ test('AttendanceRecordsController routes and metadata', () => {
   const paths = Reflect.getMetadata(PATH_METADATA, AttendanceRecordsController);
 
   assert.deepEqual(paths, ['me/attendance-records', 'attendance/me']);
+  assert.equal(
+    Reflect.getMetadata(
+      PATH_METADATA,
+      AttendanceRecordsController.prototype.getHistoryClassOptions,
+    ),
+    'classes',
+  );
 });
 
 test('AttendanceRecordsController and DTO pipeline enforce authentication, authorization, and validation', async (t) => {

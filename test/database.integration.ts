@@ -21,6 +21,7 @@ import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
 import { adminUsersIntegration } from './admin-users.integration.ts';
 import { attendanceIntegration } from './attendance.integration.ts';
+import { timetableIntegration } from './timetable.integration.ts';
 
 // This command owns its container. It never reads .env or connects to the app database.
 test(
@@ -708,6 +709,7 @@ test(
       await attendanceHistoryIntegration(t, ds!);
       await enrolmentsIntegration(t, ds!, fixtures);
       await coursesIntegration(t, ds!, fixtures);
+      await timetableIntegration(t, ds!);
       await authIntegration(t, ds!);
       await adminUsersIntegration(t, ds!);
       await t.test(

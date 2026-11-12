@@ -20,6 +20,9 @@
 | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Backend `#10` / Frontend `#7` | Validate browser location and record `present` or `late` |
 | `POST` | `/class-sessions/:classSessionId/finalise` | Assigned `lecturer` | Backend `#13` | Mark remaining `pending` students `absent` after the session has ended |
 | `GET` | `/class-sessions/:classSessionId/records` | Assigned `lecturer`, `admin` | Backend `#12` / Frontend `#9` | Read-only attendance roster for a class session |
+| `GET` | `/classes/:classId/class-sessions` | `admin` | Backend `#19` / Frontend `#17` | List the sessions of one class with attendance counts |
+| `POST` | `/classes/:classId/class-sessions` | `admin` | Backend `#19` / Frontend `#17` | Schedule a new session for a class |
+| `POST` | `/class-sessions/:classSessionId/cancel` | `admin` | Backend `#19` / Frontend `#17` | Cancel a session that has not ended; keeps its attendance records |
 | `GET` | `/me/attendance-records` | `student` | Backend `#11` / Frontend `#8` | Personal attendance history across class sessions |
 | `GET` | `/me/attendance-records/classes` | `student` | Backend `#17` / Frontend `#14` | Classes the student can pick in the attendance-history filter |
 
@@ -527,3 +530,113 @@ Migration `1793491200000-SessionVenueSnapshot.ts` adds non-null room/coordinate/
 `npm test` includes strict input validation, exact time/accuracy/freshness boundaries, geofence math, pending-state preservation, replay behavior, access scoping, safe DTOs and real Nest HTTP tests for authentication/CSRF/error envelopes. `npm run test:db` uses only its owned disposable MySQL container and covers concurrent materialisation/check-ins, venue snapshots, pagination/scoping, location failures and migration backfill/rollback. It never seeds the application database.
 
 The local Docker stack supports authenticated browser-to-API verification with the development adapter enabled. Production login still requires the separate auth implementation.
+
+## Admin session management
+
+Admins list, schedule and cancel the sessions of a class. All three endpoints are admin only and use `AttendanceGuard`, so the same sign-in, CSRF (demo mode) and `PASSWORD_CHANGE_REQUIRED` rules apply. Responses use `Cache-Control: no-store`. Timetable rescheduling (`GET /class-sessions`, `PATCH /class-sessions/batch`) is a separate feature and is not changed here.
+
+The path for cancelling is `POST /class-sessions/:classSessionId/cancel`, in the same style as `…/finalise`. It has no request body. A `PATCH` on `/class-sessions/:classSessionId` is not used, because it would clash with the static route `PATCH /class-sessions/batch`.
+
+### The session object
+
+```json
+{
+  "id": 31,
+  "class_id": 7,
+  "room_label": "EN402",
+  "latitude": "3.121500",
+  "longitude": "101.656800",
+  "radius_m": "75.00",
+  "starts_at": "2026-11-20T01:00:00.000Z",
+  "late_after": "2026-11-20T01:15:00.000Z",
+  "ends_at": "2026-11-20T03:00:00.000Z",
+  "state": "scheduled",
+  "availability": "upcoming",
+  "attendance": { "present": 0, "late": 0, "absent": 0, "pending": 0 }
+}
+```
+
+- `state` is the saved state: `scheduled` or `cancelled`.
+- `availability` comes from the server clock: `cancelled`, `upcoming`, `in_progress` or `ended`. It is not stored.
+- `attendance` counts the saved records by status. Pending rows exist only after the session has started.
+- Times are UTC with a `Z` suffix. Decimal fields are strings, as everywhere else in the API.
+
+### `GET /classes/:classId/class-sessions`
+
+| Query | Rule | Default |
+| --- | --- | --- |
+| `state` | `scheduled` or `cancelled` | both |
+| `page` | Integer, 1–10000 | `1` |
+| `limit` | Integer, 1–100 | `20` |
+
+Sorted by `starts_at` from early to late, then `id`, so pages stay stable. Success: **200 OK**
+
+```json
+{
+  "data": [ { "...": "session object" } ],
+  "context": {
+    "class": {
+      "id": 7,
+      "course": { "id": 1, "code": "COS30043", "name": "Interface Design" },
+      "section": "A",
+      "term": "2026-S2",
+      "lecturer": { "id": 2, "name": "Lecturer One" },
+      "room_label": "EN402"
+    }
+  },
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+A class with no sessions returns `"data": []` with `"total": 0`.
+
+### `POST /classes/:classId/class-sessions`
+
+```json
+{
+  "starts_at": "2026-11-20T01:00:00.000Z",
+  "late_after": "2026-11-20T01:15:00.000Z",
+  "ends_at": "2026-11-20T03:00:00.000Z"
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `starts_at` | UTC timestamp `YYYY-MM-DDTHH:mm:ss[.sss]Z`. Must be later than the server time when the request is saved. |
+| `late_after` | UTC timestamp. Not before `starts_at`, and before `ends_at`. |
+| `ends_at` | UTC timestamp. After `starts_at`. |
+
+Unknown fields are stripped, so `state`, `room_label` and the other venue fields cannot be set. The new session is `scheduled`. It copies the venue of the class (`room_label`, `latitude`, `longitude`, `radius_m`) at this moment, so a later change to the class does not move it. Attendance rosters are still created by the existing check-in flow when the session starts.
+
+The server locks the class row, then checks for conflicts, so two requests for the same class cannot both pass the checks. A scheduled session conflicts when its time overlaps another **scheduled** session of the same class, of the same lecturer, or in the same room (letters and spacing ignored). Overlap means `starts_at < other.ends_at` and `other.starts_at < ends_at`, so sessions that touch end to start are allowed. Cancelled sessions never cause a conflict. A session with the same class and the same `starts_at` as an existing session, cancelled or not, is a duplicate.
+
+Success: **201 Created** with `{ "data": { session object } }`.
+
+### `POST /class-sessions/:classSessionId/cancel`
+
+No request body. The server locks the class, then the session, and reads the server time after both locks, in the same order as check-in and finalisation. A check-in and a cancellation that arrive together are therefore handled one after the other: a check-in saved before the cancellation stays, and every check-in after it receives `409 CLASS_CANCELLED`.
+
+| Session now | Result |
+| --- | --- |
+| `upcoming` | Cancelled. |
+| `in_progress` | Cancelled. Present and Late records already saved are kept. |
+| `ended` | `409 CLASS_SESSION_ENDED`. History of an ended session is not changed. |
+| `cancelled` | `200`, unchanged. Repeating the request is safe. |
+
+Cancelling never deletes or changes attendance records, and it never creates absences. Finalisation ignores cancelled sessions. Sessions are never deleted. A cancelled session can not be reinstated through this API.
+
+Success: **200 OK** with `{ "data": { session object } }` and `"state": "cancelled"`.
+
+### Errors
+
+| HTTP | `error.code` | When |
+| --- | --- | --- |
+| `401` | `UNAUTHENTICATED` | No valid sign-in |
+| `403` | `FORBIDDEN` | The caller is not an admin |
+| `403` | `PASSWORD_CHANGE_REQUIRED` | The calling admin must change the password first |
+| `403` | `CSRF_INVALID` | Demo mode only: missing or wrong CSRF token |
+| `404` | `RESOURCE_NOT_FOUND` | The class or session does not exist |
+| `409` | `CLASS_SESSION_EXISTS` | The class already has a session with this `starts_at` |
+| `409` | `SCHEDULE_CONFLICT` | The time overlaps a scheduled session of the same class, lecturer or room |
+| `409` | `CLASS_SESSION_ENDED` | Cancel: the session has already ended |
+| `422` | `VALIDATION_ERROR` | An ID, query value or field is not valid, or `starts_at` is not in the future. `fields` names each one. |

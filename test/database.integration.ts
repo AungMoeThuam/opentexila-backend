@@ -21,6 +21,7 @@ import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
 import { adminUsersIntegration } from './admin-users.integration.ts';
 import { announcementsIntegration } from './announcements.integration.ts';
+import { classSessionsAdminIntegration } from './class-sessions-admin.integration.ts';
 import { attendanceIntegration } from './attendance.integration.ts';
 import { timetableIntegration } from './timetable.integration.ts';
 import { finalisationIntegration } from './finalisation.integration.ts';
@@ -746,6 +747,7 @@ test(
       await authIntegration(t, ds!);
       await adminUsersIntegration(t, ds!);
       await announcementsIntegration(t, ds!);
+      await classSessionsAdminIntegration(t, ds!);
       await t.test(
         'real AppModule wires JWT attendance protection without protecting example routes',
         () => {

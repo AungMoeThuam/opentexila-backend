@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { jwtAuthEnabled } from './auth/auth.config';
 import { devAuthEnabled } from './dev/dev-auth';
 import { TimetableModule } from './timetable/timetable.module';
+import { ClassSessionsModule } from './class-sessions/class-sessions.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { TimetableModule } from './timetable/timetable.module';
     AdminUsersModule,
     AnnouncementsModule,
     TimetableModule,
+    ClassSessionsModule,
     ...(jwtAuthEnabled() ? [AuthModule] : []),
     ...(devAuthEnabled() ? [DevAuthModule] : []),
     ...(process.env.NODE_ENV === 'development' ? [ExamplesModule] : []),

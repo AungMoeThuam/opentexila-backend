@@ -7,7 +7,7 @@ import type { AuthenticatedUser } from '../auth/auth-request';
 // Who may see a class and its announcements: any admin, the assigned lecturer,
 // and enrolled students. Other users get the same answer as for a missing class,
 // so the API never shows which classes exist. Later announcement features
-// (create, like, comment) reuse this check.
+// (create, edit, delete, like, comment) reuse this check.
 @Injectable()
 export class AnnouncementAccessService {
   constructor(@Inject(DATABASE) private readonly database: DataSource) {}

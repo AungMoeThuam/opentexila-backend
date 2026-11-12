@@ -2,35 +2,35 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes and enrolments](enrolments.md)
 
-**Status: reading announcements (list for all classes, list for one class, and get one) is implemented. Creating, editing and deleting posts, likes and comments are planned in the next backend issues.** Paths are relative to `/api/v1`.
+**Status: reading announcements (list for all classes, list for one class, and get one) and writing them (create, edit, delete) are implemented. Likes and comments are planned in the next backend issue.** Paths are relative to `/api/v1`.
 
 A lecturer posts news to one of their classes, for example a class change or a reminder. Students of that class read the posts, like them and write comments. Pinned posts are not planned.
 
 ## Endpoint summary
 
-| Method | Path | Allowed roles | Status |
-| --- | --- | --- | --- |
-| GET | `/announcements` | Lecturer (own classes), student (enrolled classes), admin (all) | Implemented |
-| GET | `/classes/:classId/announcements` | Assigned lecturer, enrolled student, admin | Implemented |
-| GET | `/announcements/:announcementId` | Assigned lecturer, enrolled student, admin | Implemented |
-| POST | `/classes/:classId/announcements` | Assigned lecturer | Planned (write API) |
-| PATCH | `/announcements/:announcementId` | Author | Planned (write API) |
-| DELETE | `/announcements/:announcementId` | Author, admin | Planned (write API) |
-| PUT, DELETE | `/announcements/:announcementId/like` | Assigned lecturer, enrolled student | Planned (likes and comments API) |
-| GET, POST | `/announcements/:announcementId/comments` | Assigned lecturer, enrolled student (GET also admin) | Planned (likes and comments API) |
-| DELETE | `/comments/:commentId` | Author, class lecturer, admin | Planned (likes and comments API) |
+| Method      | Path                                      | Allowed roles                                                   | Status                           |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------- | -------------------------------- |
+| GET         | `/announcements`                          | Lecturer (own classes), student (enrolled classes), admin (all) | Implemented                      |
+| GET         | `/classes/:classId/announcements`         | Assigned lecturer, enrolled student, admin                      | Implemented                      |
+| GET         | `/announcements/:announcementId`          | Assigned lecturer, enrolled student, admin                      | Implemented                      |
+| POST        | `/classes/:classId/announcements`         | Assigned lecturer                                               | Implemented                      |
+| PATCH       | `/announcements/:announcementId`          | Author (the assigned lecturer)                                  | Implemented                      |
+| DELETE      | `/announcements/:announcementId`          | Author (the assigned lecturer), admin                           | Implemented                      |
+| PUT, DELETE | `/announcements/:announcementId/like`     | Assigned lecturer, enrolled student                             | Planned (likes and comments API) |
+| GET, POST   | `/announcements/:announcementId/comments` | Assigned lecturer, enrolled student (GET also admin)            | Planned (likes and comments API) |
+| DELETE      | `/comments/:commentId`                    | Author, class lecturer, admin                                   | Planned (likes and comments API) |
 
 ## Who can see what
 
-| Action | Lecturer of the class | Enrolled student | Admin | Other users |
-| --- | --- | --- | --- | --- |
-| Read announcements and comments | Yes | Yes | Yes | No |
-| Create an announcement | Yes | No | No | No |
-| Edit an announcement | Own posts only | No | No | No |
-| Delete an announcement | Own posts only | No | Any | No |
-| Like or unlike | Yes | Yes | No | No |
-| Write a comment | Yes | Yes | No | No |
-| Delete a comment | Any comment on own class | Own comments only | Any | No |
+| Action                          | Lecturer of the class    | Enrolled student  | Admin | Other users |
+| ------------------------------- | ------------------------ | ----------------- | ----- | ----------- |
+| Read announcements and comments | Yes                      | Yes               | Yes   | No          |
+| Create an announcement          | Yes                      | No                | No    | No          |
+| Edit an announcement            | Own posts only           | No                | No    | No          |
+| Delete an announcement          | Own posts only           | No                | Any   | No          |
+| Like or unlike                  | Yes                      | Yes               | No    | No          |
+| Write a comment                 | Yes                      | Yes               | No    | No          |
+| Delete a comment                | Any comment on own class | Own comments only | Any   | No          |
 
 The rules are checked on the server. A class or post that the caller may not see returns `404 RESOURCE_NOT_FOUND`, the same answer as for a missing one, so the API does not show which classes exist. Every endpoint needs a signed-in user and uses the same guard as the other features. Responses use `Cache-Control: no-store`.
 
@@ -38,11 +38,11 @@ The rules are checked on the server. A class or post that the caller may not see
 
 Migration `1793750400000-Announcements.ts` creates three tables. IDs are unsigned integers and dates are UTC `DATETIME(3)`.
 
-| Table | Columns |
-| --- | --- |
-| `announcements` | `id`, `class_id` (FK `classes`), `author_id` (FK `users`), `category` (`general`, `class_change`, `reminder`, `exam`), `title` (1–150), `body` (1–5000), `created_at`, `updated_at` |
-| `announcement_likes` | `announcement_id` (FK, delete cascade), `user_id` (FK), `created_at`. Primary key (`announcement_id`, `user_id`): one like for each user and post. |
-| `announcement_comments` | `id`, `announcement_id` (FK, delete cascade), `author_id` (FK `users`), `body` (1–1000), `created_at` |
+| Table                   | Columns                                                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `announcements`         | `id`, `class_id` (FK `classes`), `author_id` (FK `users`), `category` (`general`, `class_change`, `reminder`, `exam`), `title` (1–150), `body` (1–5000), `created_at`, `updated_at` |
+| `announcement_likes`    | `announcement_id` (FK, delete cascade), `user_id` (FK), `created_at`. Primary key (`announcement_id`, `user_id`): one like for each user and post.                                  |
+| `announcement_comments` | `id`, `announcement_id` (FK, delete cascade), `author_id` (FK `users`), `body` (1–1000), `created_at`                                                                               |
 
 ## The announcement object
 
@@ -74,20 +74,20 @@ Migration `1793750400000-Announcements.ts` creates three tables. IDs are unsigne
 
 One list of announcements from **all** the classes the caller may see: the enrolled classes of a student, the taught classes of a lecturer, every class for an admin. It powers the "Announcements" page in the navigation.
 
-| Query | Rule | Default |
-| --- | --- | --- |
-| `classId` | Integer, 1–4294967295. Narrows the list to one class. A class the caller may not see, or that does not exist, returns `404`. | all visible classes |
-| `search` | 1–100 characters after trimming. Case-insensitive match on `title` or `body`. `%` and `_` match literally. | none |
-| `category` | `general`, `class_change`, `reminder` or `exam` | all |
-| `sort` | `newest`, `oldest` or `most_liked` | `newest` |
-| `page` | Integer, 1–10000 | `1` |
-| `limit` | Integer, 1–100 | `20` |
+| Query      | Rule                                                                                                                         | Default             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `classId`  | Integer, 1–4294967295. Narrows the list to one class. A class the caller may not see, or that does not exist, returns `404`. | all visible classes |
+| `search`   | 1–100 characters after trimming. Case-insensitive match on `title` or `body`. `%` and `_` match literally.                   | none                |
+| `category` | `general`, `class_change`, `reminder` or `exam`                                                                              | all                 |
+| `sort`     | `newest`, `oldest` or `most_liked`                                                                                           | `newest`            |
+| `page`     | Integer, 1–10000                                                                                                             | `1`                 |
+| `limit`    | Integer, 1–100                                                                                                               | `20`                |
 
 Sorting, search and paging work as in the per-class list below. Success: **200 OK**
 
 ```json
 {
-  "data": [ { "...": "announcement object, with its class" } ],
+  "data": [{ "...": "announcement object, with its class" }],
   "meta": { "page": 1, "limit": 20, "total": 24, "totalPages": 2 }
 }
 ```
@@ -96,13 +96,13 @@ There is no `context` here, because the posts come from several classes. Use eac
 
 ### `GET /classes/:classId/announcements`
 
-| Query | Rule | Default |
-| --- | --- | --- |
-| `search` | 1–100 characters after trimming. Case-insensitive match on `title` or `body`. `%` and `_` match literally. | none |
-| `category` | `general`, `class_change`, `reminder` or `exam` | all |
-| `sort` | `newest`, `oldest` or `most_liked` | `newest` |
-| `page` | Integer, 1–10000 | `1` |
-| `limit` | Integer, 1–100 | `20` |
+| Query      | Rule                                                                                                       | Default  |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | -------- |
+| `search`   | 1–100 characters after trimming. Case-insensitive match on `title` or `body`. `%` and `_` match literally. | none     |
+| `category` | `general`, `class_change`, `reminder` or `exam`                                                            | all      |
+| `sort`     | `newest`, `oldest` or `most_liked`                                                                         | `newest` |
+| `page`     | Integer, 1–10000                                                                                           | `1`      |
+| `limit`    | Integer, 1–100                                                                                             | `20`     |
 
 Sort order: `newest` is `created_at` new to old; `oldest` is old to new; `most_liked` is `like_count` high to low, then `created_at` new to old. Every sort ends with `id`, so pages stay stable.
 
@@ -110,7 +110,7 @@ Success: **200 OK**
 
 ```json
 {
-  "data": [ { "...": "announcement object" } ],
+  "data": [{ "...": "announcement object" }],
   "context": {
     "class": {
       "id": 7,
@@ -131,17 +131,54 @@ Success: **200 OK**
 
 Success: **200 OK** with `{ "data": { announcement object } }`.
 
+### `POST /classes/:classId/announcements`
+
+Only the lecturer assigned to the class may call it. The author is always the signed-in user.
+
+```json
+{
+  "category": "class_change",
+  "title": "Tomorrow's class moves to EN305",
+  "body": "Please go to room EN305."
+}
+```
+
+| Field      | Rule                                                                            |
+| ---------- | ------------------------------------------------------------------------------- |
+| `category` | Optional. `general`, `class_change`, `reminder` or `exam`. Default `general`.   |
+| `title`    | 1–150 characters after trimming                                                 |
+| `body`     | 1–5000 characters after trimming. Plain text; the server does not interpret it. |
+
+Unknown fields are stripped. The caller cannot set `author_id`, `class_id`, `created_at`, `updated_at` or the counts. Success: **201 Created** with `{ "data": { announcement object } }`. `like_count` and `comment_count` are `0` and `liked_by_me` is `false`.
+
+### `PATCH /announcements/:announcementId`
+
+Only the author may edit, and the author must still be the lecturer assigned to the class. Send at least one of `category`, `title`, `body`, with the same rules as create. The server sets `updated_at` and never changes `created_at`, the class or the author. A body with none of the three fields returns `422` with the message under `fields.body`.
+
+Success: **200 OK** with `{ "data": { announcement object } }`.
+
+### `DELETE /announcements/:announcementId`
+
+The author, or any admin, may delete. The database deletes the post's likes and comments with it. Success: **204 No Content** with no body.
+
 ## Errors
 
 Errors use the shared envelope:
 
 ```json
-{ "error": { "code": "VALIDATION_ERROR", "message": "...", "fields": { "limit": "..." } } }
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "...",
+    "fields": { "limit": "..." }
+  }
+}
 ```
 
-| HTTP | Code | When |
-| --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | No valid sign-in |
-| 403 | `PASSWORD_CHANGE_REQUIRED` | The user must change the password first |
-| 404 | `RESOURCE_NOT_FOUND` | The class or post does not exist, or the user may not see it |
-| 422 | `VALIDATION_ERROR` | An ID or query value is not valid. `fields` names each one. |
+| HTTP | Code                       | When                                                                                                                                                                |
+| ---- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401  | `UNAUTHENTICATED`          | No valid sign-in                                                                                                                                                    |
+| 403  | `FORBIDDEN`                | The role cannot do this (a student or admin creates or edits; a student deletes), or a lecturer edits or deletes a post of another author in a class they can see   |
+| 403  | `PASSWORD_CHANGE_REQUIRED` | The user must change the password first                                                                                                                             |
+| 404  | `RESOURCE_NOT_FOUND`       | The class or post does not exist, or the user may not see it. This includes a lecturer who writes to a class of another lecturer and a student who is not enrolled. |
+| 422  | `VALIDATION_ERROR`         | An ID, query value or body field is not valid. `fields` names each one.                                                                                             |

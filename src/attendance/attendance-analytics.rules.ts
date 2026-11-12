@@ -7,6 +7,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
 export const DEFAULT_AT_RISK_BELOW = 75;
+const MAX_AT_RISK_BELOW = 100;
 const MAX_CLASS_ID = 4294967295;
 
 export interface AnalyticsQuery {
@@ -81,11 +82,15 @@ export function parseAnalyticsQuery(
     if (
       typeof raw === 'string' &&
       /^\d{1,3}$/.test(raw) &&
-      Number(raw) >= 75 &&
-      Number(raw) <= 100
+      Number(raw) >= DEFAULT_AT_RISK_BELOW &&
+      Number(raw) <= MAX_AT_RISK_BELOW
     )
       atRiskBelow = Number(raw);
-    else fail('atRiskBelow', 'Must be a whole number between 75 and 100.');
+    else
+      fail(
+        'atRiskBelow',
+        `Must be a whole number between ${DEFAULT_AT_RISK_BELOW} and ${MAX_AT_RISK_BELOW}.`,
+      );
   }
 
   if (Object.keys(fields).length > 0) throw validationError(fields);

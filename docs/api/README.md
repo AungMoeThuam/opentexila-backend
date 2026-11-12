@@ -91,14 +91,14 @@ Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`),
   - Surrogate IDs (`users.id`, `courses.id`, `classes.id`, `class_sessions.id`) are positive JSON integers.
   - Composite keys use `(class_id, student_id)` for `enrolments` and `(class_session_id, student_id)` for `attendance_records`.
   - Dates are ISO 8601 UTC strings (`"2026-10-29T01:00:00.000Z"`); optional timestamps/fields are explicit `null`.
-  - JSON property names use `snake_case` except pagination `totalPages` and `csrfToken`; path and query parameters use `camelCase`.
+  - JSON property names use `snake_case` except pagination `totalPages` and `csrfToken`; path and query parameters use `camelCase`. Exception: [lecturer attendance analytics](attendance-analytics.md) uses `camelCase` JSON to match its frontend contract.
 - **Pagination**:
   - `page` defaults to `1` (integer `1`–`10000`).
   - `limit` defaults to `20` (integer `1`–`100`).
   - `total` is the authorised, filtered count before pagination; `totalPages = ceil(total / limit)` (`0` when `total` is `0`).
   - Requesting a `page` beyond `totalPages` returns `data: []` with the real `total` and `totalPages`.
 - **Date range filters**:
-  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`.
+  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`. Exception: [lecturer attendance analytics](attendance-analytics.md) takes inclusive `YYYY-MM-DD` Malaysia-time days ([ADR 0001](../adr/0001-analytics-days-use-malaysia-time.md)).
 - **Security & privacy**:
   - Omit `password_hash`, `auth_sessions` payloads, refresh-token hashes, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
   - Never include SQL queries or stack traces in error responses.

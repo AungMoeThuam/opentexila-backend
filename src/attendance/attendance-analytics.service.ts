@@ -7,6 +7,8 @@ import {
   buildAnalytics,
   parseAnalyticsQuery,
   type AnalyticsQuery,
+  type SessionRow,
+  type StudentRow,
 } from './attendance-analytics.rules';
 
 // Sessions the lecturer teaches, in range, that have ended and are not
@@ -43,7 +45,7 @@ export class AttendanceAnalyticsService {
     lecturer: AttendanceCaller,
     query: AnalyticsQuery,
   ): Promise<void> {
-    const rows: unknown[] = await this.database.query(
+    const rows = await this.database.query<{ id: number }[]>(
       'SELECT id FROM classes WHERE id = ? AND lecturer_id = ?',
       [query.classId, lecturer.id],
     );
@@ -62,7 +64,7 @@ export class AttendanceAnalyticsService {
 
   // One row per ended, non-cancelled session with its status counts.
   private sessionRows(lecturer: AttendanceCaller, query: AnalyticsQuery) {
-    return this.database.query(
+    return this.database.query<SessionRow[]>(
       `SELECT s.id AS class_session_id, s.class_id,
         DATE_FORMAT(DATE_ADD(s.starts_at, INTERVAL ${MALAYSIA_OFFSET_HOURS} HOUR), '%Y-%m-%d') AS day,
         s.starts_at, s.ends_at,
@@ -82,7 +84,7 @@ export class AttendanceAnalyticsService {
   // One row per (student, class) over Finalised class sessions only: a
   // session with any pending record of an enrolled student is left out.
   private studentRows(lecturer: AttendanceCaller, query: AnalyticsQuery) {
-    return this.database.query(
+    return this.database.query<StudentRow[]>(
       `SELECT s.class_id, r.student_id, u.name, u.email,
         COUNT(*) AS sessions,
         SUM(r.status = 'present') AS present,

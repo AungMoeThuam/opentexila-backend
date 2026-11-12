@@ -40,14 +40,18 @@ test('TypeORM resolves every entity relation without duplicate FK columns or exp
   const ds = new DataSource(databaseOptions(env));
   // Build metadata only: no connection, SQL or external database.
   await (ds as any).buildMetadatas();
-  assert.equal(ds.entityMetadatas.length, 7);
+  assert.equal(ds.entityMetadatas.length, 10);
   for (const entity of ds.entityMetadatas) {
     assert.equal(
       new Set(entity.columns.map((c) => c.databaseName)).size,
       entity.columns.length,
     );
     for (const fk of entity.foreignKeys) {
-      assert.equal(fk.onDelete, 'RESTRICT');
+      // Likes and comments are deleted with their announcement; nothing else cascades.
+      const cascades =
+        fk.referencedEntityMetadata.name === 'Announcement' &&
+        ['AnnouncementLike', 'AnnouncementComment'].includes(entity.name);
+      assert.equal(fk.onDelete, cascades ? 'CASCADE' : 'RESTRICT');
       assert.equal(fk.onUpdate, 'RESTRICT');
       assert.ok(ds.entityMetadatas.includes(fk.referencedEntityMetadata));
     }

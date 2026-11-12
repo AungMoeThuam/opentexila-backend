@@ -1,4 +1,13 @@
 import { RefreshSession } from './refresh-session.schema';
+import {
+  Announcement,
+  AnnouncementSchema,
+  AnnouncementEntity,
+  AnnouncementCategory,
+  ANNOUNCEMENT_CATEGORIES,
+} from './announcement.schema';
+import { AnnouncementLike } from './announcement-like.schema';
+import { AnnouncementComment } from './announcement-comment.schema';
 import { Course, CourseSchema, CourseEntity } from './course.schema';
 import {
   User,
@@ -28,6 +37,13 @@ import {
 
 export {
   RefreshSession,
+  Announcement,
+  AnnouncementSchema,
+  AnnouncementEntity,
+  AnnouncementCategory,
+  ANNOUNCEMENT_CATEGORIES,
+  AnnouncementLike,
+  AnnouncementComment,
   Course,
   CourseSchema,
   CourseEntity,
@@ -54,6 +70,9 @@ export {
 
 export const entities = [
   RefreshSession,
+  Announcement,
+  AnnouncementLike,
+  AnnouncementComment,
   Course,
   User,
   Class,

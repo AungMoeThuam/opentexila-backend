@@ -20,6 +20,7 @@ import type { AttendanceCaller } from '../dist/attendance/attendance.rules.js';
 import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
 import { adminUsersIntegration } from './admin-users.integration.ts';
+import { announcementsIntegration } from './announcements.integration.ts';
 import { attendanceIntegration } from './attendance.integration.ts';
 import { timetableIntegration } from './timetable.integration.ts';
 import { finalisationIntegration } from './finalisation.integration.ts';
@@ -110,13 +111,14 @@ test(
       await t.test(
         'migration applies once and supports rollback/reapply',
         async () => {
-          assert.equal((await ds!.runMigrations()).length, 3);
+          assert.equal((await ds!.runMigrations()).length, 4);
           assert.equal((await ds!.runMigrations()).length, 0);
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
+          await ds!.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds!.runMigrations()).length, 3);
+          assert.equal((await ds!.runMigrations()).length, 4);
           assert.deepEqual(
             await tableNames(),
             [
@@ -129,6 +131,9 @@ test(
               'attendance_records',
               'auth_sessions',
               'auth_refresh_sessions',
+              'announcements',
+              'announcement_likes',
+              'announcement_comments',
             ].sort(),
           );
           migrationsReady = true;
@@ -146,6 +151,23 @@ test(
           assert.equal(await ds!.getRepository('Course').count(), 5);
           assert.equal(await ds!.getRepository('Class').count(), 8);
           assert.equal(await ds!.getRepository('ClassSession').count(), 64);
+          // Three announcements for each of the eight classes, with their
+          // likes and comments, and the same totals after a second run.
+          const announcementTotals = async () =>
+            Promise.all(
+              ['Announcement', 'AnnouncementLike', 'AnnouncementComment'].map(
+                (name) => ds!.getRepository(name).count(),
+              ),
+            );
+          const [posts, likes, comments] = await announcementTotals();
+          assert.equal(posts, 24);
+          assert.ok(likes > 24 && comments > 24);
+          await seedDemo(ds!, env);
+          assert.deepEqual(await announcementTotals(), [
+            posts,
+            likes,
+            comments,
+          ]);
           assert.equal(
             (await ds!.getRepository('AttendanceRecord').count()) > 100,
             true,
@@ -723,6 +745,7 @@ test(
       await timetableIntegration(t, ds!);
       await authIntegration(t, ds!);
       await adminUsersIntegration(t, ds!);
+      await announcementsIntegration(t, ds!);
       await t.test(
         'real AppModule wires JWT attendance protection without protecting example routes',
         () => {
@@ -787,9 +810,11 @@ test(
         'venue migration backfills populated sessions without losing attendance',
         async () => {
           const count = await ds!.getRepository('AttendanceRecord').count();
+          // Announcements and refresh sessions come after the venue migration.
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
-          assert.equal((await ds!.runMigrations()).length, 2);
+          await ds!.undoLastMigration();
+          assert.equal((await ds!.runMigrations()).length, 3);
           const [row] = await ds!.query(
             `SELECT s.room_label, s.latitude, s.longitude, s.radius_m,
           c.room_label AS class_room, c.latitude AS class_latitude
@@ -810,8 +835,9 @@ test(
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
           await ds!.undoLastMigration();
+          await ds!.undoLastMigration();
           assert.deepEqual(await tableNames(), infrastructureTables);
-          assert.equal((await ds!.runMigrations()).length, 3);
+          assert.equal((await ds!.runMigrations()).length, 4);
           await seedDemo(ds!, env);
           assert.ok(
             (await ds!.getRepository('AttendanceRecord').count()) > 100,

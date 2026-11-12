@@ -1,6 +1,7 @@
 import { EnrolmentsModule } from './enrolments/enrolments.module';
 import { CoursesModule } from './courses/courses.module';
 import { AdminUsersModule } from './users/admin-users.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from './database/database.module';
 import { ExamplesModule } from './examples/examples.module';
@@ -18,6 +19,7 @@ import { TimetableModule } from './timetable/timetable.module';
     EnrolmentsModule,
     CoursesModule,
     AdminUsersModule,
+    AnnouncementsModule,
     TimetableModule,
     ...(jwtAuthEnabled() ? [AuthModule] : []),
     ...(devAuthEnabled() ? [DevAuthModule] : []),

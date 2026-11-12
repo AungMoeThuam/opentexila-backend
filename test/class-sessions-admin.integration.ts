@@ -465,5 +465,149 @@ export async function classSessionsAdminIntegration(
         }
       },
     );
+
+    await t.test(
+      'the policy of one upcoming session changes, and nothing else',
+      async () => {
+        const target = (await service.create(classA, times(400))).data;
+        const other = (await service.create(classA, times(430))).data;
+        const classBefore = await ds.query(
+          'SELECT room_label, latitude, longitude, radius_m FROM classes WHERE id = ?',
+          [classA],
+        );
+        const changed = await service.updatePolicy(target.id, {
+          room_label: 'Moved room',
+          latitude: 3.12345678,
+          longitude: 101.5,
+          radius_m: 42.5,
+          late_after: hours(400.5),
+        });
+        assert.equal(changed.data.room_label, 'Moved room');
+        assert.equal(Number(changed.data.latitude), 3.123457);
+        assert.equal(Number(changed.data.longitude), 101.5);
+        assert.equal(Number(changed.data.radius_m), 42.5);
+        assert.equal(changed.data.late_after, hours(400.5));
+        assert.equal(
+          changed.data.starts_at,
+          target.starts_at,
+          'the times of the session stay',
+        );
+        assert.equal(changed.data.state, 'scheduled');
+        // The class and the other sessions of the class keep their values.
+        assert.deepEqual(
+          await ds.query(
+            'SELECT room_label, latitude, longitude, radius_m FROM classes WHERE id = ?',
+            [classA],
+          ),
+          classBefore,
+        );
+        const [untouched] = await ds.query(
+          'SELECT room_label, radius_m, late_after FROM class_sessions WHERE id = ?',
+          [other.id],
+        );
+        assert.equal(untouched.room_label, other.room_label);
+        assert.equal(Number(untouched.radius_m), Number(other.radius_m));
+        // A field that is not sent keeps its value.
+        const partial = await service.updatePolicy(target.id, { radius_m: 60 });
+        assert.equal(partial.data.room_label, 'Moved room');
+        assert.equal(Number(partial.data.radius_m), 60);
+        // The late time must lie inside the session.
+        await assert.rejects(
+          service.updatePolicy(target.id, { late_after: hours(402) }),
+          code('VALIDATION_ERROR'),
+        );
+        await assert.rejects(
+          service.updatePolicy(target.id, { late_after: hours(399) }),
+          code('VALIDATION_ERROR'),
+        );
+        await assert.rejects(
+          service.updatePolicy(target.id, {}),
+          code('VALIDATION_ERROR'),
+        );
+        await assert.rejects(
+          service.updatePolicy(4294967295, { radius_m: 5 }),
+          code('RESOURCE_NOT_FOUND'),
+        );
+      },
+    );
+
+    await t.test(
+      'a session that has started, ended or been cancelled keeps its policy',
+      async () => {
+        const running = await insertRunning(classA);
+        const ended = await insertEnded(classA);
+        const cancelled = (await service.create(classB, times(500))).data;
+        await service.cancel(cancelled.id);
+        for (const id of [running, ended, cancelled.id]) {
+          const [before] = await ds.query(
+            'SELECT * FROM class_sessions WHERE id = ?',
+            [id],
+          );
+          await assert.rejects(
+            service.updatePolicy(id, { radius_m: 5, late_after: hours(0) }),
+            code('SESSION_NOT_EDITABLE'),
+          );
+          const [after] = await ds.query(
+            'SELECT * FROM class_sessions WHERE id = ?',
+            [id],
+          );
+          assert.deepEqual(after, before, `session ${id} is unchanged`);
+        }
+      },
+    );
+
+    await t.test(
+      'a student check-in follows the changed radius and late time',
+      async () => {
+        // A session that starts in about two seconds, so it can be edited now and
+        // checked in to shortly after.
+        const [now] = await ds.query('SELECT UTC_TIMESTAMP(3) AS now');
+        const start = new Date(new Date(now.now).getTime() + 2500);
+        // classB has no running session, so nothing clashes with "now".
+        await ds.query(
+          'INSERT INTO enrolments (class_id, student_id) VALUES (?, ?)',
+          [classB, studentId],
+        );
+        const made = (
+          await service.create(classB, {
+            starts_at: start.toISOString(),
+            late_after: new Date(start.getTime() + 15 * 60_000).toISOString(),
+            ends_at: new Date(start.getTime() + 3600_000).toISOString(),
+          })
+        ).data;
+        // The class allows 100 m. This session allows only 30 m, and counts every
+        // check-in after the start as Late.
+        await service.updatePolicy(made.id, {
+          latitude: 0,
+          longitude: 0,
+          radius_m: 30,
+          late_after: start.toISOString(),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const near = {
+          latitude: 0,
+          longitude: 0,
+          accuracy_m: 5,
+          reading_timestamp: new Date(),
+        };
+        // About 66 m from the point: inside the class radius, outside this session's.
+        const far = { ...near, latitude: 0.0006 };
+        await assert.rejects(
+          attendance.checkIn(student, made.id, far),
+          code('OUTSIDE_ALLOWED_AREA'),
+        );
+        const result = await attendance.checkIn(student, made.id, near);
+        assert.equal(
+          result.data.attendance_record.status,
+          'late',
+          'the new late time applies',
+        );
+        // Once it has started the policy can no longer be changed.
+        await assert.rejects(
+          service.updatePolicy(made.id, { radius_m: 500 }),
+          code('SESSION_NOT_EDITABLE'),
+        );
+      },
+    );
   });
 }

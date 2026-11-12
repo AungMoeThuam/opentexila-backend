@@ -11,6 +11,11 @@ import {
 } from '../common/api-exception';
 import { pageMeta, type PageMeta } from '../common/query-reader';
 import {
+  definedEntries,
+  emptyUpdate,
+  toDecimal,
+} from '../courses/class-management.rules';
+import {
   availability,
   type SessionAvailability,
 } from '../attendance/attendance.rules';
@@ -27,6 +32,7 @@ import type {
   CreateClassSessionDto,
   ListManagedSessionsQueryDto,
 } from './dto/class-session-admin.dto';
+import type { UpdateSessionPolicyDto } from './dto/session-policy.dto';
 import {
   ScheduleConflictException,
   type ScheduleConflictDto,
@@ -249,6 +255,63 @@ export class ClassSessionsAdminService {
           [session.id],
         );
       }
+      return { data: await this.load(manager, session.id, now) };
+    });
+  }
+
+  // Changes the venue (room, location, radius) and the late time of one session
+  // that has not started. The class is not touched, and neither are other
+  // sessions. A session that has started, ended or been cancelled is history, so
+  // the server refuses it. The class and session are locked first, as in
+  // check-in, and the time is read after the locks, so a check-in cannot slip
+  // between the check and the save.
+  async updatePolicy(
+    classSessionId: number,
+    input: UpdateSessionPolicyDto,
+  ): Promise<{ data: ManagedSessionDto }> {
+    const sent = definedEntries(input);
+    if (Object.keys(sent).length === 0) throw emptyUpdate();
+    const late =
+      sent.late_after === undefined ? null : parseUtcTimestamp(sent.late_after);
+    if (sent.late_after !== undefined && !late)
+      throw validationError({
+        late_after:
+          'late_after must be a UTC time such as 2026-11-20T01:15:00.000Z.',
+      });
+    return this.database.transaction(async (manager) => {
+      const { session } = await lockClassSession(manager, classSessionId);
+      const now = await databaseNow(manager); // After both locks.
+      const starts = new Date(session.starts_at).getTime();
+      if (session.state !== 'scheduled' || now.getTime() >= starts)
+        throw new ApiException(
+          409,
+          'SESSION_NOT_EDITABLE',
+          'A session that has started, ended or been cancelled cannot be changed.',
+        );
+      if (
+        late &&
+        (late.getTime() < starts ||
+          late.getTime() >= new Date(session.ends_at).getTime())
+      )
+        throw validationError({
+          late_after:
+            'The late time must be between the start and the end time.',
+        });
+      // Column names come from this fixed list, never from the request.
+      const changes: [string, string | number][] = [];
+      if (sent.room_label !== undefined)
+        changes.push(['room_label', sent.room_label]);
+      if (sent.latitude !== undefined)
+        changes.push(['latitude', toDecimal(sent.latitude, 6)]);
+      if (sent.longitude !== undefined)
+        changes.push(['longitude', toDecimal(sent.longitude, 6)]);
+      if (sent.radius_m !== undefined)
+        changes.push(['radius_m', toDecimal(sent.radius_m, 2)]);
+      if (late) changes.push(['late_after', mysqlUtc(late)]);
+      await manager.query(
+        `UPDATE class_sessions SET ${changes.map(([column]) => `${column} = ?`).join(', ')} WHERE id = ?`,
+        [...changes.map(([, value]) => value), session.id],
+      );
       return { data: await this.load(manager, session.id, now) };
     });
   }

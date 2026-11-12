@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -17,6 +18,7 @@ import {
   ListManagedSessionsQueryDto,
   ManagedClassParamsDto,
 } from './dto/class-session-admin.dto';
+import { UpdateSessionPolicyDto } from './dto/session-policy.dto';
 
 // Admin-only session management. The timetable page keeps its own routes on
 // /class-sessions (list by date, batch reschedule); these routes are different.
@@ -46,5 +48,14 @@ export class ClassSessionsAdminController {
   @HttpCode(200)
   cancel(@Param() params: ClassSessionParamsDto) {
     return this.sessions.cancel(params.classSessionId);
+  }
+
+  // Venue and late time of one session that has not started.
+  @Patch('class-sessions/:classSessionId/attendance-policy')
+  updatePolicy(
+    @Param() params: ClassSessionParamsDto,
+    @Body() body: UpdateSessionPolicyDto,
+  ) {
+    return this.sessions.updatePolicy(params.classSessionId, body);
   }
 }

@@ -11,6 +11,8 @@ import { AttendanceRecordsController } from './me-attendance-records.controller'
 import { AttendanceHistoryService } from './attendance-history.service';
 import { ClassSessionRecordsController } from './class-session-records.controller';
 import { ClassSessionRecordsService } from './class-session-records.service';
+import { LecturerAttendanceAnalyticsController } from './lecturer-attendance-analytics.controller';
+import { AttendanceAnalyticsService } from './attendance-analytics.service';
 
 @Module({
   imports: jwtAuthEnabled() ? [AuthModule] : [],
@@ -18,6 +20,7 @@ import { ClassSessionRecordsService } from './class-session-records.service';
     AttendanceController,
     AttendanceRecordsController,
     ClassSessionRecordsController,
+    LecturerAttendanceAnalyticsController,
   ],
   providers: [
     AttendanceService,
@@ -25,6 +28,7 @@ import { ClassSessionRecordsService } from './class-session-records.service';
     AttendanceGuard,
     RosterService,
     ClassSessionRecordsService,
+    AttendanceAnalyticsService,
     { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
   ],
   exports: [

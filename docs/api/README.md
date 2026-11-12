@@ -9,6 +9,7 @@ This documentation belongs to the backend repository. The separate frontend repo
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
 - [Authentication](auth.md) — JWT login, refresh, profile, logout and password changes.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
+- [Lecturer attendance analytics](attendance-analytics.md) — summary, trend, class comparison, at-risk students and unfinalised sessions (`GET /lecturer/attendance-analytics`).
 - **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
 - **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
 - **[Courses & Class Management](courses-classes.md)** — Admin course list/create/edit (`GET`/`POST /courses`, `PATCH /courses/:courseId`), active lecturer options (`GET /lecturers`), and class create/detail/edit (`POST /classes`, `GET`/`PATCH /classes/:classId`) including lecturer assignment and attendance location.
@@ -47,6 +48,7 @@ All paths below are relative to `/api/v1`. Admin account management and enrolmen
 | **Attendance** | `GET`    | `/class-sessions/:classSessionId/records`   | Assigned `lecturer`, `admin`              | Read-only attendance roster for a class session                 | [attendance.md](attendance.md#get-class-sessionsclasssessionidrecords)    |
 | **Attendance** | `GET`    | `/me/attendance-records`                    | `student`                                | Personal attendance history across class sessions               | [attendance.md](attendance.md#get-meattendance-records)                   |
 | **Attendance** | `GET`    | `/me/attendance-records/classes`            | `student`                                | Classes selectable in the attendance-history filter            | [attendance.md](attendance.md#get-meattendance-recordsclasses)         |
+| **Attendance** | `GET`    | `/lecturer/attendance-analytics`            | `lecturer`                               | Attendance summary, trend, at-risk students for own classes     | [attendance-analytics.md](attendance-analytics.md)                        |
 | **Examples**   | `GET`    | `/examples/classrooms`                      | Dev-only (`NODE_ENV=development`)        | Sample paginated classroom list                                 | [examples.md](examples.md#get-examplesclassrooms)                         |
 | **Examples**   | `GET`    | `/examples/classrooms/:id`                  | Dev-only (`NODE_ENV=development`)        | Sample single classroom detail                                  | [examples.md](examples.md#get-examplesclassroomsid)                       |
 

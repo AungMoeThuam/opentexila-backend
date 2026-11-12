@@ -18,8 +18,11 @@ See the [ER diagram](database-erd.md) and [baseline setup guide](database-refact
 | `attendance_records` | One row per student per class session.                     | primary key `(class_session_id, student_id)` |
 | `auth_sessions` | Preserved unused cookie-adapter table. | primary key `session_id` |
 | `auth_refresh_sessions` | Hashed JWT refresh credentials, expiry and revocation. | primary key `id`; FK `user_id` |
+| `announcements` | Class news posted by the class lecturer (migration `1793750400000-Announcements.ts`). | primary key `id`; FKs `class_id`, `author_id` |
+| `announcement_likes` | One like for each user and announcement. | primary key `(announcement_id, user_id)`; deleted with the announcement |
+| `announcement_comments` | Comments on an announcement. | primary key `id`; FKs `announcement_id` (cascade), `author_id` |
 
-Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession`, `AttendanceRecord` and `RefreshSession`. Schemas are in `src/database/entities/`. Columns use **snake_case**.
+Entity names are `User`, `Course`, `Class`, `Enrolment`, `ClassSession`, `AttendanceRecord`, `RefreshSession`, `Announcement`, `AnnouncementLike` and `AnnouncementComment`. Schemas are in `src/database/entities/`. Columns use **snake_case**.
 
 ## Design rules
 

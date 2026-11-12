@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
 import type { DataSource } from 'typeorm';
 import { AnnouncementAccessService } from '../dist/announcements/announcement-access.service.js';
+import { AnnouncementEngagementService } from '../dist/announcements/announcement-engagement.service.js';
 import { AnnouncementsService } from '../dist/announcements/announcements.service.js';
 import { ApiException } from '../dist/common/api-exception.js';
 
@@ -633,6 +634,249 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
           const [{ comments }] = await ds.query(
             'SELECT COUNT(*) AS comments FROM announcement_comments WHERE announcement_id = ?',
             [made.data.id],
+          );
+          assert.deepEqual([Number(likes), Number(comments)], [0, 0]);
+        },
+      );
+    });
+
+    await t.test('likes and comments against MySQL', async (t) => {
+      const engagement = new AnnouncementEngagementService(
+        ds,
+        new AnnouncementAccessService(ds),
+      );
+      const outsider = { id: Number(outsiderId), role: 'student' as const };
+      const otherLecturer = {
+        id: Number(otherLecturerId),
+        role: 'lecturer' as const,
+      };
+      const second = await accountId('student.three@example.com');
+      await ds.query(
+        'INSERT INTO enrolments (class_id, student_id) VALUES (?, ?)',
+        [classId, second],
+      );
+      const student2 = { id: Number(second), role: 'student' as const };
+      const post = await insertPost(
+        classId,
+        'general',
+        'Engagement',
+        'Like and comment here.',
+        '2026-02-01 10:00:00.000',
+      );
+
+      await t.test(
+        'likes count once per person and repeat safely',
+        async () => {
+          const first = await engagement.setLike(student, post, true);
+          assert.deepEqual(first.data, { liked: true, like_count: 1 });
+          const again = await engagement.setLike(student, post, true);
+          assert.equal(again.data.like_count, 1, 'a second PUT adds no like');
+          // Two requests at the same moment still give one like and no error.
+          const racing = await Promise.all([
+            engagement.setLike(lecturer, post, true),
+            engagement.setLike(lecturer, post, true),
+          ]);
+          assert.deepEqual(
+            racing.map((item) => item.data.liked),
+            [true, true],
+          );
+          const seen = await service.get(student, post);
+          assert.deepEqual(
+            [seen.data.like_count, seen.data.liked_by_me],
+            [2, true],
+          );
+          const lecturerView = await service.get(lecturer, post);
+          assert.equal(lecturerView.data.liked_by_me, true);
+          const other = await service.get(student2, post);
+          assert.equal(other.data.liked_by_me, false);
+          const off = await engagement.setLike(student, post, false);
+          assert.deepEqual(off.data, { liked: false, like_count: 1 });
+          const offAgain = await engagement.setLike(student, post, false);
+          assert.deepEqual(offAgain.data, { liked: false, like_count: 1 });
+        },
+      );
+
+      await t.test('outsiders cannot like or comment', async () => {
+        await assert.rejects(
+          engagement.setLike(outsider, post, true),
+          notFound,
+        );
+        await assert.rejects(
+          engagement.setLike(otherLecturer, post, true),
+          notFound,
+        );
+        await assert.rejects(
+          engagement.createComment(outsider, post, { body: 'Hi' }),
+          notFound,
+        );
+        await assert.rejects(
+          engagement.listComments(outsider, post, { page: 1, limit: 20 }),
+          notFound,
+        );
+        await assert.rejects(
+          engagement.setLike(student, 4294967295, true),
+          notFound,
+        );
+      });
+
+      await t.test(
+        'comments list oldest first with paging and can_delete',
+        async (t) => {
+          const insertComment = async (
+            author: number,
+            body: string,
+            at: string,
+          ) => {
+            const result: any = await ds.query(
+              `INSERT INTO announcement_comments (announcement_id, author_id, body, created_at)
+             VALUES (?, ?, ?, ?)`,
+              [post, author, body, at],
+            );
+            return Number(result.insertId);
+          };
+          // Inserted out of order, so the sort has to do the work.
+          const late = await insertComment(
+            second,
+            'Late',
+            '2026-02-01 12:00:00.000',
+          );
+          const early = await insertComment(
+            studentId,
+            'Early',
+            '2026-02-01 11:00:00.000',
+          );
+          const tie = await insertComment(
+            studentId,
+            'Tie',
+            '2026-02-01 11:00:00.000',
+          );
+
+          const page = await engagement.listComments(student, post, {
+            page: 1,
+            limit: 20,
+          });
+          assert.deepEqual(
+            page.data.map((item) => item.id),
+            [early, tie, late],
+            'oldest first, then by id',
+          );
+          assert.deepEqual(page.meta, {
+            page: 1,
+            limit: 20,
+            total: 3,
+            totalPages: 1,
+          });
+          assert.deepEqual(page.data[0].author, {
+            id: studentId,
+            name: page.data[0].author.name,
+            role: 'student',
+          });
+          assert.deepEqual(
+            page.data.map((item) => item.can_delete),
+            [true, true, false],
+            'a student may delete only own comments',
+          );
+          const asLecturer = await engagement.listComments(lecturer, post, {
+            page: 1,
+            limit: 20,
+          });
+          assert.deepEqual(
+            asLecturer.data.map((item) => item.can_delete),
+            [true, true, true],
+          );
+          const asAdmin = await engagement.listComments(admin, post, {
+            page: 1,
+            limit: 20,
+          });
+          assert.equal(
+            asAdmin.data.every((item) => item.can_delete),
+            true,
+          );
+          const paged = await engagement.listComments(student, post, {
+            page: 2,
+            limit: 2,
+          });
+          assert.deepEqual(
+            paged.data.map((item) => item.id),
+            [late],
+          );
+          assert.equal(paged.meta.totalPages, 2);
+          const counted = await service.get(student, post);
+          assert.equal(counted.data.comment_count, 3, 'the feed count is real');
+
+          await t.test('writing a comment', async () => {
+            const written = await engagement.createComment(student2, post, {
+              body: 'Thank you, see you there.',
+            });
+            assert.equal(written.data.author.id, second);
+            assert.equal(written.data.can_delete, true);
+            const fromLecturer = await engagement.createComment(
+              lecturer,
+              post,
+              {
+                body: 'See you.',
+              },
+            );
+            assert.equal(fromLecturer.data.author.role, 'lecturer');
+            const [{ total }] = await ds.query(
+              'SELECT COUNT(*) AS total FROM announcement_comments WHERE announcement_id = ?',
+              [post],
+            );
+            assert.equal(Number(total), 5);
+          });
+
+          await t.test('deleting a comment', async () => {
+            // A student cannot delete the comment of another student.
+            await assert.rejects(
+              engagement.deleteComment(student2, early),
+              forbidden,
+            );
+            await assert.rejects(
+              engagement.deleteComment(student, late),
+              forbidden,
+            );
+            // A person outside the class sees no comment.
+            await assert.rejects(
+              engagement.deleteComment(outsider, early),
+              notFound,
+            );
+            await assert.rejects(
+              engagement.deleteComment(otherLecturer, early),
+              notFound,
+            );
+            await assert.rejects(
+              engagement.deleteComment(lecturer, 4294967295),
+              notFound,
+            );
+            const [{ stay }] = await ds.query(
+              'SELECT COUNT(*) AS stay FROM announcement_comments WHERE id IN (?, ?)',
+              [early, late],
+            );
+            assert.equal(Number(stay), 2, 'nothing was deleted');
+            await engagement.deleteComment(student, early); // own comment
+            await engagement.deleteComment(lecturer, late); // lecturer of the class
+            await engagement.deleteComment(admin, tie); // admin
+            const rest = await ds.query(
+              'SELECT id FROM announcement_comments WHERE id IN (?, ?, ?)',
+              [early, late, tie],
+            );
+            assert.deepEqual(rest, []);
+          });
+        },
+      );
+
+      await t.test(
+        'deleting the post removes its likes and comments',
+        async () => {
+          await engagement.setLike(student, post, true);
+          await ds.query('DELETE FROM announcements WHERE id = ?', [post]);
+          const [{ likes }] = await ds.query(
+            'SELECT COUNT(*) AS likes FROM announcement_likes WHERE announcement_id = ?',
+            [post],
+          );
+          const [{ comments }] = await ds.query(
+            'SELECT COUNT(*) AS comments FROM announcement_comments WHERE announcement_id = ?',
+            [post],
           );
           assert.deepEqual([Number(likes), Number(comments)], [0, 0]);
         },

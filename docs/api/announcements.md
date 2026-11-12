@@ -2,23 +2,23 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes and enrolments](enrolments.md)
 
-**Status: reading announcements (list for all classes, list for one class, and get one) and writing them (create, edit, delete) are implemented. Likes and comments are planned in the next backend issue.** Paths are relative to `/api/v1`.
+**Status: reading announcements (list for all classes, list for one class, and get one) writing them (create, edit, delete), likes and comments are implemented.** Paths are relative to `/api/v1`.
 
 A lecturer posts news to one of their classes, for example a class change or a reminder. Students of that class read the posts, like them and write comments. Pinned posts are not planned.
 
 ## Endpoint summary
 
-| Method      | Path                                      | Allowed roles                                                   | Status                           |
-| ----------- | ----------------------------------------- | --------------------------------------------------------------- | -------------------------------- |
-| GET         | `/announcements`                          | Lecturer (own classes), student (enrolled classes), admin (all) | Implemented                      |
-| GET         | `/classes/:classId/announcements`         | Assigned lecturer, enrolled student, admin                      | Implemented                      |
-| GET         | `/announcements/:announcementId`          | Assigned lecturer, enrolled student, admin                      | Implemented                      |
-| POST        | `/classes/:classId/announcements`         | Assigned lecturer                                               | Implemented                      |
-| PATCH       | `/announcements/:announcementId`          | Author (the assigned lecturer)                                  | Implemented                      |
-| DELETE      | `/announcements/:announcementId`          | Author (the assigned lecturer), admin                           | Implemented                      |
-| PUT, DELETE | `/announcements/:announcementId/like`     | Assigned lecturer, enrolled student                             | Planned (likes and comments API) |
-| GET, POST   | `/announcements/:announcementId/comments` | Assigned lecturer, enrolled student (GET also admin)            | Planned (likes and comments API) |
-| DELETE      | `/comments/:commentId`                    | Author, class lecturer, admin                                   | Planned (likes and comments API) |
+| Method      | Path                                      | Allowed roles                                                   | Status      |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------- | ----------- |
+| GET         | `/announcements`                          | Lecturer (own classes), student (enrolled classes), admin (all) | Implemented |
+| GET         | `/classes/:classId/announcements`         | Assigned lecturer, enrolled student, admin                      | Implemented |
+| GET         | `/announcements/:announcementId`          | Assigned lecturer, enrolled student, admin                      | Implemented |
+| POST        | `/classes/:classId/announcements`         | Assigned lecturer                                               | Implemented |
+| PATCH       | `/announcements/:announcementId`          | Author (the assigned lecturer)                                  | Implemented |
+| DELETE      | `/announcements/:announcementId`          | Author (the assigned lecturer), admin                           | Implemented |
+| PUT, DELETE | `/announcements/:announcementId/like`     | Assigned lecturer, enrolled student                             | Implemented |
+| GET, POST   | `/announcements/:announcementId/comments` | Assigned lecturer, enrolled student (GET also admin)            | Implemented |
+| DELETE      | `/comments/:commentId`                    | Author, class lecturer, admin                                   | Implemented |
 
 ## Who can see what
 
@@ -161,6 +161,58 @@ Success: **200 OK** with `{ "data": { announcement object } }`.
 
 The author, or any admin, may delete. The database deletes the post's likes and comments with it. Success: **204 No Content** with no body.
 
+### `PUT /announcements/:announcementId/like` and `DELETE /announcements/:announcementId/like`
+
+No request body. Only the lecturer of the class and enrolled students may like; an admin gets `403 FORBIDDEN`. Both calls are safe to repeat: a second `PUT` does not add a second like, and a second `DELETE` is not an error. The server changes the like and counts the likes in one transaction.
+
+Success: **200 OK**
+
+```json
+{ "data": { "liked": true, "like_count": 13 } }
+```
+
+`DELETE` returns `"liked": false` with the new count.
+
+### `GET /announcements/:announcementId/comments`
+
+The lecturer of the class, enrolled students and admins may read.
+
+| Query   | Rule             | Default |
+| ------- | ---------------- | ------- |
+| `page`  | Integer, 1–10000 | `1`     |
+| `limit` | Integer, 1–100   | `20`    |
+
+Comments are sorted from old to new (`created_at`, then `id`). Success: **200 OK**
+
+```json
+{
+  "data": [
+    {
+      "id": 90,
+      "body": "Thank you, see you there.",
+      "author": { "id": 21, "name": "Student Two", "role": "student" },
+      "created_at": "2026-11-12T02:00:00.000Z",
+      "can_delete": true
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+`can_delete` is `true` for the author of the comment, the lecturer of the class and any admin. The server checks the rule again on delete. No comments returns `"data": []` with `"total": 0`.
+
+### `POST /announcements/:announcementId/comments`
+
+```json
+{ "body": "Thank you, see you there." }
+```
+
+`body` is 1–1000 characters after trimming, plain text. Unknown fields are stripped. Only the lecturer of the class and enrolled students may write; an admin gets `403 FORBIDDEN`. Success: **201 Created** with `{ "data": { comment object } }`.
+
+### `DELETE /comments/:commentId`
+
+Allowed for the author of the comment, the lecturer of the class and any admin. Success: **204 No Content** with no body. A student cannot delete the comment of another student (`403`). A lecturer of another class and a student who is not enrolled get `404`.
+
 ## Errors
 
 Errors use the shared envelope:
@@ -175,10 +227,10 @@ Errors use the shared envelope:
 }
 ```
 
-| HTTP | Code                       | When                                                                                                                                                                |
-| ---- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 401  | `UNAUTHENTICATED`          | No valid sign-in                                                                                                                                                    |
-| 403  | `FORBIDDEN`                | The role cannot do this (a student or admin creates or edits; a student deletes), or a lecturer edits or deletes a post of another author in a class they can see   |
-| 403  | `PASSWORD_CHANGE_REQUIRED` | The user must change the password first                                                                                                                             |
-| 404  | `RESOURCE_NOT_FOUND`       | The class or post does not exist, or the user may not see it. This includes a lecturer who writes to a class of another lecturer and a student who is not enrolled. |
-| 422  | `VALIDATION_ERROR`         | An ID, query value or body field is not valid. `fields` names each one.                                                                                             |
+| HTTP | Code                       | When                                                                                                                                                                                                                                                                                                       |
+| ---- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401  | `UNAUTHENTICATED`          | No valid sign-in                                                                                                                                                                                                                                                                                           |
+| 403  | `FORBIDDEN`                | The role cannot do this (a student or admin creates or edits; a student deletes), a lecturer edits or deletes a post of another author in a class they can see, an admin likes or comments, or a user deletes a comment they may not delete (for example a student deletes the comment of another student) |
+| 403  | `PASSWORD_CHANGE_REQUIRED` | The user must change the password first                                                                                                                                                                                                                                                                    |
+| 404  | `RESOURCE_NOT_FOUND`       | The class or post does not exist, or the user may not see it. This includes a lecturer who writes to a class of another lecturer and a student who is not enrolled.                                                                                                                                        |
+| 422  | `VALIDATION_ERROR`         | An ID, query value or body field is not valid. `fields` names each one.                                                                                                                                                                                                                                    |

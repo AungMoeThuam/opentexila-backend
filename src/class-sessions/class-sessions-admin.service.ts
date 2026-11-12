@@ -27,6 +27,10 @@ import type {
   CreateClassSessionDto,
   ListManagedSessionsQueryDto,
 } from './dto/class-session-admin.dto';
+import {
+  ScheduleConflictException,
+  type ScheduleConflictDto,
+} from './schedule-conflict.exception';
 import { mysqlUtc, parseUtcTimestamp } from './session-times';
 
 export interface ManagedSessionDto {
@@ -76,6 +80,8 @@ const SELECT = `SELECT s.id, s.class_id, s.room_label, s.latitude, s.longitude, 
   FROM class_sessions s`;
 
 const TIME_FIELDS = ['starts_at', 'late_after', 'ends_at'] as const;
+// The error lists at most this many clashing sessions.
+const MAX_LISTED_CONFLICTS = 10;
 
 function toSession(row: SessionRow, now: Date): ManagedSessionDto {
   const starts = new Date(row.starts_at);
@@ -109,6 +115,12 @@ const CONFLICT_TEXT: Record<TimetableConflictType, string> = {
   lecturer: 'the same lecturer',
   room: 'the same room',
 };
+
+// "a", "a and b", "a, b and c".
+const joinWithAnd = (items: string[]): string =>
+  items.length < 2
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 
 // MySQL error 1062: another session of this class starts at the same time.
 const isDuplicateKey = (error: unknown): boolean => {
@@ -279,11 +291,17 @@ export class ClassSessionsAdminService {
     )) as { id: number }[];
     if (same.length) throw sessionExists();
     const rows = (await manager.query(
-      `SELECT s.id, s.class_id, c.lecturer_id, s.room_label, s.starts_at, s.ends_at, s.state
-       FROM class_sessions s JOIN classes c ON c.id = s.class_id
+      `SELECT s.id, s.class_id, c.lecturer_id, s.room_label, s.starts_at, s.ends_at, s.state,
+         co.code AS course_code, co.name AS course_name, c.section, c.term,
+         u.name AS lecturer_name
+       FROM class_sessions s
+       JOIN classes c ON c.id = s.class_id
+       JOIN courses co ON co.id = c.course_id
+       JOIN users u ON u.id = c.lecturer_id
        WHERE s.state = 'scheduled' AND s.starts_at < ? AND s.ends_at > ?
          AND (s.class_id = ? OR c.lecturer_id = ?
-              OR LOWER(TRIM(s.room_label)) = LOWER(TRIM(?)))`,
+              OR LOWER(TRIM(s.room_label)) = LOWER(TRIM(?)))
+       ORDER BY s.starts_at ASC, s.id ASC`,
       [
         mysqlUtc(times.ends_at),
         mysqlUtc(times.starts_at),
@@ -299,6 +317,11 @@ export class ClassSessionsAdminService {
       starts_at: Date;
       ends_at: Date;
       state: 'scheduled';
+      course_code: string;
+      course_name: string;
+      section: string;
+      term: string;
+      lecturer_name: string;
     }[];
     // The same overlap rules as the timetable, with the new session as id 0.
     const proposed = {
@@ -310,19 +333,43 @@ export class ClassSessionsAdminService {
       ends_at: times.ends_at,
       state: 'scheduled' as const,
     };
-    const types = new Set(
-      findTimetableConflicts([proposed, ...rows])
-        .filter((conflict) => conflict.session_id === 0)
-        .map((conflict) => conflict.type),
+    const typesBySession = new Map<number, Set<TimetableConflictType>>();
+    for (const conflict of findTimetableConflicts([proposed, ...rows])) {
+      if (conflict.session_id !== 0) continue;
+      const types = typesBySession.get(conflict.with_session_id) ?? new Set();
+      types.add(conflict.type);
+      typesBySession.set(conflict.with_session_id, types);
+    }
+    if (!typesBySession.size) return;
+    const conflicts: ScheduleConflictDto[] = rows
+      .filter((row) => typesBySession.has(Number(row.id)))
+      .slice(0, MAX_LISTED_CONFLICTS)
+      .map((row) => ({
+        types: [...typesBySession.get(Number(row.id))!],
+        session: {
+          id: Number(row.id),
+          class: {
+            id: Number(row.class_id),
+            course: { code: row.course_code, name: row.course_name },
+            section: row.section,
+            term: row.term,
+          },
+          lecturer: { id: Number(row.lecturer_id), name: row.lecturer_name },
+          room_label: row.room_label,
+          starts_at: new Date(row.starts_at).toISOString(),
+          ends_at: new Date(row.ends_at).toISOString(),
+        },
+      }));
+    // The message names every kind of clash, also when the list is cut short.
+    const kinds = new Set(
+      [...typesBySession.values()].flatMap((types) => [...types]),
     );
-    if (types.size)
-      throw new ApiException(
-        409,
-        'SCHEDULE_CONFLICT',
-        `This time overlaps a scheduled session of ${[...types]
-          .map((type) => CONFLICT_TEXT[type])
-          .join(', ')}.`,
-      );
+    throw new ScheduleConflictException(
+      `This time overlaps a scheduled session of ${joinWithAnd(
+        [...kinds].map((type) => CONFLICT_TEXT[type]),
+      )}.`,
+      conflicts,
+    );
   }
 
   private async load(

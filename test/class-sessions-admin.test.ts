@@ -496,6 +496,11 @@ test('admin session management: permissions, rules, queries and responses', asyn
         starts_at: at(23),
         ends_at: at(25),
         state: 'scheduled',
+        course_code: 'COS20019',
+        course_name: 'Networks',
+        section: 'A',
+        term: '2026-S2',
+        lecturer_name: 'Lecturer Three',
         ...over,
       });
       const cases: [Record<string, unknown>, string][] = [
@@ -524,9 +529,127 @@ test('admin session management: permissions, rules, queries and responses', asyn
       const all = await (
         await send('POST', '/classes/7/class-sessions', valid)
       ).json();
-      assert.match(all.error.message, /class.*lecturer.*room/);
+      assert.equal(
+        all.error.message,
+        'This time overlaps a scheduled session of the same class, the same lecturer and the same room.',
+      );
+      // Two kinds read as "a and b".
+      reset();
+      overlapRows = [other({ lecturer_id: 2, room_label: 'EN402' })];
+      const two = await (
+        await send('POST', '/classes/7/class-sessions', valid)
+      ).json();
+      assert.equal(
+        two.error.message,
+        'This time overlaps a scheduled session of the same lecturer and the same room.',
+      );
     },
   );
+
+  await t.test(
+    'the overlap error lists each clashing session and why it clashes',
+    async () => {
+      const row = (id: number, over: Record<string, unknown> = {}) => ({
+        id,
+        class_id: 8,
+        lecturer_id: 3,
+        room_label: 'Other room',
+        starts_at: at(23),
+        ends_at: at(25),
+        state: 'scheduled',
+        course_code: 'COS20019',
+        course_name: 'Networks',
+        section: 'A',
+        term: '2026-S2',
+        lecturer_name: 'Lecturer Three',
+        ...over,
+      });
+      reset();
+      overlapRows = [
+        row(50, { lecturer_id: 2, lecturer_name: 'Lecturer One' }),
+        row(51, {
+          class_id: 7,
+          lecturer_id: 2,
+          lecturer_name: 'Lecturer One',
+          room_label: 'EN402',
+          starts_at: at(25),
+          ends_at: at(27),
+          section: 'B',
+        }),
+        // Overlaps in time but shares nothing, so it is not listed.
+        row(52),
+      ];
+      const response = await send('POST', '/classes/7/class-sessions', valid);
+      assert.equal(response.status, 409);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const error = (await response.json()).error;
+      assert.deepEqual(Object.keys(error).sort(), [
+        'code',
+        'conflicts',
+        'fields',
+        'message',
+      ]);
+      assert.equal(error.code, 'SCHEDULE_CONFLICT');
+      assert.deepEqual(error.fields, {});
+      assert.deepEqual(error.conflicts, [
+        {
+          types: ['lecturer'],
+          session: {
+            id: 50,
+            class: {
+              id: 8,
+              course: { code: 'COS20019', name: 'Networks' },
+              section: 'A',
+              term: '2026-S2',
+            },
+            lecturer: { id: 2, name: 'Lecturer One' },
+            room_label: 'Other room',
+            starts_at: iso(23),
+            ends_at: iso(25),
+          },
+        },
+        {
+          types: ['class', 'lecturer', 'room'],
+          session: {
+            id: 51,
+            class: {
+              id: 7,
+              course: { code: 'COS20019', name: 'Networks' },
+              section: 'B',
+              term: '2026-S2',
+            },
+            lecturer: { id: 2, name: 'Lecturer One' },
+            room_label: 'EN402',
+            starts_at: iso(25),
+            ends_at: iso(27),
+          },
+        },
+      ]);
+    },
+  );
+
+  await t.test('the overlap error lists at most ten sessions', async () => {
+    reset();
+    overlapRows = Array.from({ length: 14 }, (_, index) => ({
+      id: 100 + index,
+      class_id: 8,
+      lecturer_id: 2,
+      room_label: 'Other room',
+      starts_at: at(23 + index * 0.01),
+      ends_at: at(25),
+      state: 'scheduled',
+      course_code: 'COS20019',
+      course_name: 'Networks',
+      section: 'A',
+      term: '2026-S2',
+      lecturer_name: 'Lecturer One',
+    }));
+    const error = (
+      await (await send('POST', '/classes/7/class-sessions', valid)).json()
+    ).error;
+    assert.equal(error.conflicts.length, 10);
+    assert.match(error.message, /same lecturer/);
+  });
 
   await t.test(
     'POST allows sessions that only touch, and unrelated ones',

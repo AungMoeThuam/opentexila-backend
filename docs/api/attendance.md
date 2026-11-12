@@ -610,6 +610,43 @@ Unknown fields are stripped, so `state`, `room_label` and the other venue fields
 
 The server locks the class row, then checks for conflicts, so two requests for the same class cannot both pass the checks. A scheduled session conflicts when its time overlaps another **scheduled** session of the same class, of the same lecturer, or in the same room (letters and spacing ignored). Overlap means `starts_at < other.ends_at` and `other.starts_at < ends_at`, so sessions that touch end to start are allowed. Cancelled sessions never cause a conflict. A session with the same class and the same `starts_at` as an existing session, cancelled or not, is a duplicate.
 
+#### Conflict details
+
+A `409 SCHEDULE_CONFLICT` lists the sessions that clash, so the time can be changed. The usual `code`, `message` and `fields` stay the same, and `error.conflicts` is added:
+
+```json
+{
+  "error": {
+    "code": "SCHEDULE_CONFLICT",
+    "message": "This time overlaps a scheduled session of the same lecturer and the same room.",
+    "fields": {},
+    "conflicts": [
+      {
+        "types": ["lecturer", "room"],
+        "session": {
+          "id": 12,
+          "class": {
+            "id": 8,
+            "course": { "code": "COS20019", "name": "Networks" },
+            "section": "A",
+            "term": "2026-S2"
+          },
+          "lecturer": { "id": 2, "name": "Lecturer One" },
+          "room_label": "EN402",
+          "starts_at": "2026-11-20T01:00:00.000Z",
+          "ends_at": "2026-11-20T03:00:00.000Z"
+        }
+      }
+    ]
+  }
+}
+```
+
+- `types` says why the session clashes: `class`, `lecturer` and/or `room`. One session can have several.
+- Only sessions that share a class, lecturer or room with the new session are listed, sorted by `starts_at`. At most 10 are listed, and `message` still names every kind of clash.
+- The lecturer is the lecturer of the session's class.
+- `CLASS_SESSION_EXISTS` has no `conflicts`. Its `fields.starts_at` says the class already has a session at that start time.
+
 Success: **201 Created** with `{ "data": { session object } }`.
 
 ### `POST /class-sessions/:classSessionId/cancel`
@@ -637,6 +674,6 @@ Success: **200 OK** with `{ "data": { session object } }` and `"state": "cancell
 | `403` | `CSRF_INVALID` | Demo mode only: missing or wrong CSRF token |
 | `404` | `RESOURCE_NOT_FOUND` | The class or session does not exist |
 | `409` | `CLASS_SESSION_EXISTS` | The class already has a session with this `starts_at` |
-| `409` | `SCHEDULE_CONFLICT` | The time overlaps a scheduled session of the same class, lecturer or room |
+| `409` | `SCHEDULE_CONFLICT` | The time overlaps a scheduled session of the same class, lecturer or room. `error.conflicts` lists the sessions and why. |
 | `409` | `CLASS_SESSION_ENDED` | Cancel: the session has already ended |
 | `422` | `VALIDATION_ERROR` | An ID, query value or field is not valid, or `starts_at` is not in the future. `fields` names each one. |

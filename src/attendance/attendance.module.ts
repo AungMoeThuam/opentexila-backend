@@ -11,6 +11,8 @@ import { AttendanceRecordsController } from './me-attendance-records.controller'
 import { AttendanceHistoryService } from './attendance-history.service';
 import { ClassSessionRecordsController } from './class-session-records.controller';
 import { ClassSessionRecordsService } from './class-session-records.service';
+import { ClassSessionFinaliseController } from './class-session-finalise.controller';
+import { FinalisationService } from './finalisation.service';
 import { LecturerAttendanceAnalyticsController } from './lecturer-attendance-analytics.controller';
 import { AttendanceAnalyticsService } from './attendance-analytics.service';
 
@@ -20,6 +22,7 @@ import { AttendanceAnalyticsService } from './attendance-analytics.service';
     AttendanceController,
     AttendanceRecordsController,
     ClassSessionRecordsController,
+    ClassSessionFinaliseController,
     LecturerAttendanceAnalyticsController,
   ],
   providers: [
@@ -28,6 +31,7 @@ import { AttendanceAnalyticsService } from './attendance-analytics.service';
     AttendanceGuard,
     RosterService,
     ClassSessionRecordsService,
+    FinalisationService,
     AttendanceAnalyticsService,
     { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
   ],

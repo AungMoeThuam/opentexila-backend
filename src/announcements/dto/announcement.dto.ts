@@ -48,3 +48,48 @@ export class ListAllAnnouncementsQueryDto extends ListAnnouncementsQueryDto {
   @QueryInteger(4294967295)
   classId?: number;
 }
+
+const trimmed = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
+
+// Body of POST /classes/:classId/announcements. The author and class come from
+// the signed-in user and the path, so they are not fields here.
+export class CreateAnnouncementDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsIn(ANNOUNCEMENT_CATEGORIES, {
+    message: 'category must be general, class_change, reminder or exam.',
+  })
+  category: AnnouncementCategory = 'general';
+
+  @Transform(trimmed)
+  @IsString({ message: 'title must be 1 to 150 characters.' })
+  @Length(1, 150, { message: 'title must be 1 to 150 characters.' })
+  title!: string;
+
+  @Transform(trimmed)
+  @IsString({ message: 'body must be 1 to 5000 characters.' })
+  @Length(1, 5000, { message: 'body must be 1 to 5000 characters.' })
+  body!: string;
+}
+
+// Body of PATCH /announcements/:announcementId. Every field is optional, but
+// the service rejects a body that sets none of them.
+export class UpdateAnnouncementDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsIn(ANNOUNCEMENT_CATEGORIES, {
+    message: 'category must be general, class_change, reminder or exam.',
+  })
+  category?: AnnouncementCategory;
+
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @Transform(trimmed)
+  @IsString({ message: 'title must be 1 to 150 characters.' })
+  @Length(1, 150, { message: 'title must be 1 to 150 characters.' })
+  title?: string;
+
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @Transform(trimmed)
+  @IsString({ message: 'body must be 1 to 5000 characters.' })
+  @Length(1, 5000, { message: 'body must be 1 to 5000 characters.' })
+  body?: string;
+}

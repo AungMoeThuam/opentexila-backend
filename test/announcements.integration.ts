@@ -12,6 +12,13 @@ const notFound = (error: any) => {
   return true;
 };
 
+const forbidden = (error: any) => {
+  assert.ok(error instanceof ApiException, String(error));
+  assert.equal(error.getStatus(), 403);
+  assert.equal(error.getResponse().error.code, 'FORBIDDEN');
+  return true;
+};
+
 export async function announcementsIntegration(t: TestContext, ds: DataSource) {
   await t.test('announcement reading against MySQL', async (t) => {
     const service = new AnnouncementsService(
@@ -461,6 +468,174 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
           [c, lecturerId, c, lecturerId],
         ),
         /Duplicate entry/,
+      );
+    });
+
+    await t.test('announcement writing against MySQL', async (t) => {
+      const outsider = { id: Number(outsiderId), role: 'student' as const };
+      const otherLecturer = {
+        id: Number(otherLecturerId),
+        role: 'lecturer' as const,
+      };
+      const input = {
+        category: 'class_change' as const,
+        title: 'Room change',
+        body: 'Moved to EN305.',
+      };
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      const made = await service.create(lecturer, classId, input);
+      created.push(made.data.id);
+
+      await t.test(
+        'create stores the post for the signed-in author',
+        async () => {
+          const post = made.data;
+          assert.equal(post.class_id, classId);
+          assert.equal(post.author.id, lecturerId);
+          assert.equal(post.category, 'class_change');
+          assert.equal(post.title, 'Room change');
+          assert.deepEqual(
+            [post.like_count, post.comment_count, post.liked_by_me],
+            [0, 0, false],
+          );
+          assert.equal(post.created_at, post.updated_at);
+          const [row] = await ds.query(
+            'SELECT author_id, class_id FROM announcements WHERE id = ?',
+            [post.id],
+          );
+          assert.deepEqual(
+            [Number(row.author_id), Number(row.class_id)],
+            [lecturerId, classId],
+          );
+        },
+      );
+
+      await t.test(
+        'create is limited to the lecturer of the class',
+        async () => {
+          await assert.rejects(
+            service.create(otherLecturer, classId, input),
+            notFound,
+          );
+          await assert.rejects(
+            service.create(outsider, classId, input),
+            notFound,
+          );
+          await assert.rejects(
+            service.create(lecturer, 4294967295, input),
+            notFound,
+          );
+        },
+      );
+
+      await t.test('edit changes updated_at and keeps created_at', async () => {
+        await wait(15);
+        const edited = await service.update(lecturer, made.data.id, {
+          title: 'Room change (EN306)',
+        });
+        assert.equal(edited.data.title, 'Room change (EN306)');
+        assert.equal(edited.data.body, 'Moved to EN305.', 'other fields stay');
+        assert.equal(edited.data.category, 'class_change');
+        assert.equal(edited.data.author.id, lecturerId);
+        assert.equal(edited.data.created_at, made.data.created_at);
+        assert.ok(
+          Date.parse(edited.data.updated_at) > Date.parse(made.data.updated_at),
+          'updated_at moved forward',
+        );
+        const both = await service.update(lecturer, made.data.id, {
+          category: 'exam',
+          body: 'New body.',
+        });
+        assert.deepEqual(
+          [both.data.category, both.data.body, both.data.title],
+          ['exam', 'New body.', 'Room change (EN306)'],
+        );
+      });
+
+      await t.test('an edit with no fields is a validation error', async () => {
+        await assert.rejects(
+          service.update(lecturer, made.data.id, {}),
+          (error: any) => {
+            assert.equal(error.getStatus(), 422);
+            assert.ok(error.getResponse().error.fields.body);
+            return true;
+          },
+        );
+      });
+
+      await t.test('only the author may edit or delete', async () => {
+        // A post by another lecturer in this class, as after a reassignment.
+        const result: any = await ds.query(
+          `INSERT INTO announcements (class_id, author_id, category, title, body)
+           VALUES (?, ?, 'general', 'By someone else', 'x')`,
+          [classId, otherLecturerId],
+        );
+        const foreign = Number(result.insertId);
+        created.push(foreign);
+        await assert.rejects(
+          service.update(lecturer, foreign, { title: 'Hijack' }),
+          forbidden,
+        );
+        await assert.rejects(service.remove(lecturer, foreign), forbidden);
+        await assert.rejects(
+          service.update(student, made.data.id, { title: 'Hijack' }),
+          forbidden,
+        );
+        await assert.rejects(service.remove(student, made.data.id), forbidden);
+        // A lecturer who cannot see the class and an outsider get 404.
+        await assert.rejects(
+          service.update(otherLecturer, made.data.id, { title: 'x' }),
+          notFound,
+        );
+        await assert.rejects(service.remove(outsider, made.data.id), notFound);
+        await assert.rejects(service.remove(lecturer, 4294967295), notFound);
+        const [row] = await ds.query(
+          'SELECT title FROM announcements WHERE id = ?',
+          [made.data.id],
+        );
+        assert.equal(row.title, 'Room change (EN306)', 'nothing changed');
+        // An admin may delete the post of someone else.
+        await service.remove(admin, foreign);
+        const gone = await ds.query(
+          'SELECT id FROM announcements WHERE id = ?',
+          [foreign],
+        );
+        assert.deepEqual(gone, []);
+      });
+
+      await t.test(
+        'delete removes the post with its likes and comments',
+        async () => {
+          await ds.query(
+            'INSERT INTO announcement_likes (announcement_id, user_id) VALUES (?, ?)',
+            [made.data.id, studentId],
+          );
+          await ds.query(
+            `INSERT INTO announcement_comments (announcement_id, author_id, body) VALUES (?, ?, 'Thanks')`,
+            [made.data.id, studentId],
+          );
+          const counted = await service.get(student, made.data.id);
+          assert.deepEqual(
+            [
+              counted.data.like_count,
+              counted.data.comment_count,
+              counted.data.liked_by_me,
+            ],
+            [1, 1, true],
+          );
+          await service.remove(lecturer, made.data.id);
+          await assert.rejects(service.get(lecturer, made.data.id), notFound);
+          const [{ likes }] = await ds.query(
+            'SELECT COUNT(*) AS likes FROM announcement_likes WHERE announcement_id = ?',
+            [made.data.id],
+          );
+          const [{ comments }] = await ds.query(
+            'SELECT COUNT(*) AS comments FROM announcement_comments WHERE announcement_id = ?',
+            [made.data.id],
+          );
+          assert.deepEqual([Number(likes), Number(comments)], [0, 0]);
+        },
       );
     });
   });

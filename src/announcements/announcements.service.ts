@@ -3,7 +3,11 @@ import type { DataSource } from 'typeorm';
 import { DATABASE } from '../database/database.constants';
 import type { AnnouncementCategory } from '../database/entities';
 import type { AuthenticatedUser } from '../auth/auth-request';
-import { notFound } from '../common/api-exception';
+import {
+  ApiException,
+  notFound,
+  validationError,
+} from '../common/api-exception';
 import { pageMeta, type PageMeta } from '../common/query-reader';
 import {
   toClassSummary,
@@ -13,6 +17,8 @@ import { likePattern } from '../courses/courses.service';
 import { AnnouncementAccessService } from './announcement-access.service';
 import type {
   AnnouncementSort,
+  CreateAnnouncementDto,
+  UpdateAnnouncementDto,
   ListAllAnnouncementsQueryDto,
   ListAnnouncementsQueryDto,
 } from './dto/announcement.dto';
@@ -199,5 +205,78 @@ export class AnnouncementsService {
     if (!row || !(await this.access.canSeeClass(user, Number(row.class_id))))
       throw notFound('Announcement not found.');
     return { data: toAnnouncement(row, user) };
+  }
+
+  // Only the lecturer of the class may post. Any other caller gets the same
+  // 404 as for a missing class, so the API does not show which classes exist.
+  async create(
+    user: AuthenticatedUser,
+    classId: number,
+    input: CreateAnnouncementDto,
+  ): Promise<{ data: AnnouncementDto }> {
+    if (!(await this.access.canSeeClass(user, classId)))
+      throw notFound('Class not found.');
+    const result = (await this.database.query(
+      `INSERT INTO announcements (class_id, author_id, category, title, body)
+       VALUES (?, ?, ?, ?, ?)`,
+      [classId, user.id, input.category, input.title, input.body],
+    )) as { insertId: number | string };
+    return this.get(user, Number(result.insertId));
+  }
+
+  async update(
+    user: AuthenticatedUser,
+    announcementId: number,
+    input: UpdateAnnouncementDto,
+  ): Promise<{ data: AnnouncementDto }> {
+    const changes: [string, string][] = [];
+    for (const field of ['category', 'title', 'body'] as const) {
+      const value = input[field];
+      if (value !== undefined) changes.push([field, value]);
+    }
+    if (changes.length === 0)
+      throw validationError({
+        body: 'Send at least one of category, title or body.',
+      });
+    await this.findWritable(user, announcementId);
+    // `field` comes from the fixed list above, never from the request.
+    const assignments = changes.map(([field]) => `${field} = ?`);
+    await this.database.query(
+      `UPDATE announcements SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP(3)
+       WHERE id = ? AND author_id = ?`,
+      [...changes.map(([, value]) => value), announcementId, user.id],
+    );
+    return this.get(user, announcementId);
+  }
+
+  // The database removes the post's likes and comments with it (cascade).
+  async remove(user: AuthenticatedUser, announcementId: number): Promise<void> {
+    await this.findWritable(user, announcementId);
+    await this.database.query('DELETE FROM announcements WHERE id = ?', [
+      announcementId,
+    ]);
+  }
+
+  // A post the caller may change. Missing posts and posts in classes the caller
+  // cannot see are 404. A lecturer who can see the class but did not write the
+  // post gets 403. An admin may delete any post; the controller blocks an
+  // admin from editing.
+  private async findWritable(
+    user: AuthenticatedUser,
+    announcementId: number,
+  ): Promise<void> {
+    const rows = (await this.database.query(
+      'SELECT class_id, author_id FROM announcements WHERE id = ?',
+      [announcementId],
+    )) as { class_id: number | string; author_id: number | string }[];
+    const post = rows[0];
+    if (!post || !(await this.access.canSeeClass(user, Number(post.class_id))))
+      throw notFound('Announcement not found.');
+    if (user.role !== 'admin' && Number(post.author_id) !== user.id)
+      throw new ApiException(
+        403,
+        'FORBIDDEN',
+        'Only the author can change this announcement.',
+      );
   }
 }

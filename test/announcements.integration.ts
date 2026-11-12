@@ -19,29 +19,37 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
       new AnnouncementAccessService(ds),
     );
 
-    // Pick real seeded people: a class with its lecturer and one enrolled
-    // student, plus a student and a lecturer with no link to that class.
-    const [link] = await ds.query(
-      `SELECT e.class_id AS classId, e.student_id AS studentId, c.lecturer_id AS lecturerId
-       FROM enrolments e JOIN classes c ON c.id = e.class_id
-       ORDER BY e.class_id, e.student_id LIMIT 1`,
+    // Use an isolated class, so the seeded announcements do not change the
+    // expected feed. People come from the seeded accounts.
+    const accountId = async (email: string): Promise<number> => {
+      const [row] = await ds.query('SELECT id FROM users WHERE email = ?', [
+        email,
+      ]);
+      return Number(row.id);
+    };
+    const lecturerId = await accountId('lecturer.one@example.com');
+    const studentId = await accountId('student.one@example.com');
+    const outsiderId = await accountId('student.two@example.com');
+    const otherLecturerId = await accountId('lecturer.two@example.com');
+    const adminId = await accountId('admin.demo@example.com');
+    const [{ id: courseId }] = await ds.query(
+      'SELECT id FROM courses ORDER BY id LIMIT 1',
     );
-    const { classId, studentId, lecturerId } = link;
-    const [{ id: outsiderId }] = await ds.query(
-      `SELECT id FROM users WHERE role = 'student' AND id NOT IN
-         (SELECT student_id FROM enrolments WHERE class_id = ?) ORDER BY id LIMIT 1`,
-      [classId],
+    const classResult: any = await ds.query(
+      `INSERT INTO classes (course_id, section, term, lecturer_id, room_label, latitude, longitude, radius_m)
+       VALUES (?, 'ZZTEST', '2099-TEST', ?, 'Test room', 1, 1, 50)`,
+      [courseId, lecturerId],
     );
-    const [{ id: otherLecturerId }] = await ds.query(
-      `SELECT id FROM users WHERE role = 'lecturer' AND id <> ? ORDER BY id LIMIT 1`,
-      [lecturerId],
+    const classId = Number(classResult.insertId);
+    await ds.query(
+      'INSERT INTO enrolments (class_id, student_id) VALUES (?, ?)',
+      [classId, studentId],
     );
-    const [{ id: adminId }] = await ds.query(
-      `SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`,
-    );
+    // A seeded class that this student is not enrolled in.
     const [{ id: otherClassId }] = await ds.query(
-      `SELECT id FROM classes WHERE id <> ? ORDER BY id LIMIT 1`,
-      [classId],
+      `SELECT id FROM classes WHERE id <> ? AND id NOT IN
+         (SELECT class_id FROM enrolments WHERE student_id = ?) ORDER BY id LIMIT 1`,
+      [classId, studentId],
     );
     const student = { id: Number(studentId), role: 'student' as const };
     const lecturer = { id: Number(lecturerId), role: 'lecturer' as const };
@@ -68,6 +76,8 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
     t.after(async () => {
       if (created.length)
         await ds.query('DELETE FROM announcements WHERE id IN (?)', [created]);
+      await ds.query('DELETE FROM enrolments WHERE class_id = ?', [classId]);
+      await ds.query('DELETE FROM classes WHERE id = ?', [classId]);
     });
 
     const a = await insertPost(

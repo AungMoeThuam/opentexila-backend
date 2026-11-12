@@ -148,6 +148,23 @@ test(
           assert.equal(await ds!.getRepository('Course').count(), 5);
           assert.equal(await ds!.getRepository('Class').count(), 8);
           assert.equal(await ds!.getRepository('ClassSession').count(), 64);
+          // Three announcements for each of the eight classes, with their
+          // likes and comments, and the same totals after a second run.
+          const announcementTotals = async () =>
+            Promise.all(
+              ['Announcement', 'AnnouncementLike', 'AnnouncementComment'].map(
+                (name) => ds!.getRepository(name).count(),
+              ),
+            );
+          const [posts, likes, comments] = await announcementTotals();
+          assert.equal(posts, 24);
+          assert.ok(likes > 24 && comments > 24);
+          await seedDemo(ds!, env);
+          assert.deepEqual(await announcementTotals(), [
+            posts,
+            likes,
+            comments,
+          ]);
           assert.equal(
             (await ds!.getRepository('AttendanceRecord').count()) > 100,
             true,

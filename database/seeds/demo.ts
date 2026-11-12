@@ -8,6 +8,9 @@ import type {
   ClassSessionEntity,
   EnrolmentEntity,
   AttendanceRecordEntity,
+  AnnouncementEntity,
+  AnnouncementLike,
+  AnnouncementComment,
 } from '../../dist/database/entities/index.js';
 
 const DAY_MS = 86400000;
@@ -369,6 +372,50 @@ const PAST_WEEK_ATTENDANCE: Record<string, PastOutcome[]> = {
   ],
 };
 
+interface AnnouncementPlan {
+  category: 'general' | 'class_change' | 'reminder' | 'exam';
+  title: string;
+  body: string;
+  daysBefore: number;
+}
+
+// Three posts for each class: a welcome, a check-in reminder, and either a
+// class change (even classes) or a quiz notice (odd classes). Dates are
+// relative to the first session start, so the newest post is always recent.
+function announcementPlans(
+  courseCode: string,
+  section: string,
+  index: number,
+): AnnouncementPlan[] {
+  return [
+    {
+      category: 'general',
+      title: `Welcome to ${courseCode}`,
+      body: `Welcome to ${courseCode} section ${section}. Please read the unit outline before the first class and bring your questions.`,
+      daysBefore: 21,
+    },
+    {
+      category: 'reminder',
+      title: 'Check-in reminder',
+      body: 'Attendance uses your location. Turn on location access in your browser and check in as soon as you arrive in the room.',
+      daysBefore: 7,
+    },
+    index % 2 === 0
+      ? {
+          category: 'class_change',
+          title: 'Room change this week',
+          body: `This week's ${courseCode} class moves to the lab next door. Check-in works in the same way.`,
+          daysBefore: 1,
+        }
+      : {
+          category: 'exam',
+          title: 'Quiz next week',
+          body: `There will be a short quiz in ${courseCode} next week. It covers the first four weeks and is worth 20% of your mark.`,
+          daysBefore: 2,
+        },
+  ];
+}
+
 export async function seedDemo(
   dataSource: DataSource,
   env: NodeJS.ProcessEnv = process.env,
@@ -441,6 +488,12 @@ export async function seedDemo(
       manager.getRepository<ClassSessionEntity>('ClassSession');
     const records =
       manager.getRepository<AttendanceRecordEntity>('AttendanceRecord');
+    const announcements =
+      manager.getRepository<AnnouncementEntity>('Announcement');
+    const likes = manager.getRepository<AnnouncementLike>('AnnouncementLike');
+    const comments = manager.getRepository<AnnouncementComment>(
+      'AnnouncementComment',
+    );
     const classIds: number[] = [];
     const sessionIds: number[] = [];
     let firstClass: ClassEntity | undefined;
@@ -485,6 +538,72 @@ export async function seedDemo(
             class_id: classroom.id,
             student_id: student.id,
           });
+      }
+
+      // Announcements keep API-created posts: a post is only added when a post
+      // with the same title is missing, together with its likes and comments.
+      for (const [postIndex, post] of announcementPlans(
+        plan.courseCode,
+        plan.section,
+        index,
+      ).entries()) {
+        const existing = await announcements.findOneBy({
+          class_id: classroom.id,
+          title: post.title,
+        });
+        if (existing) continue;
+        const postedAt = new Date(
+          startsAt.getTime() - post.daysBefore * DAY_MS,
+        );
+        const saved = await announcements.save({
+          class_id: classroom.id,
+          author_id: lecturer.id,
+          category: post.category,
+          title: post.title,
+          body: post.body,
+          created_at: postedAt,
+          updated_at: postedAt,
+        });
+        // Students like alternate posts so the counts differ; the lecturer
+        // likes the welcome post.
+        const likers = enrolledStudents.filter(
+          (_student, slot) => (slot + postIndex) % 2 === 0,
+        );
+        if (postIndex === 0) likers.push(lecturer);
+        await likes.save(
+          likers.map((user) => ({
+            announcement_id: saved.id,
+            user_id: user.id,
+            created_at: new Date(postedAt.getTime() + HOUR_MS),
+          })),
+        );
+        const commentPlans: [UserEntity | undefined, string][] = [
+          [
+            enrolledStudents[postIndex % enrolledStudents.length],
+            [
+              'Looking forward to it!',
+              'Thanks for the reminder.',
+              'Thanks for letting us know.',
+            ][postIndex] ?? 'Thank you.',
+          ],
+          ...(postIndex === 1
+            ? ([[lecturer, 'You are welcome. See you in class.']] as [
+                UserEntity,
+                string,
+              ][])
+            : []),
+        ];
+        let minutes = 2 * 60;
+        for (const [author, body] of commentPlans) {
+          if (!author) continue;
+          await comments.save({
+            announcement_id: saved.id,
+            author_id: author.id,
+            body,
+            created_at: new Date(postedAt.getTime() + minutes * MINUTE_MS),
+          });
+          minutes += 30;
+        }
       }
 
       const schedule: ClassSessionEntity[] = [];

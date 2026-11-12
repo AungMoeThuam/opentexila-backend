@@ -223,6 +223,45 @@ export async function classSessionsAdminIntegration(
           service.create(classSameRoom, times(25)),
           code('SCHEDULE_CONFLICT'),
         );
+        // The error says which session clashes and why.
+        const conflictsOf = async (classId: number, start: number) => {
+          try {
+            await service.create(classId, times(start));
+          } catch (error: any) {
+            return error.getResponse().error;
+          }
+          throw new Error('Expected a schedule conflict.');
+        };
+        const sameLecturer = await conflictsOf(classSameLecturer, 25);
+        assert.equal(sameLecturer.conflicts.length, 1);
+        assert.deepEqual(sameLecturer.conflicts[0].types, ['lecturer']);
+        assert.equal(sameLecturer.conflicts[0].session.class.id, classA);
+        assert.equal(sameLecturer.conflicts[0].session.class.section, 'ZZSESA');
+        assert.equal(sameLecturer.conflicts[0].session.class.term, '2099-TEST');
+        assert.equal(
+          sameLecturer.conflicts[0].session.lecturer.id,
+          lecturerOne,
+        );
+        assert.ok(sameLecturer.conflicts[0].session.lecturer.name);
+        assert.ok(sameLecturer.conflicts[0].session.class.course.code);
+        assert.equal(
+          sameLecturer.conflicts[0].session.room_label,
+          'Sess room A',
+        );
+        assert.equal(sameLecturer.conflicts[0].session.starts_at, hours(24));
+        assert.equal(sameLecturer.conflicts[0].session.ends_at, hours(26));
+        const sameRoom = await conflictsOf(classSameRoom, 25);
+        assert.deepEqual(sameRoom.conflicts[0].types, ['room']);
+        const sameClass = await conflictsOf(classA, 25);
+        assert.deepEqual(sameClass.conflicts[0].types.sort(), [
+          'class',
+          'lecturer',
+          'room',
+        ]);
+        assert.match(
+          sameClass.message,
+          /same class, the same lecturer and the same room/,
+        );
         // A different class, lecturer and room is free at the same time.
         const free = await service.create(classB, times(25));
         assert.equal(free.data.class_id, classB);

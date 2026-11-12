@@ -137,6 +137,12 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
     await t.test('the feed shows only this class, newest first', async () => {
       const page = await feed(student);
       assert.deepEqual(ids(page), [d, c, b, a]);
+      // The class summary says which class the feed belongs to.
+      assert.equal(page.context.class.id, classId);
+      assert.equal(page.context.class.section, 'ZZTEST');
+      assert.equal(page.context.class.term, '2099-TEST');
+      assert.ok(page.context.class.course.code);
+      assert.equal(page.context.class.lecturer.id, lecturerId);
       assert.equal(ids(page).includes(elsewhere), false);
       assert.deepEqual(page.meta, {
         page: 1,
@@ -148,6 +154,7 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
         'author',
         'body',
         'category',
+        'class',
         'class_id',
         'comment_count',
         'created_at',
@@ -273,6 +280,151 @@ export async function announcementsIntegration(t: TestContext, ds: DataSource) {
       await assert.rejects(service.get(student, elsewhere), notFound);
       assert.equal((await service.get(admin, elsewhere)).data.id, elsewhere);
     });
+
+    const allList = (user: any, query: Record<string, unknown> = {}) =>
+      service.listAll(user, {
+        page: 1,
+        limit: 100,
+        sort: 'newest',
+        ...query,
+      } as any);
+
+    await t.test(
+      'the all-classes list is limited to the caller classes',
+      async () => {
+        const classSet = async (sql: string, id: number) =>
+          new Set<number>(
+            (await ds.query(sql, [id])).map((row: any) => Number(row.id)),
+          );
+        const enrolled = await classSet(
+          'SELECT class_id AS id FROM enrolments WHERE student_id = ?',
+          studentId,
+        );
+        const taught = await classSet(
+          'SELECT id FROM classes WHERE lecturer_id = ?',
+          lecturerId,
+        );
+        const countIn = async (classes: Set<number>) => {
+          const [{ total }] = await ds.query(
+            'SELECT COUNT(*) AS total FROM announcements WHERE class_id IN (?)',
+            [[...classes]],
+          );
+          return Number(total);
+        };
+
+        const forStudent = await allList(student);
+        assert.ok(forStudent.data.length > 4, 'seeded posts and test posts');
+        assert.ok(forStudent.data.every((post) => enrolled.has(post.class_id)));
+        assert.equal(forStudent.meta.total, await countIn(enrolled));
+        assert.ok(forStudent.data.some((post) => post.class_id === classId));
+
+        const forLecturer = await allList(lecturer);
+        assert.ok(forLecturer.data.every((post) => taught.has(post.class_id)));
+        assert.equal(forLecturer.meta.total, await countIn(taught));
+
+        const [{ every }] = await ds.query(
+          'SELECT COUNT(*) AS every FROM announcements',
+        );
+        assert.equal((await allList(admin)).meta.total, Number(every));
+        // A student who is not in this class sees none of its posts.
+        const outsider = { id: Number(outsiderId), role: 'student' as const };
+        assert.equal(
+          (await allList(outsider)).data.some(
+            (post) => post.class_id === classId,
+          ),
+          false,
+        );
+      },
+    );
+
+    await t.test(
+      'the all-classes list filters, sorts and labels posts',
+      async () => {
+        const onlyClass = await allList(student, { classId });
+        assert.deepEqual(ids(onlyClass), [d, c, b, a]);
+        const [course] = await ds.query(
+          'SELECT c.id, c.code, c.name FROM courses c JOIN classes k ON k.course_id = c.id WHERE k.id = ?',
+          [classId],
+        );
+        assert.deepEqual(onlyClass.data[0].class, {
+          id: classId,
+          course: {
+            id: Number(course.id),
+            code: course.code,
+            name: course.name,
+          },
+          section: 'ZZTEST',
+          term: '2099-TEST',
+        });
+        assert.deepEqual(
+          ids(await allList(student, { classId, sort: 'most_liked' })),
+          [b, c, d, a],
+        );
+        assert.deepEqual(
+          ids(await allList(student, { classId, category: 'exam' })),
+          [c],
+        );
+        // Text that only the test posts contain, searched across every class.
+        assert.deepEqual(
+          ids(await allList(student, { search: 'BRING YOUR LAPTOP' })),
+          [b],
+        );
+        // `%` is literal: every match contains one, and it is not "match all".
+        const percent = await allList(student, { search: '%' });
+        assert.ok(ids(percent).includes(c));
+        assert.ok(
+          percent.data.every((post) => (post.title + post.body).includes('%')),
+        );
+        assert.ok(percent.meta.total < (await allList(student)).meta.total);
+        const paged = await allList(student, { classId, limit: 2, page: 2 });
+        assert.deepEqual(ids(paged), [b, a]);
+        assert.deepEqual(paged.meta, {
+          page: 2,
+          limit: 2,
+          total: 4,
+          totalPages: 2,
+        });
+        // Most liked puts the highest like counts first across all classes.
+        const liked = (await allList(student, { sort: 'most_liked' })).data.map(
+          (post) => post.like_count,
+        );
+        assert.deepEqual(
+          liked,
+          [...liked].sort((x, y) => y - x),
+        );
+        // Posts of different classes carry their own class label.
+        const labels = new Set(
+          (await allList(student)).data.map((post) => post.class.id),
+        );
+        assert.ok(labels.size > 1);
+        assert.ok(
+          ids(await allList(admin, { classId: otherClassId })).includes(
+            elsewhere,
+          ),
+        );
+      },
+    );
+
+    await t.test(
+      'the all-classes list hides classes the caller cannot see',
+      async () => {
+        await assert.rejects(
+          allList(
+            { id: Number(outsiderId), role: 'student' as const },
+            { classId },
+          ),
+          notFound,
+        );
+        await assert.rejects(
+          allList(
+            { id: Number(otherLecturerId), role: 'lecturer' as const },
+            { classId },
+          ),
+          notFound,
+        );
+        await assert.rejects(allList(admin, { classId: 4294967295 }), notFound);
+      },
+    );
 
     await t.test(
       'deleting an announcement removes its likes and comments',

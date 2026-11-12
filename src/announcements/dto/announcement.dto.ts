@@ -41,3 +41,10 @@ export class ListAnnouncementsQueryDto extends PaginationQueryDto {
   })
   sort: AnnouncementSort = 'newest';
 }
+
+// Filters for GET /announcements (all classes the caller may see).
+export class ListAllAnnouncementsQueryDto extends ListAnnouncementsQueryDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @QueryInteger(4294967295)
+  classId?: number;
+}

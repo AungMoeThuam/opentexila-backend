@@ -22,6 +22,11 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   updated_at: new Date('2026-11-12T01:30:00.000Z'),
   author_id: '2',
   author_name: 'Lecturer One',
+  course_id: '1',
+  course_code: 'COS30043',
+  course_name: 'Interface Design',
+  section: 'A',
+  term: '2026-S2',
   like_count: '12',
   comment_count: '3',
   liked_by_me: '1',
@@ -52,6 +57,17 @@ test('announcement reading permissions, queries and responses', async (t) => {
       Course: {},
       Class: {
         findOneBy: async ({ id }: any) => classes[id] ?? null,
+        findOne: async ({ where: { id } }: any) =>
+          classes[id]
+            ? {
+                ...classes[id],
+                section: 'A',
+                term: '2026-S2',
+                room_label: 'EN402',
+                course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+                lecturer: { id: classes[id].lecturer_id, name: 'Lecturer One' },
+              }
+            : null,
       },
       Enrolment: {
         findOneBy: async ({ class_id, student_id }: any) =>
@@ -137,6 +153,12 @@ test('announcement reading permissions, queries and responses', async (t) => {
             title: "Tomorrow's class moves to EN305",
             body: 'Please go to room EN305.',
             author: { id: 2, name: 'Lecturer One' },
+            class: {
+              id: 7,
+              course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+              section: 'A',
+              term: '2026-S2',
+            },
             created_at: '2026-11-12T01:00:00.000Z',
             updated_at: '2026-11-12T01:30:00.000Z',
             like_count: 12,
@@ -144,6 +166,16 @@ test('announcement reading permissions, queries and responses', async (t) => {
             liked_by_me: true,
           },
         ],
+        context: {
+          class: {
+            id: 7,
+            course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+            section: 'A',
+            term: '2026-S2',
+            lecturer: { id: 2, name: 'Lecturer One' },
+            room_label: 'EN402',
+          },
+        },
         meta: { page: 2, limit: 20, total: 41, totalPages: 3 },
       });
       const [sql, params] = listSql();
@@ -161,6 +193,16 @@ test('announcement reading permissions, queries and responses', async (t) => {
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       data: [],
+      context: {
+        class: {
+          id: 7,
+          course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+          section: 'A',
+          term: '2026-S2',
+          lecturer: { id: 2, name: 'Lecturer One' },
+          room_label: 'EN402',
+        },
+      },
       meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
     });
     rows = [row()];
@@ -291,4 +333,162 @@ test('announcement reading permissions, queries and responses', async (t) => {
       assert.ok((await response.json()).error.fields.announcementId);
     }
   });
+
+  await t.test('GET /announcements needs a signed-in user', async () => {
+    app.state.signedIn = false;
+    const response = await get('/announcements');
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'UNAUTHENTICATED');
+    app.state.signedIn = true;
+  });
+
+  await t.test(
+    'GET /announcements limits each role to its own classes',
+    async () => {
+      rows = [row()];
+      total = 1;
+      const cases: [string, number, RegExp, any[]][] = [
+        [
+          'student',
+          21,
+          /class_id IN \(SELECT class_id FROM enrolments WHERE student_id = \?\)/,
+          [21, 21, 20, 0],
+        ],
+        [
+          'lecturer',
+          2,
+          /class_id IN \(SELECT id FROM classes WHERE lecturer_id = \?\)/,
+          [2, 2, 20, 0],
+        ],
+        ['admin', 1, /1 = 1/, [1, 20, 0]],
+      ];
+      for (const [role, id, pattern, params] of cases) {
+        as(role, id);
+        const response = await get('/announcements');
+        assert.equal(response.status, 200, role);
+        const [sql, used] = listSql();
+        assert.match(sql, pattern, role);
+        assert.deepEqual(used, params, role);
+        const body = await response.json();
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.deepEqual(Object.keys(body).sort(), ['data', 'meta']);
+        assert.deepEqual(body.meta, {
+          page: 1,
+          limit: 20,
+          total: 1,
+          totalPages: 1,
+        });
+        // Each post says which class it belongs to.
+        assert.deepEqual(body.data[0].class, {
+          id: 7,
+          course: { id: 1, code: 'COS30043', name: 'Interface Design' },
+          section: 'A',
+          term: '2026-S2',
+        });
+      }
+    },
+  );
+
+  await t.test(
+    'GET /announcements applies filters, sort and paging',
+    async () => {
+      as('student', 21);
+      total = 45;
+      const response = await get(
+        '/announcements?search=%20quiz%25%20&category=exam&sort=most_liked&page=2&limit=10',
+      );
+      assert.equal(response.status, 200);
+      const [sql, params] = listSql();
+      assert.match(
+        sql,
+        /ORDER BY like_count DESC, a\.created_at DESC, a\.id DESC/,
+      );
+      assert.match(sql, /a\.category = \?/);
+      // [me, scope, category, pattern, pattern, limit, offset]
+      assert.deepEqual(params, [
+        21,
+        21,
+        'exam',
+        '%quiz\\%%',
+        '%quiz\\%%',
+        10,
+        10,
+      ]);
+      assert.deepEqual((await response.json()).meta, {
+        page: 2,
+        limit: 10,
+        total: 45,
+        totalPages: 5,
+      });
+      total = 1;
+    },
+  );
+
+  await t.test(
+    'GET /announcements?classId narrows to one visible class',
+    async () => {
+      as('student', 21);
+      let response = await get('/announcements?classId=7&category=reminder');
+      assert.equal(response.status, 200);
+      let [sql, params] = listSql();
+      assert.match(sql, / AND a\.class_id = \?/);
+      assert.deepEqual(params, [21, 21, 7, 'reminder', 20, 0]);
+      as('admin', 1);
+      response = await get('/announcements?classId=8');
+      assert.equal(response.status, 200);
+      [sql, params] = listSql();
+      assert.deepEqual(params, [1, 8, 20, 0]);
+    },
+  );
+
+  await t.test(
+    'GET /announcements?classId hides classes the caller cannot see',
+    async () => {
+      queries.length = 0;
+      for (const [role, id, classId] of [
+        ['student', 22, 7],
+        ['student', 21, 8],
+        ['lecturer', 3, 7],
+        ['lecturer', 2, 8],
+        ['admin', 1, 999],
+      ] as [string, number, number][]) {
+        as(role, id);
+        const response = await get(`/announcements?classId=${classId}`);
+        assert.equal(response.status, 404, `${role} ${id} class ${classId}`);
+        assert.equal((await response.json()).error.code, 'RESOURCE_NOT_FOUND');
+      }
+      assert.deepEqual(queries, []);
+    },
+  );
+
+  await t.test('GET /announcements validates the query', async () => {
+    as('student', 21);
+    queries.length = 0;
+    for (const [field, query] of [
+      ['classId', '?classId=0'],
+      ['classId', '?classId=abc'],
+      ['classId', '?classId=1.5'],
+      ['limit', '?limit=101'],
+      ['page', '?page=0'],
+      ['sort', '?sort=random'],
+      ['category', '?category=news'],
+      ['search', '?search='],
+    ]) {
+      const response = await get(`/announcements${query}`);
+      assert.equal(response.status, 422, query);
+      const error = (await response.json()).error;
+      assert.equal(error.code, 'VALIDATION_ERROR');
+      assert.ok(error.fields[field], `${field} message`);
+    }
+    assert.deepEqual(queries, []);
+  });
+
+  await t.test(
+    'GET /announcements shows liked_by_me as false for an admin',
+    async () => {
+      as('admin', 1);
+      const body = await (await get('/announcements')).json();
+      assert.equal(body.data[0].liked_by_me, false);
+    },
+  );
 });

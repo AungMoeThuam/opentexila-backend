@@ -6,6 +6,7 @@ import { AnnouncementsService } from './announcements.service';
 import {
   AnnouncementParamsDto,
   ClassAnnouncementsParamsDto,
+  ListAllAnnouncementsQueryDto,
   ListAnnouncementsQueryDto,
 } from './dto/announcement.dto';
 
@@ -15,6 +16,14 @@ import {
 @UseGuards(AttendanceGuard)
 export class AnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}
+
+  @Get('announcements')
+  listAll(
+    @Query() query: ListAllAnnouncementsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.announcements.listAll(user, query);
+  }
 
   @Get('classes/:classId/announcements')
   list(

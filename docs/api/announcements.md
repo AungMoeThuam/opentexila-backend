@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes and enrolments](enrolments.md)
 
-**Status: reading announcements (list and get one) is implemented. Creating, editing and deleting posts, likes and comments are planned in the next backend issues.** Paths are relative to `/api/v1`.
+**Status: reading announcements (list for all classes, list for one class, and get one) is implemented. Creating, editing and deleting posts, likes and comments are planned in the next backend issues.** Paths are relative to `/api/v1`.
 
 A lecturer posts news to one of their classes, for example a class change or a reminder. Students of that class read the posts, like them and write comments. Pinned posts are not planned.
 
@@ -10,6 +10,7 @@ A lecturer posts news to one of their classes, for example a class change or a r
 
 | Method | Path | Allowed roles | Status |
 | --- | --- | --- | --- |
+| GET | `/announcements` | Lecturer (own classes), student (enrolled classes), admin (all) | Implemented |
 | GET | `/classes/:classId/announcements` | Assigned lecturer, enrolled student, admin | Implemented |
 | GET | `/announcements/:announcementId` | Assigned lecturer, enrolled student, admin | Implemented |
 | POST | `/classes/:classId/announcements` | Assigned lecturer | Planned (write API) |
@@ -53,6 +54,12 @@ Migration `1793750400000-Announcements.ts` creates three tables. IDs are unsigne
   "title": "Tomorrow's class moves to EN305",
   "body": "Please go to room EN305 at the usual time.",
   "author": { "id": 2, "name": "Lecturer One" },
+  "class": {
+    "id": 7,
+    "course": { "id": 1, "code": "COS30043", "name": "Interface Design" },
+    "section": "A",
+    "term": "2026-S2"
+  },
   "created_at": "2026-11-12T01:00:00.000Z",
   "updated_at": "2026-11-12T01:00:00.000Z",
   "like_count": 12,
@@ -61,7 +68,31 @@ Migration `1793750400000-Announcements.ts` creates three tables. IDs are unsigne
 }
 ```
 
-`like_count`, `comment_count` and `liked_by_me` come from the like and comment tables in the same query, so one page needs one query, not one for each post. `liked_by_me` is always `false` for an admin. Show `title`, `body` and comments as plain text.
+`class` names the class the post belongs to, so a list across several classes can label each post. `like_count`, `comment_count` and `liked_by_me` come from the like and comment tables in the same query, so one page needs one query, not one for each post. `liked_by_me` is always `false` for an admin. Show `title`, `body` and comments as plain text.
+
+### `GET /announcements`
+
+One list of announcements from **all** the classes the caller may see: the enrolled classes of a student, the taught classes of a lecturer, every class for an admin. It powers the "Announcements" page in the navigation.
+
+| Query | Rule | Default |
+| --- | --- | --- |
+| `classId` | Integer, 1–4294967295. Narrows the list to one class. A class the caller may not see, or that does not exist, returns `404`. | all visible classes |
+| `search` | 1–100 characters after trimming. Case-insensitive match on `title` or `body`. `%` and `_` match literally. | none |
+| `category` | `general`, `class_change`, `reminder` or `exam` | all |
+| `sort` | `newest`, `oldest` or `most_liked` | `newest` |
+| `page` | Integer, 1–10000 | `1` |
+| `limit` | Integer, 1–100 | `20` |
+
+Sorting, search and paging work as in the per-class list below. Success: **200 OK**
+
+```json
+{
+  "data": [ { "...": "announcement object, with its class" } ],
+  "meta": { "page": 1, "limit": 20, "total": 24, "totalPages": 2 }
+}
+```
+
+There is no `context` here, because the posts come from several classes. Use each post's `class` instead. No match returns `"data": []`.
 
 ### `GET /classes/:classId/announcements`
 
@@ -80,11 +111,21 @@ Success: **200 OK**
 ```json
 {
   "data": [ { "...": "announcement object" } ],
+  "context": {
+    "class": {
+      "id": 7,
+      "course": { "id": 1, "code": "COS30043", "name": "Interface Design" },
+      "section": "A",
+      "term": "2026-S2",
+      "lecturer": { "id": 2, "name": "Lecturer One" },
+      "room_label": "EN402"
+    }
+  },
   "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
 }
 ```
 
-No match returns `"data": []` with `"total": 0`. It is not an error.
+`context.class` is the same class summary as the roster endpoint. A page can show which class the feed belongs to without another request. No match returns `"data": []` with `"total": 0`. It is not an error.
 
 ### `GET /announcements/:announcementId`
 

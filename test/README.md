@@ -15,6 +15,8 @@ Do not run build-backed test commands simultaneously: each build replaces `dist/
 - `attendance-records.test.ts`: real HTTP routing, guard behaviour and safe errors with fake repositories, including `GET /me/attendance-records/classes`. Its fake query builder only proves the verified student id reaches the query; the SQL itself is verified against MySQL.
 - `attendance-history.integration.ts`: real MySQL history filtering, student isolation, ordering, paging, date boundaries and cancelled records, plus the history class-filter options (current, former and cancelled-only classes, dedupe across pages, ordering and isolation).
 - `attendance.test.ts` and `attendance.integration.ts`: attendance rules, request handling, transactions and concurrency at their respective levels.
+- `class-session-finalise.test.ts`: real HTTP routing, access, CSRF, validation and the outcome/error contract of `POST /class-sessions/:id/finalise`. The transaction is a fake that does not parse SQL.
+- `finalisation.integration.ts`: real MySQL finalisation: pending and unmaterialised students become absent, evidence is kept, repeat and concurrent calls are idempotent, and open, cancelled and foreign sessions are untouched.
 - Authentication, cookies, database configuration, migrations, seeds, development auth and stack tests retain their separate coverage.
 
 ## Adding coverage

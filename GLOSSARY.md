@@ -28,6 +28,16 @@ _Avoid_: lesson, occurrence
 A student's attendance outcome for one Class session. It outlives the student's Enrolment in the Class.
 _Avoid_: check-in (a check-in is only how a record becomes present or late)
 
+**Pending**:
+An Attendance record that has not yet been given an outcome by a check-in or by Finalisation.
+
+**Absent**:
+The outcome for a student who did not check in before the Class session ended, recorded at Finalisation.
+
+**Finalisation**:
+The Lecturer closing a Class session after it has ended, which gives every enrolled student a final Attendance record outcome.
+_Avoid_: close, end session (a Class session ends by time but is only finalised by its Lecturer)
+
 **Attendance history**:
 A student's Attendance records across all their Classes, current or former.
 _Avoid_: attendance log

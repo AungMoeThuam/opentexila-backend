@@ -23,6 +23,7 @@
 | `GET` | `/classes/:classId/class-sessions` | `admin` | Backend `#19` / Frontend `#17` | List the sessions of one class with attendance counts |
 | `POST` | `/classes/:classId/class-sessions` | `admin` | Backend `#19` / Frontend `#17` | Schedule a new session for a class |
 | `POST` | `/class-sessions/:classSessionId/cancel` | `admin` | Backend `#19` / Frontend `#17` | Cancel a session that has not ended; keeps its attendance records |
+| `PATCH` | `/class-sessions/:classSessionId/attendance-policy` | `admin` | Backend `#25` / Frontend `#25` | Change the venue and the late time of one session that has not started |
 | `GET` | `/me/attendance-records` | `student` | Backend `#11` / Frontend `#8` | Personal attendance history across class sessions |
 | `GET` | `/me/attendance-records/classes` | `student` | Backend `#17` / Frontend `#14` | Classes the student can pick in the attendance-history filter |
 
@@ -664,6 +665,36 @@ Cancelling never deletes or changes attendance records, and it never creates abs
 
 Success: **200 OK** with `{ "data": { session object } }` and `"state": "cancelled"`.
 
+### `PATCH /class-sessions/:classSessionId/attendance-policy`
+
+Changes the attendance settings of **one** session: where students can check in, and when a check-in counts as Late. The class is not touched, and neither are the other sessions of the class. A later change to the class defaults never changes a session that already exists.
+
+```json
+{
+  "room_label": "EN305",
+  "latitude": 3.1215,
+  "longitude": 101.6568,
+  "radius_m": 75,
+  "late_after": "2026-11-20T01:15:00.000Z"
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `room_label` | Optional. 1–100 characters after trimming. |
+| `latitude` | Optional. Number from -90 to 90, rounded to 6 decimals. |
+| `longitude` | Optional. Number from -180 to 180, rounded to 6 decimals. |
+| `radius_m` | Optional. Number from 1 to 1000, rounded to 2 decimals. Same limits as a class. |
+| `late_after` | Optional. UTC time `YYYY-MM-DDTHH:mm:ss[.sss]Z`. Not before the session's `starts_at` and before its `ends_at`. |
+
+Send at least one field. An empty body returns `422`. Unknown fields are stripped, so `starts_at`, `ends_at`, `state` and `class_id` cannot be changed here (the timetable reschedules times). Fields you do not send keep their saved value.
+
+**When it is allowed.** Only while the session is `scheduled` and has not started. The server locks the class, then the session, then reads its own clock, in the same order as check-in. A check-in therefore cannot happen between the check and the save. A session that has started, ended or been cancelled is history, so the server answers `409 SESSION_NOT_EDITABLE` and changes nothing. Attendance records are never changed.
+
+**Check-in uses these values.** A student's check-in is checked against the session's saved location, radius and `late_after`, as before. After this change, the new values apply.
+
+Success: **200 OK** with `{ "data": { session object } }` (the session object of this section).
+
 ### Errors
 
 | HTTP | `error.code` | When |
@@ -673,7 +704,8 @@ Success: **200 OK** with `{ "data": { session object } }` and `"state": "cancell
 | `403` | `PASSWORD_CHANGE_REQUIRED` | The calling admin must change the password first |
 | `403` | `CSRF_INVALID` | Demo mode only: missing or wrong CSRF token |
 | `404` | `RESOURCE_NOT_FOUND` | The class or session does not exist |
+| `409` | `SESSION_NOT_EDITABLE` | Policy change: the session has started, ended or been cancelled |
 | `409` | `CLASS_SESSION_EXISTS` | The class already has a session with this `starts_at` |
 | `409` | `SCHEDULE_CONFLICT` | The time overlaps a scheduled session of the same class, lecturer or room. `error.conflicts` lists the sessions and why. |
 | `409` | `CLASS_SESSION_ENDED` | Cancel: the session has already ended |
-| `422` | `VALIDATION_ERROR` | An ID, query value or field is not valid, or `starts_at` is not in the future. `fields` names each one. |
+| `422` | `VALIDATION_ERROR` | An ID, query value or field is not valid, `starts_at` is not in the future, `late_after` is outside the session, or a policy change sends no field. `fields` names each one. |

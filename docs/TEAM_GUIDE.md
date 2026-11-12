@@ -25,7 +25,7 @@ Open <http://localhost:5173>. Check the real API through the frontend proxy:
 curl http://localhost:5173/api/v1/examples/classrooms
 ```
 
-An empty `data` array is expected before seeding. Attendance APIs and optional development sign-in are implemented; production authentication and enrolment APIs are still pending. For seeded accounts with real attendance APIs, follow [development sign-in](DEVELOPMENT_AUTH.md). For UI work with mock identities, set `FRONTEND_MOCK_AUTH=true` in **backend/.env** and rerun `npm run stack:up`. Mock mode blocks live API calls; use `false` when integrating real APIs.
+An empty `data` array is expected before seeding. Attendance APIs and optional development sign-in are implemented; production authentication and enrolment APIs are still pending. For seeded accounts with real attendance APIs, follow [development sign-in](DEVELOPMENT_AUTH.md); accounts are listed in [demo accounts](DEMO_ACCOUNTS.md). For UI work with mock identities, set `FRONTEND_MOCK_AUTH=true` in **backend/.env** and rerun `npm run stack:up`. Mock mode blocks live API calls; use `false` when integrating real APIs.
 
 > [!WARNING]
 > Never commit `.env`. Changing `DB_PASSWORD` does **not** change credentials inside an existing Docker volume. Restore the credentials that initialized it rather than deleting data to fix a login problem.

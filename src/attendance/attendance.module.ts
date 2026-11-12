@@ -13,6 +13,8 @@ import { ClassSessionRecordsController } from './class-session-records.controlle
 import { ClassSessionRecordsService } from './class-session-records.service';
 import { ClassSessionFinaliseController } from './class-session-finalise.controller';
 import { FinalisationService } from './finalisation.service';
+import { LecturerAttendanceAnalyticsController } from './lecturer-attendance-analytics.controller';
+import { AttendanceAnalyticsService } from './attendance-analytics.service';
 
 @Module({
   imports: jwtAuthEnabled() ? [AuthModule] : [],
@@ -21,6 +23,7 @@ import { FinalisationService } from './finalisation.service';
     AttendanceRecordsController,
     ClassSessionRecordsController,
     ClassSessionFinaliseController,
+    LecturerAttendanceAnalyticsController,
   ],
   providers: [
     AttendanceService,
@@ -29,6 +32,7 @@ import { FinalisationService } from './finalisation.service';
     RosterService,
     ClassSessionRecordsService,
     FinalisationService,
+    AttendanceAnalyticsService,
     { provide: APP_FILTER, useClass: AttendanceExceptionFilter },
   ],
   exports: [

@@ -7,7 +7,7 @@ x-backend-build: &backend-build
 
 x-backend-environment: &backend-environment
   NODE_ENV: development
-  DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-false}
+  DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-true}
   JWT_AUTH_ENABLED: ${JWT_AUTH_ENABLED:-false}
   JWT_SECRET: ${JWT_SECRET:-}
   HOST: 0.0.0.0
@@ -69,6 +69,34 @@ services:
         condition: service_healthy
     restart: 'no'
 
+  # Loads database/dummy-data.sql (fictional accounts, classes, attendance) once,
+  # when the users table is empty, so the stack is usable right after `up`.
+  # Skip it with SEED_DEMO_DATA=false. To reload, delete the volume first.
+  seed:
+    image: mysql:8.4
+    environment:
+      MYSQL_PWD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_USER: ${DB_USER:-opentexila}
+      DB_NAME: ${DB_NAME:-opentexila}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    volumes:
+      - ./database/dummy-data.sql:/dummy-data.sql:ro
+    command:
+      - sh
+      - -c
+      - |
+        [ "$$SEED_DEMO_DATA" = "false" ] && exit 0
+        users=$$(mysql -h db -u"$$DB_USER" -N -e 'SELECT COUNT(*) FROM users' "$$DB_NAME") || exit 1
+        if [ "$$users" = "0" ]; then
+          mysql -h db -u"$$DB_USER" "$$DB_NAME" < /dummy-data.sql && echo "Loaded dummy data."
+        else
+          echo "Users already exist; dummy data not loaded."
+        fi
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
   backend:
     build: *backend-build
     environment: *backend-environment
@@ -81,7 +109,7 @@ services:
       - ./tsconfig.build.json:/app/tsconfig.build.json:ro
       - ./nodemon.json:/app/nodemon.json:ro
     depends_on:
-      migrate:
+      seed:
         condition: service_completed_successfully
     healthcheck:
       # Nest starts listening only after its database provider has initialized.
@@ -116,7 +144,7 @@ services:
         CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     environment:
       VITE_API_BASE_URL: /api/v1
-      VITE_ENABLE_DEV_AUTH: ${DEV_AUTH_ENABLED:-false}
+      VITE_ENABLE_DEV_AUTH: ${DEV_AUTH_ENABLED:-true}
       VITE_ENABLE_MOCK_AUTH: ${FRONTEND_MOCK_AUTH:-false}
       API_PROXY_TARGET: http://backend:3000
     ports:

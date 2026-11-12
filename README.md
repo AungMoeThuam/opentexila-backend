@@ -1,6 +1,6 @@
 # OpenTexila backend
 
-NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Optional [development sign-in](docs/DEVELOPMENT_AUTH.md) is available for seeded accounts. Opt-in [JWT authentication](docs/JWT_AUTH.md) is implemented. Enrolment and admin account provisioning/reset APIs remain planned; frontend JWT integration is separate work.
+NestJS in **TypeScript**, with MySQL 8.4 and decorated TypeORM entities. The database foundation, attendance APIs (`me/class-sessions`, `class-sessions/:id`, `class-sessions/:id/check-ins`, `class-sessions/:id/records`, `me/attendance-records`), and a development-only sample classroom API are implemented. Optional [development sign-in](docs/DEVELOPMENT_AUTH.md) is available for seeded accounts; see [demo accounts](docs/DEMO_ACCOUNTS.md) for emails, password and class membership. Opt-in [JWT authentication](docs/JWT_AUTH.md) is implemented. Enrolment and admin account provisioning/reset APIs remain planned; frontend JWT integration is separate work.
 
 ## Start the whole stack
 

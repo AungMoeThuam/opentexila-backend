@@ -2,14 +2,14 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Classes & Enrolments](enrolments.md) · [Database design](../database-design.md)
 
-**Status: student schedule, detail, check-in, roster materialisation, student history, history class options and the lecturer roster are implemented. Every route uses `AttendanceGuard`, accepting Bearer JWTs in JWT mode or a verified demo session in development mode. See [authentication](auth.md) and [development sign-in](../DEVELOPMENT_AUTH.md). Finalisation endpoints remain planned.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: student schedule, detail, check-in, roster materialisation, student history, history class options and the lecturer roster are implemented. Every route uses `AttendanceGuard`, accepting Bearer JWTs in JWT mode or a verified demo session in development mode. See [authentication](auth.md) and [development sign-in](../DEVELOPMENT_AUTH.md). The lecturer finalisation endpoint (`POST /class-sessions/:classSessionId/finalise`) is implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Scheduled attendance flow
 
 1. **Pre-scheduled occurrences (`class_sessions`)**: Each class meeting has `starts_at`, `late_after`, `ends_at`, `state` (`'scheduled' | 'cancelled'`), and a frozen venue snapshot (`room_label`, `latitude`, `longitude`, `radius_m`).
 2. **Automatic roster materialisation**: At or after `starts_at`, the backend ensures one `attendance_records` row (`PRIMARY KEY (class_session_id, student_id)`) with `status = 'pending'` for each enrolled student in `enrolments`. There is **no session code and no lecturer opening action**.
 3. **Geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`)**: An enrolled student submits their browser coordinates while `starts_at <= server_now < ends_at`. A valid reading on or before `late_after` sets `status = 'present'`; after `late_after` and before `ends_at` sets `status = 'late'`. The server records `checked_in_at` and `distance_m` and never persists raw student coordinates.
-4. **Automatic finalisation**: At or after `ends_at`, overdue non-cancelled class sessions have any remaining `pending` records (and any unmaterialised enrolled students) marked `absent` without lecturer intervention.
+4. **Lecturer finalisation (`POST /class-sessions/:classSessionId/finalise`)**: At or after `ends_at`, the assigned lecturer finalises the class session. Every remaining `pending` record, and every enrolled student without a record, is marked `absent`. There is no automatic finalisation: until the lecturer finalises, those students stay `pending`.
 
 ## Endpoint summary
 
@@ -18,6 +18,7 @@
 | `GET` | `/me/class-sessions` | `student`, `lecturer` | Backend `#10`, `#12` / Frontend `#7`, `#9` | List scheduled class sessions for enrolled or assigned classes |
 | `GET` | `/class-sessions/:classSessionId` | Authorised `student`, `lecturer`, `admin` | Backend `#10` / Frontend `#7` | Class session detail, availability, and student check-in eligibility |
 | `POST` | `/class-sessions/:classSessionId/check-ins` | Eligible `student` | Backend `#10` / Frontend `#7` | Validate browser location and record `present` or `late` |
+| `POST` | `/class-sessions/:classSessionId/finalise` | Assigned `lecturer` | Backend `#13` | Mark remaining `pending` students `absent` after the session has ended |
 | `GET` | `/class-sessions/:classSessionId/records` | Assigned `lecturer`, `admin` | Backend `#12` / Frontend `#9` | Read-only attendance roster for a class session |
 | `GET` | `/me/attendance-records` | `student` | Backend `#11` / Frontend `#8` | Personal attendance history across class sessions |
 | `GET` | `/me/attendance-records/classes` | `student` | Backend `#17` / Frontend `#14` | Classes the student can pick in the attendance-history filter |
@@ -262,7 +263,7 @@ Example `422 Unprocessable Entity` (`OUTSIDE_ALLOWED_AREA`):
 
 ### `GET /class-sessions/:classSessionId/records`
 
-Returns the read-only attendance roster for a single class session ordered by `student_id ASC`, alongside session and class `context`. Triggers overdue finalisation catch-up if the session has ended.
+Returns the read-only attendance roster for a single class session ordered by `student_id ASC`, alongside session and class `context`.
 
 - **Access**: Assigned `lecturer` (`classes.lecturer_id = user.id`) or `admin`.
 - **Path parameters**: `classSessionId` — positive integer `class_sessions.id`.
@@ -334,7 +335,7 @@ Returns the read-only attendance roster for a single class session ordered by `s
 
 ### `GET /me/attendance-records`
 
-Returns the authenticated student's personal attendance history ordered by `class_sessions.starts_at DESC, class_session_id DESC`. Ensures overdue ended sessions are finalised before returning results.
+Returns the authenticated student's personal attendance history ordered by `class_sessions.starts_at DESC, class_session_id DESC`. Sessions the lecturer has not yet finalised still show `pending` records.
 
 - **Access**: `student` only (no `studentId` override parameter is accepted).
 - **Query parameters**:
@@ -453,11 +454,27 @@ Returns the classes a student can choose in the attendance-history class filter.
 
 ---
 
-## Internal service contract (Issue `#13`: Automatic finalisation & catch-up)
+### `POST /class-sessions/:classSessionId/finalise`
 
-Automatic finalisation is an internal backend service/worker (`feat/attendance-finalisation`), **not a public HTTP endpoint**.
+Lets the assigned lecturer finalise a class session after it has ended. The frontend calls this when the lecturer presses the finish button. It is idempotent, so repeated clicks are harmless.
 
-### `finaliseClassSession(classSessionId)` result DTO
+- **Access**: `lecturer` assigned to the class (`classes.lecturer_id = user.id`). Admins and students are refused.
+- **Path parameters**: `classSessionId` — positive integer `class_sessions.id`.
+- **Body**: none. CSRF is required for demo-cookie sessions and not for Bearer tokens, as for check-ins.
+- **Transaction**: lock the class, then the class session, then the attendance records. The server time and the lecturer's ownership are checked after the locks, inside the transaction.
+
+Behaviour by session state:
+
+| Condition                                                                     | `outcome`           | `absent_marked`                                                 | Effect                                                                                                                            |
+| ----------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `state = 'cancelled'`                                                         | `cancelled`         | `0`                                                             | None                                                                                                                              |
+| `server_now < ends_at`                                                        | `not_due`           | `0`                                                             | None. There is no early close.                                                                                                    |
+| Ended, `scheduled`, `pending` rows or unmaterialised enrolled students remain | `finalised`         | Count of rows changed to `absent` or newly inserted as `absent` | Missing rows are created as `absent`; `pending` becomes `absent`; `present` and `late` rows keep `checked_in_at` and `distance_m` |
+| Ended, `scheduled`, nothing left to change                                    | `already_finalised` | `0`                                                             | None                                                                                                                              |
+
+#### Success response — `200 OK`
+
+All four outcomes return `200 OK`; the frontend branches on `outcome`.
 
 ```json
 {
@@ -467,33 +484,25 @@ Automatic finalisation is an internal backend service/worker (`feat/attendance-f
 }
 ```
 
-- `outcome`: `"finalised" | "already_finalised" | "not_due" | "cancelled"`.
-- `absent_marked`: number of student records marked `absent` (or newly materialised as `absent`) by this call (`0` for `"already_finalised"`, `"not_due"`, or `"cancelled"`).
+#### Error responses
 
-### Catch-up batch result DTO
+| HTTP  | `error.code`               | When                                                                                                                                                                                       |
+| ----- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `401` | `UNAUTHENTICATED`          | Missing or expired session                                                                                                                                                                 |
+| `403` | `FORBIDDEN`                | Caller is a `student` or an `admin`                                                                                                                                                        |
+| `404` | `RESOURCE_NOT_FOUND`       | Session does not exist, or the caller is a `lecturer` not assigned to this class                                                                                                           |
+| `409` | `ATTENDANCE_DATA_CONFLICT` | A `pending` row has `checked_in_at`, or a `present`/`late` row has none. Nothing is changed. Defence in depth: the `ck_records_evidence` database constraint normally prevents these rows. |
+| `422` | `VALIDATION_ERROR`         | Invalid `classSessionId`                                                                                                                                                                   |
 
-```json
-{
-  "processed": 3,
-  "finalised": 1,
-  "already_finalised": 1,
-  "not_due": 0,
-  "cancelled": 0,
-  "failed": 1,
-  "failures": [
-    {
-      "class_session_id": 32,
-      "code": "TRANSIENT_DATABASE_ERROR",
-      "retryable": true
-    }
-  ]
-}
-```
+### Assumptions and known gaps
 
+- **Enrolled on time**: finalisation treats every current Enrolment as covering every class session of the class. `enrolments` has no enrolled-at date, so a student who joined mid-term is marked `absent` for earlier sessions, and a student who left before finalisation gets no row.
+- **No automatic fallback**: if the lecturer never finalises, students stay `pending` and the session is ignored by the attendance percentage `(present + late) / (present + late + absent)`. A startup, scheduled or read-triggered sweep can later reuse the same finalisation logic.
+- **No early close**: the lecturer cannot end a class session before `ends_at`.
 
 ## Implementation and integration notes
 
-`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Lecturer schedule scoping is included in the shared list handler; lecturer roster reads are also implemented. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising overdue pending records to absent remains issue #13; this module does not run a finalisation worker.
+`AttendanceModule` registers the three discovery/detail/check-in routes in every environment. Lecturer schedule scoping is included in the shared list handler; lecturer roster reads are also implemented. `GET` responses derive availability from database UTC time; they materialise due non-cancelled rosters. Finalising pending records to absent is the lecturer endpoint of issue #13; this module runs no background worker.
 
 ### Authentication dependency
 
@@ -511,7 +520,7 @@ A structurally valid replay of an accepted check-in returns the original record 
 
 Migration `1793491200000-SessionVenueSnapshot.ts` adds non-null room/coordinate/radius snapshots to sessions, backfills existing sessions from their current class venue, and adds coordinate/radius constraints. Historical venues cannot be reconstructed; backfill uses the class venue at migration time. Run migrations before starting the updated application. New session creators must copy all four venue fields when inserting a session; the demo seed now does so. Later class-venue changes do not change a session's check-in area.
 
-`RosterService.materialise(classSessionId)` owns a transaction, locks the class before the class session, samples database time after the locks, and inserts missing pending rows without overwriting existing evidence. It skips future and cancelled sessions. Issue #13 can reuse `lockClassSession`, `databaseNow` and `materialiseLockedRoster` inside its own transaction. All enrolment, session cancellation, and finalisation writers must follow the same class → session lock order. Membership and attendance reads use locking current reads so they do not use an earlier repeatable-read snapshot after waiting on the class lock.
+`RosterService.materialise(classSessionId)` owns a transaction, locks the class before the class session, samples database time after the locks, and inserts missing pending rows without overwriting existing evidence. It skips future and cancelled sessions. `FinalisationService` reuses `lockClassSession` and `databaseNow` inside its own transaction. All enrolment, session cancellation, and finalisation writers must follow the same class → session lock order. Membership and attendance reads use locking current reads so they do not use an earlier repeatable-read snapshot after waiting on the class lock.
 
 ### Verification
 

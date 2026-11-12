@@ -82,3 +82,12 @@ export interface SessionRosterResponseDto extends PaginatedResponse<RosterRecord
     class_state: ClassSessionState;
   };
 }
+
+export type FinaliseOutcome =
+  'finalised' | 'already_finalised' | 'not_due' | 'cancelled';
+
+export interface FinaliseResultDto {
+  class_session_id: number;
+  outcome: FinaliseOutcome;
+  absent_marked: number;
+}

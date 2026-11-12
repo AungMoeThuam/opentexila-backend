@@ -9,11 +9,13 @@ This documentation belongs to the backend repository. The separate frontend repo
 - [Sample classroom API](examples.md) — implemented development-only list/detail endpoints and a code pattern for teammates.
 - [Authentication](auth.md) — JWT login, refresh, profile, logout and password changes.
 - [Attendance](attendance.md) — sessions, location check-in and attendance history.
+- [Lecturer attendance analytics](attendance-analytics.md) — summary, trend, class comparison, at-risk students and unfinalised sessions (`GET /lecturer/attendance-analytics`).
 - **[Authentication & Account Onboarding](auth.md)** — CSRF token bootstrap, login, logout, current-user restoration (`/auth/me`), mandatory first-login password change, and admin account creation/password reset.
 - **[Classes & Enrolments](enrolments.md)** — Admin class listing (`GET /classes`), personal enrolled/assigned classes (`GET /me/classes`), class student rosters (`GET /classes/:classId/enrolments`), and admin enrolment mutations (`POST` and `DELETE`).
 - **[Courses & Class Management](courses-classes.md)** — Admin course list/create/edit (`GET`/`POST /courses`, `PATCH /courses/:courseId`), active lecturer options (`GET /lecturers`), and class create/detail/edit (`POST /classes`, `GET`/`PATCH /classes/:classId`) including lecturer assignment and attendance location.
 - **[Class Announcements](announcements.md)** — All-classes feed (`GET /announcements`), one class's feed (`GET /classes/:classId/announcements`) and one announcement (`GET /announcements/:announcementId`) with like and comment counts. Create, edit, delete, likes and comments are planned.
 - **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), history class-filter options (`GET /me/attendance-records/classes`), and the internal finalisation service contract.
+- **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), history class-filter options (`GET /me/attendance-records/classes`), and lecturer finalisation of ended sessions (`POST /class-sessions/:classSessionId/finalise`).
 - **[Sample Classroom API](examples.md)** — Implemented development-only list/detail endpoints (`GET /examples/classrooms`, `GET /examples/classrooms/:id`) and a reference controller/service/test pattern for teammates.
 
 ## Master endpoint index
@@ -51,6 +53,7 @@ All paths below are relative to `/api/v1`. Admin account management and enrolmen
 | **Attendance** | `GET`    | `/class-sessions/:classSessionId/records`   | Assigned `lecturer`, `admin`              | Read-only attendance roster for a class session                 | [attendance.md](attendance.md#get-class-sessionsclasssessionidrecords)    |
 | **Attendance** | `GET`    | `/me/attendance-records`                    | `student`                                | Personal attendance history across class sessions               | [attendance.md](attendance.md#get-meattendance-records)                   |
 | **Attendance** | `GET`    | `/me/attendance-records/classes`            | `student`                                | Classes selectable in the attendance-history filter            | [attendance.md](attendance.md#get-meattendance-recordsclasses)         |
+| **Attendance** | `GET`    | `/lecturer/attendance-analytics`            | `lecturer`                               | Attendance summary, trend, at-risk students for own classes     | [attendance-analytics.md](attendance-analytics.md)                        |
 | **Examples**   | `GET`    | `/examples/classrooms`                      | Dev-only (`NODE_ENV=development`)        | Sample paginated classroom list                                 | [examples.md](examples.md#get-examplesclassrooms)                         |
 | **Examples**   | `GET`    | `/examples/classrooms/:id`                  | Dev-only (`NODE_ENV=development`)        | Sample single classroom detail                                  | [examples.md](examples.md#get-examplesclassroomsid)                       |
 
@@ -93,14 +96,14 @@ Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`),
   - Surrogate IDs (`users.id`, `courses.id`, `classes.id`, `class_sessions.id`) are positive JSON integers.
   - Composite keys use `(class_id, student_id)` for `enrolments` and `(class_session_id, student_id)` for `attendance_records`.
   - Dates are ISO 8601 UTC strings (`"2026-10-29T01:00:00.000Z"`); optional timestamps/fields are explicit `null`.
-  - JSON property names use `snake_case` except pagination `totalPages` and `csrfToken`; path and query parameters use `camelCase`.
+  - JSON property names use `snake_case` except pagination `totalPages` and `csrfToken`; path and query parameters use `camelCase`. Exception: [lecturer attendance analytics](attendance-analytics.md) uses `camelCase` JSON to match its frontend contract.
 - **Pagination**:
   - `page` defaults to `1` (integer `1`–`10000`).
   - `limit` defaults to `20` (integer `1`–`100`).
   - `total` is the authorised, filtered count before pagination; `totalPages = ceil(total / limit)` (`0` when `total` is `0`).
   - Requesting a `page` beyond `totalPages` returns `data: []` with the real `total` and `totalPages`.
 - **Date range filters**:
-  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`.
+  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`. Exception: [lecturer attendance analytics](attendance-analytics.md) takes inclusive `YYYY-MM-DD` Malaysia-time days ([ADR 0001](../adr/0001-analytics-days-use-malaysia-time.md)).
 - **Security & privacy**:
   - Omit `password_hash`, `auth_sessions` payloads, refresh-token hashes, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
   - Never include SQL queries or stack traces in error responses.

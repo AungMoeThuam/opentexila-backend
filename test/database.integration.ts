@@ -21,6 +21,7 @@ import { seedDemo } from '../database/seeds/demo.ts';
 import { authIntegration } from './auth.integration.ts';
 import { adminUsersIntegration } from './admin-users.integration.ts';
 import { attendanceIntegration } from './attendance.integration.ts';
+import { finalisationIntegration } from './finalisation.integration.ts';
 import { attendanceAnalyticsIntegration } from './attendance-analytics.integration.ts';
 
 // This command owns its container. It never reads .env or connects to the app database.
@@ -175,6 +176,9 @@ test(
       if (!fixturesReady) return;
       await t.test('attendance SQL and concurrency', async (attendanceTest) => {
         await attendanceIntegration(attendanceTest, ds!, fixtures);
+      });
+      await t.test('attendance finalisation SQL', async (finalisationTest) => {
+        await finalisationIntegration(finalisationTest, ds!, fixtures);
       });
       await t.test(
         'lecturer attendance analytics SQL',

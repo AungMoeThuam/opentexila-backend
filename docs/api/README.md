@@ -18,6 +18,8 @@ This documentation belongs to the backend repository. The separate frontend repo
 - **[Attendance & Check-in](attendance.md)** — Personal and lecturer class-session schedules (`GET /me/class-sessions`), session detail & eligibility (`GET /class-sessions/:classSessionId`), geolocation check-in (`POST /class-sessions/:classSessionId/check-ins`), lecturer session rosters (`GET /class-sessions/:classSessionId/records`), student attendance history (`GET /me/attendance-records`), history class-filter options (`GET /me/attendance-records/classes`), and lecturer finalisation of ended sessions (`POST /class-sessions/:classSessionId/finalise`).
 - **[Sample Classroom API](examples.md)** — Implemented development-only list/detail endpoints (`GET /examples/classrooms`, `GET /examples/classrooms/:id`) and a reference controller/service/test pattern for teammates.
 
+- **[Admin Timetable](timetable.md)** — Admin timetable listing and atomic batch rescheduling (`GET /class-sessions`, `PATCH /class-sessions/batch`).
+
 ## Master endpoint index
 
 All paths below are relative to `/api/v1`. Admin account management and enrolment rows are planned contracts, not implemented endpoints.
@@ -66,6 +68,8 @@ All paths below are relative to `/api/v1`. Admin account management and enrolmen
 | **Attendance** | `GET`    | `/me/attendance-records`                    | `student`                                | Personal attendance history across class sessions               | [attendance.md](attendance.md#get-meattendance-records)                   |
 | **Attendance** | `GET`    | `/me/attendance-records/classes`            | `student`                                | Classes selectable in the attendance-history filter            | [attendance.md](attendance.md#get-meattendance-recordsclasses)         |
 | **Attendance** | `GET`    | `/lecturer/attendance-analytics`            | `lecturer`                               | Attendance summary, trend, at-risk students for own classes     | [attendance-analytics.md](attendance-analytics.md)                        |
+| **Timetable** | `GET` | `/class-sessions` | `admin` | List timetable sessions by date range | [timetable.md](timetable.md#get-class-sessions) |
+| **Timetable** | `PATCH` | `/class-sessions/batch` | `admin` | Atomically reschedule existing sessions | [timetable.md](timetable.md#patch-class-sessionsbatch) |
 | **Examples**   | `GET`    | `/examples/classrooms`                      | Dev-only (`NODE_ENV=development`)        | Sample paginated classroom list                                 | [examples.md](examples.md#get-examplesclassrooms)                         |
 | **Examples**   | `GET`    | `/examples/classrooms/:id`                  | Dev-only (`NODE_ENV=development`)        | Sample single classroom detail                                  | [examples.md](examples.md#get-examplesclassroomsid)                       |
 

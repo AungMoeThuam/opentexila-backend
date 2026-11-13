@@ -28,6 +28,8 @@
     "test": "npm run build && node --experimental-strip-types --no-warnings --test test/*.test.ts",
     "format": "prettier --write \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"database/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
+    "db:seed:production": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env database/seeds/production.ts",
+    "demo:live-reset": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env scripts/reset-live-demo.ts",
     "db:seed:attendance": "npm run build && node --experimental-strip-types --no-warnings --env-file-if-exists=.env scripts/create-attendance-demo.ts"
   },
   "dependencies": {

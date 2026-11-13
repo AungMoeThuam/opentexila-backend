@@ -10,6 +10,12 @@ async function bootstrap(): Promise<void> {
   }
 
   const app = await NestFactory.create(AppModule);
+  // Behind a reverse proxy, count its hops so request.ip is the real client
+  // (the sign-in throttle uses it). Leave unset when nothing sits in front.
+  const hops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (!Number.isInteger(hops) || hops < 0 || hops > 5)
+    throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 5.');
+  if (hops > 0) app.getHttpAdapter().getInstance().set('trust proxy', hops);
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(createValidationPipe());
   app.enableShutdownHooks();

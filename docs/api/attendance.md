@@ -535,6 +535,8 @@ The local Docker stack supports authenticated browser-to-API verification with t
 
 Admins list, schedule and cancel the sessions of a class. All three endpoints are admin only and use `AttendanceGuard`, so the same sign-in, CSRF (demo mode) and `PASSWORD_CHANGE_REQUIRED` rules apply. Responses use `Cache-Control: no-store`. Timetable rescheduling (`GET /class-sessions`, `PATCH /class-sessions/batch`) is a separate feature and is not changed here.
 
+`PATCH /class-sessions/batch` applies a batch atomically, so sessions of one class can swap or rotate start times in one request. If a change lands on the start time of a cancelled session of the same class (cancelled sessions keep their start time), the whole batch fails with **409** `CLASS_SESSION_EXISTS` and nothing is saved.
+
 The path for cancelling is `POST /class-sessions/:classSessionId/cancel`, in the same style as `…/finalise`. It has no request body. A `PATCH` on `/class-sessions/:classSessionId` is not used, because it would clash with the static route `PATCH /class-sessions/batch`.
 
 ### The session object

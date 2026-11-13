@@ -37,6 +37,7 @@ import {
   ScheduleConflictException,
   type ScheduleConflictDto,
 } from './schedule-conflict.exception';
+import { isDuplicateKey, sessionExists } from './session-exists';
 import { mysqlUtc, parseUtcTimestamp } from './session-times';
 
 export interface ManagedSessionDto {
@@ -127,21 +128,6 @@ const joinWithAnd = (items: string[]): string =>
   items.length < 2
     ? (items[0] ?? '')
     : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-
-// MySQL error 1062: another session of this class starts at the same time.
-const isDuplicateKey = (error: unknown): boolean => {
-  const driver = (error as { driverError?: { errno?: number }; errno?: number })
-    ?.driverError;
-  return (driver?.errno ?? (error as { errno?: number })?.errno) === 1062;
-};
-
-const sessionExists = () =>
-  new ApiException(
-    409,
-    'CLASS_SESSION_EXISTS',
-    'This class already has a session that starts at this time.',
-    { starts_at: 'This class already has a session that starts at this time.' },
-  );
 
 // Admin list, schedule and cancel for the sessions of one class. Check-in,
 // roster creation and finalisation are in the attendance module and are not

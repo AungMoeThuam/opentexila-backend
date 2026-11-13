@@ -260,6 +260,81 @@ export async function timetableIntegration(t: TestContext, ds: DataSource) {
           'Attendance records must remain unchanged',
         );
       });
+
+      /**
+       * TEST 4:
+       * Two sessions of one class can swap start times. The unique
+       * (class, start) index must not fail on the way.
+       */
+      await t.test('two sessions of one class can swap times', async () => {
+        const beforeAnchor = await getTimes(ds, anchor);
+        const beforeMovable = await getTimes(ds, movable);
+
+        await service.updateBatch({
+          changes: [change(anchor, 14, 15), change(movable, 8, 9)],
+        });
+
+        assert.deepEqual(await getTimes(ds, anchor), beforeMovable);
+        assert.deepEqual(await getTimes(ds, movable), beforeAnchor);
+      });
+
+      /**
+       * TEST 5:
+       * A cycle of three sessions of one class also works.
+       */
+      await t.test('three sessions of one class can rotate times', async () => {
+        const third = await insertTestSession(ds, sourceA, 18, 19);
+        createdIds.push(third);
+
+        const before = {
+          anchor: await getTimes(ds, anchor),
+          movable: await getTimes(ds, movable),
+          third: await getTimes(ds, third),
+        };
+
+        await service.updateBatch({
+          changes: [
+            change(anchor, 18, 19),
+            change(movable, 14, 15),
+            change(third, 8, 9),
+          ],
+        });
+
+        // After the swap: anchor 14:00, movable 08:00, third 18:00.
+        assert.deepEqual(await getTimes(ds, anchor), before.third);
+        assert.deepEqual(await getTimes(ds, movable), before.anchor);
+        assert.deepEqual(await getTimes(ds, third), before.movable);
+      });
+
+      /**
+       * TEST 6:
+       * A cancelled session still holds its start time. Moving onto it
+       * is a clean 409 and nothing is saved.
+       */
+      await t.test('moving onto a cancelled slot is a 409', async () => {
+        const cancelled = await insertTestSession(ds, sourceA, 20, 21);
+        createdIds.push(cancelled);
+        await ds.query(
+          "UPDATE class_sessions SET state = 'cancelled' WHERE id = ?",
+          [cancelled],
+        );
+        const before = await getTimes(ds, anchor);
+
+        await assert.rejects(
+          () => service.updateBatch({ changes: [change(anchor, 20, 21)] }),
+          (error: unknown) => {
+            assert.ok(error instanceof ApiException);
+            assert.equal(error.getStatus(), 409);
+            assert.equal(
+              error.getResponse().error.code,
+              'CLASS_SESSION_EXISTS',
+            );
+            return true;
+          },
+        );
+
+        assert.deepEqual(await getTimes(ds, anchor), before);
+      });
     } finally {
       /**
        * Clean up only sessions created by this suite.

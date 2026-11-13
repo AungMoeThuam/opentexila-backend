@@ -605,7 +605,7 @@ A class with no sessions returns `"data": []` with `"total": 0`.
 | Field | Rule |
 | --- | --- |
 | `starts_at` | UTC timestamp `YYYY-MM-DDTHH:mm:ss[.sss]Z`. Must be later than the server time when the request is saved. |
-| `late_after` | UTC timestamp. Not before `starts_at`, and before `ends_at`. |
+| `late_after` | UTC timestamp. Not before `starts_at`, before `ends_at`, and **at most 30 minutes after `starts_at`** (the late allowance limit, see below). |
 | `ends_at` | UTC timestamp. After `starts_at`. |
 
 Unknown fields are stripped, so `state`, `room_label` and the other venue fields cannot be set. The new session is `scheduled`. It copies the venue of the class (`room_label`, `latitude`, `longitude`, `radius_m`) at this moment, so a later change to the class does not move it. Attendance rosters are still created by the existing check-in flow when the session starts.
@@ -686,7 +686,9 @@ Changes the attendance settings of **one** session: where students can check in,
 | `latitude` | Optional. Number from -90 to 90, rounded to 6 decimals. |
 | `longitude` | Optional. Number from -180 to 180, rounded to 6 decimals. |
 | `radius_m` | Optional. Number from 1 to 1000, rounded to 2 decimals. Same limits as a class. |
-| `late_after` | Optional. UTC time `YYYY-MM-DDTHH:mm:ss[.sss]Z`. Not before the session's `starts_at` and before its `ends_at`. |
+| `late_after` | Optional. UTC time `YYYY-MM-DDTHH:mm:ss[.sss]Z`. Not before the session's `starts_at`, before its `ends_at`, and at most 30 minutes after `starts_at` (the late allowance limit, see below). |
+
+**Late allowance limit.** A check-in up to `late_after` is Present and a later one is Late, so a long allowance would mark a student who arrives almost at the end of the class as Present. The late time is therefore at most **30 minutes after `starts_at`** (`MAX_LATE_MINUTES` in `src/class-sessions/session-times.ts`; the frontend forms use the same number). Exactly 30 minutes is allowed. A longer time returns `422 VALIDATION_ERROR` with `fields.late_after` set to "The late time must be at most 30 minutes after the start time." and nothing is saved. The same limit applies when a session is created (`POST /classes/:classId/class-sessions`) and in the timetable batch (`PATCH /class-sessions/batch`). A session saved before the limit existed keeps its longer allowance; it can change its other fields, and the timetable can move it with that allowance, but nobody can give it a new allowance above the limit.
 
 Send at least one field. An empty body returns `422`. Unknown fields are stripped, so `starts_at`, `ends_at`, `state` and `class_id` cannot be changed here (the timetable reschedules times). Fields you do not send keep their saved value.
 

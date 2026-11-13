@@ -69,6 +69,8 @@ Each session ID must be unique within the batch.
 
 Timestamps must satisfy `starts_at <= late_after < ends_at`, and the new `starts_at` must be in the future.
 
+`late_after` must also be at most 30 minutes after `starts_at` (the late allowance limit; see [attendance.md](attendance.md#patch-class-sessionsclasssessionidattendance-policy)). A longer time returns `422 VALIDATION_ERROR` with `fields.late_after`, and no change is saved. A session that was saved before the limit existed keeps its old allowance when it is only moved, that is when the new `late_after` is the same number of minutes after the new `starts_at` as the saved one was. It cannot be given a different allowance above the limit.
+
 Only scheduled sessions that have not started can be rescheduled. Sessions that have already started, ended, or been cancelled cannot be rescheduled.
 
 ### Conflict detection

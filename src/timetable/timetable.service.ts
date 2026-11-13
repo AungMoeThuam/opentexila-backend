@@ -16,6 +16,10 @@ import {
   malaysiaDayStart,
   parseMalaysiaDay,
 } from '../common/malaysia-day';
+import {
+  LATE_TOO_LONG_MESSAGE,
+  lateTooLong,
+} from '../class-sessions/session-times';
 import { DATABASE } from '../database/database.constants';
 import {
   findTimetableConflicts,
@@ -343,6 +347,19 @@ export class TimetableService {
               throw validationError({
                 starts_at: 'The new start time must be in the future.',
               });
+            }
+
+            // The late time is at most MAX_LATE_MINUTES after the start. A
+            // session saved before there was a limit keeps its old allowance
+            // when it is only moved, but cannot be given a new long one.
+            const originalOffset =
+              new Date(original.late_after).getTime() - originalStart;
+            const newOffset = change.late.getTime() - change.start.getTime();
+            if (
+              lateTooLong(change.start, change.late) &&
+              newOffset !== originalOffset
+            ) {
+              throw validationError({ late_after: LATE_TOO_LONG_MESSAGE });
             }
 
             proposed.set(change.id, {

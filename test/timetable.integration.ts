@@ -262,6 +262,94 @@ export async function timetableIntegration(t: TestContext, ds: DataSource) {
       });
 
       /**
+       * The late time is at most 30 minutes after the start (#67). A session
+       * saved before there was a limit keeps its old allowance when it is only
+       * moved, but cannot be given a new long one.
+       */
+      await t.test('the late time limit applies to a batch', async () => {
+        const lateTooLong = (error: unknown) => {
+          assert.ok(error instanceof ApiException);
+          assert.equal(error.getStatus(), 422);
+          assert.equal(error.getResponse().error.code, 'VALIDATION_ERROR');
+          assert.equal(
+            error.getResponse().error.fields.late_after,
+            'The late time must be at most 30 minutes after the start time.',
+          );
+          return true;
+        };
+        const before = await getTimes(ds, movable);
+
+        // 45 minutes after the start is refused, and nothing is saved.
+        await assert.rejects(
+          () =>
+            service.updateBatch({
+              changes: [
+                {
+                  ...change(movable, 14, 15),
+                  late_after: `${START_DATE}T14:45:00.000Z`,
+                },
+              ],
+            }),
+          lateTooLong,
+        );
+        assert.deepEqual(await getTimes(ds, movable), before);
+
+        // Exactly 30 minutes is accepted.
+        await service.updateBatch({
+          changes: [
+            {
+              ...change(movable, 14, 15),
+              late_after: `${START_DATE}T14:30:00.000Z`,
+            },
+          ],
+        });
+        assert.equal(
+          (await getTimes(ds, movable)).late_after,
+          `${START_DATE}T14:30:00.000Z`,
+        );
+
+        // An old session with a 45 minute allowance can be moved with it...
+        await ds.query(
+          `UPDATE class_sessions SET late_after = DATE_ADD(starts_at, INTERVAL 45 MINUTE) WHERE id = ?`,
+          [movable],
+        );
+        const moved = await service.updateBatch({
+          changes: [
+            {
+              ...change(movable, 18, 19),
+              late_after: `${START_DATE}T18:45:00.000Z`,
+            },
+          ],
+        });
+        assert.equal(moved.data[0].late_after, `${START_DATE}T18:45:00.000Z`);
+
+        // ...but cannot be given a different long allowance.
+        await assert.rejects(
+          () =>
+            service.updateBatch({
+              changes: [
+                {
+                  ...change(movable, 18, 19),
+                  late_after: `${START_DATE}T18:50:00.000Z`,
+                },
+              ],
+            }),
+          lateTooLong,
+        );
+
+        // Put the session back for the tests that follow.
+        await ds.query(
+          `UPDATE class_sessions SET starts_at = ?, late_after = ?, ends_at = ? WHERE id = ?`,
+          [
+            toMysqlDatetime(before.starts_at),
+            toMysqlDatetime(before.late_after),
+            toMysqlDatetime(before.ends_at),
+            movable,
+          ],
+        );
+      });
+
+      /**
        * TEST 4:
        * Two sessions of one class can swap start times. The unique
        * (class, start) index must not fail on the way.

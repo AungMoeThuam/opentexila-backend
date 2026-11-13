@@ -384,6 +384,36 @@ test('admin session management: permissions, rules, queries and responses', asyn
     },
   );
 
+  await t.test(
+    'POST accepts a late time of exactly 30 minutes, and refuses more',
+    async () => {
+      reset();
+      const ok = await send('POST', '/classes/7/class-sessions', {
+        starts_at: iso(24),
+        late_after: iso(24.5),
+        ends_at: iso(26),
+      });
+      assert.equal(ok.status, 201);
+      reset();
+      const over = await send('POST', '/classes/7/class-sessions', {
+        starts_at: iso(24),
+        late_after: iso(25),
+        ends_at: iso(26),
+      });
+      assert.equal(over.status, 422);
+      const error = (await over.json()).error;
+      assert.equal(error.code, 'VALIDATION_ERROR');
+      assert.equal(
+        error.fields.late_after,
+        'The late time must be at most 30 minutes after the start time.',
+      );
+      assert.equal(
+        queries.some(([text]) => text.includes('INSERT')),
+        false,
+      );
+    },
+  );
+
   await t.test('POST reports every wrong field at once', async () => {
     reset();
     const cases: [Record<string, unknown>, string[]][] = [
@@ -398,6 +428,7 @@ test('admin session management: permissions, rules, queries and responses', asyn
       [{ ...valid, late_after: iso(23) }, ['late_after']], // before the start
       [{ ...valid, late_after: iso(26) }, ['late_after']], // not before the end
       [{ ...valid, ends_at: iso(24) }, ['ends_at']], // end not after start
+      [{ ...valid, late_after: iso(24.51) }, ['late_after']], // over 30 minutes
       [
         { starts_at: 'x', late_after: 'y', ends_at: 'z' },
         ['starts_at', 'late_after', 'ends_at'],

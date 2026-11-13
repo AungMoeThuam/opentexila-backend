@@ -38,7 +38,12 @@ import {
   type ScheduleConflictDto,
 } from './schedule-conflict.exception';
 import { isDuplicateKey, sessionExists } from './session-exists';
-import { mysqlUtc, parseUtcTimestamp } from './session-times';
+import {
+  LATE_TOO_LONG_MESSAGE,
+  lateTooLong,
+  mysqlUtc,
+  parseUtcTimestamp,
+} from './session-times';
 
 export interface ManagedSessionDto {
   id: number;
@@ -283,6 +288,8 @@ export class ClassSessionsAdminService {
           late_after:
             'The late time must be between the start and the end time.',
         });
+      if (late && lateTooLong(new Date(starts), late))
+        throw validationError({ late_after: LATE_TOO_LONG_MESSAGE });
       // Column names come from this fixed list, never from the request.
       const changes: [string, string | number][] = [];
       if (sent.room_label !== undefined)
@@ -322,6 +329,8 @@ export class ClassSessionsAdminService {
       errors.late_after = 'The late time must not be before the start time.';
     else if (late && end && late.getTime() >= end.getTime() && !errors.ends_at)
       errors.late_after = 'The late time must be before the end time.';
+    else if (start && late && lateTooLong(start, late))
+      errors.late_after = LATE_TOO_LONG_MESSAGE;
     if (Object.keys(errors).length) throw validationError(errors);
     return parsed as Record<(typeof TIME_FIELDS)[number], Date>;
   }

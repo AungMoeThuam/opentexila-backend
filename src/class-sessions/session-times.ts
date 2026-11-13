@@ -13,6 +13,22 @@ export function parseUtcTimestamp(value: unknown): Date | null {
   return date.toISOString().slice(0, 19) === value.slice(0, 19) ? date : null;
 }
 
+// The longest late allowance, in minutes after the start: a check-in up to
+// `late_after` is Present, a later one is Late. Without a limit, a student who
+// arrives almost at the end of a class is still marked Present (#67). The
+// frontend forms use the same number (MAX_LATE_MINUTES in
+// frontend/src/features/courses/services/late-allowance.js); change both.
+export const MAX_LATE_MINUTES = 30;
+
+const MINUTE_MS = 60_000;
+
+// True when `late` is more than MAX_LATE_MINUTES after `start`.
+export function lateTooLong(start: Date, late: Date): boolean {
+  return late.getTime() - start.getTime() > MAX_LATE_MINUTES * MINUTE_MS;
+}
+
+export const LATE_TOO_LONG_MESSAGE = `The late time must be at most ${MAX_LATE_MINUTES} minutes after the start time.`;
+
 export function mysqlUtc(date: Date): string {
   return date.toISOString().slice(0, 23).replace('T', ' ');
 }

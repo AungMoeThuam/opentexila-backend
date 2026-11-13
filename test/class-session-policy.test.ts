@@ -219,10 +219,9 @@ test('attendance policy of one session: permissions, rules and queries', async (
         'equal to the start',
       );
       assert.equal(
-        (await patch(fresh(), { late_after: '2026-11-13T01:59:59.999Z' }))
-          .status,
+        (await patch(fresh(), { late_after: iso(24.5) })).status,
         200,
-        'just before the end',
+        'exactly at the 30 minute limit',
       );
       reset();
       for (const late of [iso(26), iso(23.99), iso(30), iso(-5)]) {
@@ -233,6 +232,34 @@ test('attendance policy of one session: permissions, rules and queries', async (
         assert.ok(error.fields.late_after);
       }
       assert.deepEqual(updates, []);
+    },
+  );
+
+  await t.test(
+    'the late time is at most 30 minutes after the start',
+    async () => {
+      as('admin');
+      reset();
+      // Start is at(24); 30 minutes is at(24.5). One millisecond more is too long.
+      const justOver = new Date(at(24.5).getTime() + 1).toISOString();
+      for (const late of [justOver, iso(25), '2026-11-13T01:59:59.999Z']) {
+        const response = await patch(fresh(), { late_after: late });
+        assert.equal(response.status, 422, late);
+        const error = (await response.json()).error;
+        assert.equal(error.code, 'VALIDATION_ERROR');
+        assert.equal(
+          error.fields.late_after,
+          'The late time must be at most 30 minutes after the start time.',
+          late,
+        );
+      }
+      assert.deepEqual(updates, [], 'nothing is saved');
+      // Other fields can still change without a late time, also for a session
+      // that was saved with a longer allowance before there was a limit.
+      const old = fresh();
+      sessions[old].late_after = at(25.5);
+      assert.equal((await patch(old, { room_label: 'EN305' })).status, 200);
+      assert.equal(updates.length, 1);
     },
   );
 

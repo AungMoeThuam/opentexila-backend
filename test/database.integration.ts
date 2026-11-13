@@ -792,6 +792,89 @@ test(
         },
       );
       await t.test(
+        'JWT mode protects the routes of every module, not only attendance',
+        () => {
+          // Each row: path, method, body, and the status per caller. Reading
+          // routes cover the modules named in the bug report: admin users,
+          // courses, classes, enrolments, announcements and the timetable, plus
+          // the class session management routes.
+          const script = `
+          const assert = require('node:assert/strict');
+          const { NestFactory } = require('@nestjs/core');
+          const { AppModule } = require('./dist/app.module.js');
+          const { AuthService } = require('./dist/auth/auth.service.js');
+          const { createValidationPipe } = require('./dist/common/validation.pipe.js');
+          const rows = [
+            ['GET', 'admin/users', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'courses', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'lecturers', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'classes', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'classes/1', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'classes/1/enrolments', undefined, { admin: 200, lecturer: 200, student: 403 }],
+            ['GET', 'me/classes', undefined, { admin: 403, lecturer: 200, student: 200 }],
+            ['GET', 'announcements', undefined, { admin: 200, lecturer: 200, student: 200 }],
+            ['GET', 'classes/1/class-sessions', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['GET', 'class-sessions?from=2026-01-01&to=2026-12-31', undefined, { admin: 200, lecturer: 403, student: 403 }],
+            ['PATCH', 'class-sessions/batch', {}, { admin: 422, lecturer: 403, student: 403 }],
+            ['POST', 'classes/1/class-sessions', {}, { admin: 422, lecturer: 403, student: 403 }],
+          ];
+          (async () => {
+            const app = await NestFactory.create(AppModule, { logger: ['error'], abortOnError: false });
+            try {
+              app.setGlobalPrefix('api/v1');
+              app.useGlobalPipes(createValidationPipe());
+              await app.listen(0, '127.0.0.1');
+              const base = await app.getUrl();
+              const auth = app.get(AuthService);
+              const tokens = {};
+              for (const [role, email] of [['admin', 'admin.demo@example.com'], ['lecturer', 'lecturer.one@example.com'], ['student', 'student.one@example.com']])
+                tokens[role] = (await auth.login({ email, password: process.env.SEED_PASSWORD })).response.accessToken;
+              const call = async (method, path, body, token) => {
+                const response = await fetch(base + '/api/v1/' + path, {
+                  method,
+                  headers: {
+                    ...(token ? { Authorization: 'Bearer ' + token } : {}),
+                    ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+                  },
+                  body: body === undefined ? undefined : JSON.stringify(body),
+                });
+                const text = await response.text();
+                return { status: response.status, code: text ? (JSON.parse(text).error || {}).code : undefined };
+              };
+              for (const [method, path, body, expected] of rows) {
+                const label = method + ' /' + path;
+                // No token and a bad token are 401, never 503.
+                for (const token of [undefined, 'not-a-token']) {
+                  const result = await call(method, path, body, token);
+                  assert.equal(result.status, 401, label + ' with ' + (token || 'no token') + ' gave ' + result.status + ' ' + result.code);
+                  assert.equal(result.code, 'UNAUTHENTICATED', label);
+                }
+                for (const [role, status] of Object.entries(expected)) {
+                  const result = await call(method, path, body, tokens[role]);
+                  assert.equal(result.status, status, label + ' as ' + role + ' gave ' + result.status + ' ' + result.code);
+                }
+              }
+            } finally { await app.close(); }
+          })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+        `;
+          execFileSync(
+            process.execPath,
+            ['--experimental-strip-types', '--no-warnings', '-e', script],
+            {
+              env: {
+                ...process.env,
+                ...env,
+                JWT_AUTH_ENABLED: 'true',
+                DEV_AUTH_ENABLED: 'false',
+                JWT_SECRET: randomBytes(48).toString('hex'),
+              },
+              timeout: 30000,
+              stdio: 'pipe',
+            },
+          );
+        },
+      );
+      await t.test(
         'Nest exposes the shared database provider and closes the pool',
         async () => {
           Object.assign(process.env, env);

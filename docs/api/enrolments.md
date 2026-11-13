@@ -2,7 +2,7 @@
 
 [API overview](README.md) · [Authentication](auth.md) · [Attendance](attendance.md) · [Database design](../database-design.md)
 
-**Status: `GET /me/classes` and `GET /classes/:classId/enrolments` implemented; other endpoints below remain planned. Database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
+**Status: `GET /classes`, `GET /me/classes`, `GET /classes/:classId/enrolments`, `POST /classes/:classId/enrolments` and `DELETE /classes/:classId/enrolments/:studentId` are implemented. Database schema (`courses`, `classes`, `enrolments`) implemented.** All paths below are relative to `/api/v1`. Follow the [shared HTTP, pagination, CSRF and error envelope rules](README.md#shared-http-rules).
 
 ## Domain overview
 
@@ -52,7 +52,7 @@ Returns a paginated list of class offerings ordered by `classes.id ASC`.
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     }
@@ -107,7 +107,7 @@ Identity always comes from the verified JWT or development session. Unknown quer
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     }
@@ -168,7 +168,7 @@ Returns the paginated student roster for a class ordered by `student_id ASC`, to
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     }
@@ -189,7 +189,7 @@ An empty roster still returns `context.class` with `data: []`, `total: 0`, `tota
 | HTTP | `error.code` | When |
 | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Missing or expired session |
-| `403` | `FORBIDDEN` | Caller is a `student` (or, until Issue `#7`, an `admin`) |
+| `403` | `FORBIDDEN` | Caller is a `student` |
 | `404` | `RESOURCE_NOT_FOUND` | Class `:classId` does not exist, or caller is a `lecturer` not assigned to this class |
 | `422` | `VALIDATION_ERROR` | Invalid `classId`, `page`, or `limit` |
 

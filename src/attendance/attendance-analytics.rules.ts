@@ -1,10 +1,10 @@
 import { validationError, type ErrorFields } from '../common/api-exception';
-
-// Analytics days are Malaysia calendar days, a fixed UTC+8 offset with no
-// daylight saving. See docs/adr/0001-analytics-days-use-malaysia-time.md.
-export const MALAYSIA_OFFSET_HOURS = 8;
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
+import {
+  malaysiaDayEnd,
+  malaysiaDayMessage,
+  malaysiaDayStart,
+  parseMalaysiaDay,
+} from '../common/malaysia-day';
 
 export const DEFAULT_AT_RISK_BELOW = 75;
 const MAX_AT_RISK_BELOW = 100;
@@ -19,26 +19,6 @@ export interface AnalyticsQuery {
   toUtcExclusive: Date;
   atRiskBelow: number;
 }
-
-// A YYYY-MM-DD string that is a real calendar date, or undefined.
-function calendarDay(value: unknown): number | undefined {
-  if (typeof value !== 'string') return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return undefined;
-  const [year, month, day] = [+match[1], +match[2], +match[3]];
-  const midnight = Date.UTC(year, month - 1, day);
-  const check = new Date(midnight);
-  return year >= 1000 &&
-    check.getUTCFullYear() === year &&
-    check.getUTCMonth() === month - 1 &&
-    check.getUTCDate() === day
-    ? midnight
-    : undefined;
-}
-
-// Midnight (Malaysia time) at the start of a day, as a UTC instant.
-const malaysiaMidnight = (utcMidnight: number): Date =>
-  new Date(utcMidnight - MALAYSIA_OFFSET_HOURS * HOUR);
 
 export function parseAnalyticsQuery(
   query: Record<string, unknown>,
@@ -61,13 +41,13 @@ export function parseAnalyticsQuery(
   }
 
   const dayField = (name: 'from' | 'to') => {
-    const day = calendarDay(query[name]);
+    const day = parseMalaysiaDay(query[name]);
     if (day === undefined)
       fail(
         name,
         query[name] === undefined
           ? `${name} is required.`
-          : `${name} must be a date in YYYY-MM-DD format.`,
+          : malaysiaDayMessage(name),
       );
     return day;
   };
@@ -98,8 +78,8 @@ export function parseAnalyticsQuery(
     classId,
     from: query.from as string,
     to: query.to as string,
-    fromUtc: malaysiaMidnight(from as number),
-    toUtcExclusive: malaysiaMidnight((to as number) + DAY),
+    fromUtc: malaysiaDayStart(from as number),
+    toUtcExclusive: malaysiaDayEnd(to as number),
     atRiskBelow,
   };
 }

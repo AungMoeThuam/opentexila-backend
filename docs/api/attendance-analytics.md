@@ -1,6 +1,6 @@
 # Lecturer attendance analytics
 
-**Status: implemented.** `GET /api/v1/lecturer/attendance-analytics` — read-only, `lecturer` only. Feeds the frontend analytics dashboard (frontend issue #34). Terms are defined in [`GLOSSARY.md`](../../GLOSSARY.md); the Malaysia-time day rule is [ADR 0001](../adr/0001-analytics-days-use-malaysia-time.md).
+**Status: implemented.** `GET /api/v1/lecturer/attendance-analytics` — read-only, `lecturer` only. Feeds the frontend analytics dashboard (frontend issue #34). Terms are defined in [`GLOSSARY.md`](../../GLOSSARY.md); the Malaysia-time day rule is [ADR 0001](../adr/0001-date-filters-use-malaysia-time.md).
 
 > JSON property names here are **camelCase**, matching the frontend contract. This is a deliberate exception to the snake_case convention in [README.md](README.md).
 
@@ -8,8 +8,8 @@
 
 | Parameter     | Required | Rule                                                                                  |
 | ------------- | -------- | ------------------------------------------------------------------------------------- |
-| `from`        | yes      | `YYYY-MM-DD`, a real date. Inclusive.                                                 |
-| `to`          | yes      | `YYYY-MM-DD`, a real date, not before `from`. Inclusive (the whole day).              |
+| `from`        | yes      | `YYYY-MM-DD`, a real date in years 1000–9998. Inclusive.                                                 |
+| `to`          | yes      | `YYYY-MM-DD`, a real date in years 1000–9998, not before `from`. Inclusive (the whole day).              |
 | `atRiskBelow` | no       | Whole number 75–100. Default `75`.                                                    |
 | `classId`     | no       | Positive integer. Omitted: all of the signed-in Lecturer's Classes.                   |
 

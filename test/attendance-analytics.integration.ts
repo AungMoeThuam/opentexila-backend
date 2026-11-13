@@ -60,6 +60,16 @@ export async function attendanceAnalyticsIntegration(
         class_session_id: row.id,
         student_id: who.id,
         status,
+        // A present or late record must carry its evidence (ck_records_evidence):
+        // the check-in time and the distance. Pending and absent must not.
+        ...(status === 'present' || status === 'late'
+          ? {
+              checked_in_at: new Date(
+                +start + (status === 'present' ? 300_000 : 1_200_000),
+              ),
+              distance_m: '5.00',
+            }
+          : {}),
       });
     return row;
   }

@@ -10,6 +10,12 @@ import {
   isDuplicateKey,
   sessionExists,
 } from '../class-sessions/session-exists';
+import {
+  malaysiaDayEnd,
+  malaysiaDayMessage,
+  malaysiaDayStart,
+  parseMalaysiaDay,
+} from '../common/malaysia-day';
 import { DATABASE } from '../database/database.constants';
 import {
   findTimetableConflicts,
@@ -77,23 +83,6 @@ const SESSION_SQL = `
   JOIN courses co ON co.id = c.course_id
   JOIN users u ON u.id = c.lecturer_id
 `;
-
-function parseCalendarDate(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return null;
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-
-  if (
-    !Number.isFinite(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== value
-  ) {
-    return null;
-  }
-
-  return date;
-}
 
 function parseUtcTimestamp(value: string): Date | null {
   if (
@@ -193,19 +182,21 @@ export class TimetableService {
   ) {}
 
   async list(query: TimetableQueryDto) {
-    const from = parseCalendarDate(query.from);
-    const to = parseCalendarDate(query.to);
+    // from and to are Malaysia days (ADR 0001); "to" is inclusive.
+    const from = parseMalaysiaDay(query.from);
+    const to = parseMalaysiaDay(query.to);
 
-    if (!from || !to || from.getTime() > to.getTime()) {
-      throw validationError({
-        from: 'Provide a valid date range.',
-        to: 'The end date must not be before the start date.',
-      });
+    if (from === undefined || to === undefined || from > to) {
+      const fields: Record<string, string> = {};
+      if (from === undefined) fields.from = malaysiaDayMessage('from');
+      if (to === undefined) fields.to = malaysiaDayMessage('to');
+      else if (from !== undefined && from > to)
+        fields.to = 'The end date must not be before the start date.';
+      throw validationError(fields);
     }
 
-    // The "to" calendar date is inclusive.
-    const endExclusive = new Date(to);
-    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+    const start = malaysiaDayStart(from);
+    const endExclusive = malaysiaDayEnd(to);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 100;
@@ -230,7 +221,7 @@ export class TimetableService {
         WHERE ends_at > ?
           AND starts_at < ?
       `,
-      [mysqlUtc(from), mysqlUtc(endExclusive)],
+      [mysqlUtc(start), mysqlUtc(endExclusive)],
     );
 
     const total = Number(countRow?.total ?? 0);
@@ -243,7 +234,7 @@ export class TimetableService {
         ORDER BY s.starts_at ASC, s.id ASC
         LIMIT ? OFFSET ?
       `,
-      [mysqlUtc(from), mysqlUtc(endExclusive), limit, (page - 1) * limit],
+      [mysqlUtc(start), mysqlUtc(endExclusive), limit, (page - 1) * limit],
     );
 
     return {

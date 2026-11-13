@@ -59,7 +59,7 @@ issuer and audience, checks expiration, and reads current user/session state.
 Inactive accounts, revoked/expired sessions and stale session versions are
 rejected. Users required to change their password can access their auth profile,
 refresh and change-password endpoints; feature enforcement is applied explicitly
-with guards. No admin provisioning/reset endpoints are included yet.
+with guards. The admin account routes (`/admin/users*`) exist but currently return `503 AUTH_UNAVAILABLE` in JWT mode (their module does not import `AuthModule`); they only work in demo mode until that is fixed.
 
 The controller rate limiter allows 10 login attempts per minute per IP and per
 normalized email, 10 password-change attempts per IP, and 60 requests per IP per

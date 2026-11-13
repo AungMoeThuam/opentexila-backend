@@ -63,6 +63,8 @@ test('invalid filters return 422 with a message under each bad field', async (t)
     ['?from=2026-1-1&to=2026-10-31', ['from']],
     ['?from=2026-02-30&to=2026-10-31', ['from']],
     ['?from=2026-10-31&to=2026-10-01', ['from']],
+    ['?from=0999-12-31&to=2026-10-31', ['from']],
+    ['?from=2026-10-01&to=9999-12-31', ['to']],
     ['?from=2026-10-01&to=2026-10-31&atRiskBelow=74', ['atRiskBelow']],
     ['?from=2026-10-01&to=2026-10-31&atRiskBelow=101', ['atRiskBelow']],
     ['?from=2026-10-01&to=2026-10-31&atRiskBelow=80.5', ['atRiskBelow']],
@@ -79,6 +81,10 @@ test('invalid filters return 422 with a message under each bad field', async (t)
     const { error } = await response.json();
     assert.equal(error.code, 'VALIDATION_ERROR', query);
     assert.deepEqual(Object.keys(error.fields).sort(), fields.sort(), query);
+  }
+  for (const edge of ['1000-01-01', '9998-12-31']) {
+    const response = await get(`?from=${edge}&to=${edge}`);
+    assert.equal(response.status, 200, edge);
   }
   for (const ok of ['', '&atRiskBelow=75', '&atRiskBelow=100', '&classId=7']) {
     const response = await get(`?from=2026-10-01&to=2026-10-31${ok}`);

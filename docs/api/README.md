@@ -115,7 +115,7 @@ Use plural kebab-case nouns (`classes`, `class-sessions`, `attendance-records`),
   - `total` is the authorised, filtered count before pagination; `totalPages = ceil(total / limit)` (`0` when `total` is `0`).
   - Requesting a `page` beyond `totalPages` returns `data: []` with the real `total` and `totalPages`.
 - **Date range filters**:
-  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`. Exception: [lecturer attendance analytics](attendance-analytics.md) takes inclusive `YYYY-MM-DD` Malaysia-time days ([ADR 0001](../adr/0001-analytics-days-use-malaysia-time.md)).
+  - Where `from` and `to` query parameters are supported, they are ISO 8601 timestamps with explicit timezones and filter on `class_sessions.starts_at` using `from <= starts_at < to`. Reject invalid timestamps or `from >= to` with `422 VALIDATION_ERROR`. Exception: date-only filters (lecturer attendance analytics, and the admin timetable `GET /class-sessions`) take inclusive `YYYY-MM-DD` Malaysia days, years 1000–9998, and answer a date outside that range with `422 VALIDATION_ERROR` on that field ([ADR 0001](../adr/0001-date-filters-use-malaysia-time.md)). Analytics matches a session by its start; the timetable returns every session that overlaps the range.
 - **Security & privacy**:
   - Omit `password_hash`, `auth_sessions` payloads, refresh-token hashes, and raw student GPS coordinates (`latitude`, `longitude`, `accuracy_m`) from all responses and logs.
   - Never include SQL queries or stack traces in error responses.

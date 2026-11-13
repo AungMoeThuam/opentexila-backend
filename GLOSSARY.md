@@ -61,3 +61,7 @@ _Avoid_: cut-off, minimum
 **At-risk student**:
 A currently enrolled student whose Attendance rate in one Class is below the At-risk threshold. Judged per Class, so one student can be at risk in two Classes.
 _Avoid_: failing student, low attendance student
+
+**Malaysia day**:
+A calendar day in Malaysia time (UTC+8). Every date-only filter and grouping in the API means a Malaysia day, never a UTC day.
+_Avoid_: local day, UTC day

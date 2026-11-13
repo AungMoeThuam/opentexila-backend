@@ -1,6 +1,6 @@
 # Lecturer attendance analytics (backend)
 
-Frontend spec: https://github.com/AungMoeThuam/opentexila/issues/34 (shape, error table). This file records the decisions that sharpen or change it. Terms are in `GLOSSARY.md`; days in `docs/adr/0001-analytics-days-use-malaysia-time.md`.
+Frontend spec: https://github.com/AungMoeThuam/opentexila/issues/34 (shape, error table). This file records the decisions that sharpen or change it. Terms are in `GLOSSARY.md`; days in `docs/adr/0001-date-filters-use-malaysia-time.md`.
 
 ## Endpoint
 `GET /api/v1/lecturer/attendance-analytics`, read-only, lecturer only.

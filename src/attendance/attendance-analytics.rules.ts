@@ -1,11 +1,10 @@
 import { validationError, type ErrorFields } from '../common/api-exception';
 import {
-  MALAYSIA_OFFSET_HOURS,
+  malaysiaDayEnd,
+  malaysiaDayMessage,
   malaysiaDayStart,
   parseMalaysiaDay,
 } from '../common/malaysia-day';
-
-export { MALAYSIA_OFFSET_HOURS };
 
 export const DEFAULT_AT_RISK_BELOW = 75;
 const MAX_AT_RISK_BELOW = 100;
@@ -48,7 +47,7 @@ export function parseAnalyticsQuery(
         name,
         query[name] === undefined
           ? `${name} is required.`
-          : `${name} must be a date in YYYY-MM-DD format.`,
+          : malaysiaDayMessage(name),
       );
     return day;
   };
@@ -80,7 +79,7 @@ export function parseAnalyticsQuery(
     from: query.from as string,
     to: query.to as string,
     fromUtc: malaysiaDayStart(from as number),
-    toUtcExclusive: malaysiaDayStart(to as number, 1),
+    toUtcExclusive: malaysiaDayEnd(to as number),
     atRiskBelow,
   };
 }

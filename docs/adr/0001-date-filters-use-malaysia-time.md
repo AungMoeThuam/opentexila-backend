@@ -5,6 +5,6 @@ Date-only filters (`from`, `to`) and day groupings mean a Malaysia day, a fixed 
 Which sessions fall on a day differs by feature, on purpose:
 
 - **Attendance analytics** counts a Class session once, on the Malaysia day it starts.
-- **Timetable** is a calendar view, so it lists every Class session that overlaps the range. A session that starts at 23:59 appears on that day, and one that runs past midnight appears on both days.
+- **Timetable** is a calendar view, so it lists every Class session that overlaps the range (`ends_at` after the range start and `starts_at` before its end). A session that starts at 23:59 appears on that day, and one that runs past midnight appears on both days.
 
-Date-only parameters must be real dates in years 1000–9998 (the MySQL `DATETIME` range, leaving room for the one-day and eight-hour shifts); anything else is a 422 on that field.
+Date-only parameters must be real dates in years 1000–9998 (the MySQL `DATETIME` range, leaving room at the top for the one-day and eight-hour shifts; the shifted start of 1000-01-01 is clamped to the earliest `DATETIME`); anything else is a 422 on that field.

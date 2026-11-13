@@ -6,6 +6,10 @@ import {
   notFound,
   validationError,
 } from '../common/api-exception';
+import {
+  isDuplicateKey,
+  sessionExists,
+} from '../class-sessions/session-exists';
 import { DATABASE } from '../database/database.constants';
 import {
   findTimetableConflicts,
@@ -305,107 +309,126 @@ export class TimetableService {
     // protects this batch against competing timetable updates.
     // Cross-feature concurrency will also need integration tests
     // with the basic scheduling API from Backend Issue #19.
-    return this.database.transaction(
-      'SERIALIZABLE',
-      async (manager: EntityManager) => {
-        const now = Date.now();
+    try {
+      return await this.database.transaction(
+        'SERIALIZABLE',
+        async (manager: EntityManager) => {
+          const now = Date.now();
 
-        // Lock session rows in a consistent order.
-        // This is deliberately conservative for the first version.
-        await manager.query(
-          'SELECT id FROM class_sessions ORDER BY id FOR UPDATE',
-        );
+          // Lock session rows in a consistent order.
+          // This is deliberately conservative for the first version.
+          await manager.query(
+            'SELECT id FROM class_sessions ORDER BY id FOR UPDATE',
+          );
 
-        const rows = await manager.query<SessionRow[]>(
-          `${SESSION_SQL} ORDER BY s.id ASC`,
-        );
+          const rows = await manager.query<SessionRow[]>(
+            `${SESSION_SQL} ORDER BY s.id ASC`,
+          );
 
-        const byId = new Map(rows.map((row) => [Number(row.id), row]));
+          const byId = new Map(rows.map((row) => [Number(row.id), row]));
 
-        const proposed = new Map(
-          rows.map((row) => [Number(row.id), conflictSession(row)]),
-        );
+          const proposed = new Map(
+            rows.map((row) => [Number(row.id), conflictSession(row)]),
+          );
 
-        for (const change of requested) {
-          const original = byId.get(change.id);
+          for (const change of requested) {
+            const original = byId.get(change.id);
 
-          if (!original) {
-            throw notFound(`Class session ${change.id} was not found.`);
-          }
+            if (!original) {
+              throw notFound(`Class session ${change.id} was not found.`);
+            }
 
-          const originalStart = new Date(original.starts_at).getTime();
+            const originalStart = new Date(original.starts_at).getTime();
 
-          if (
-            original.state !== 'scheduled' ||
-            !Number.isFinite(originalStart) ||
-            originalStart <= now
-          ) {
-            throw sessionNotEditable();
-          }
+            if (
+              original.state !== 'scheduled' ||
+              !Number.isFinite(originalStart) ||
+              originalStart <= now
+            ) {
+              throw sessionNotEditable();
+            }
 
-          if (change.start.getTime() <= now) {
-            throw validationError({
-              starts_at: 'The new start time must be in the future.',
+            if (change.start.getTime() <= now) {
+              throw validationError({
+                starts_at: 'The new start time must be in the future.',
+              });
+            }
+
+            proposed.set(change.id, {
+              ...conflictSession(original),
+              starts_at: change.start,
+              ends_at: change.end,
             });
           }
 
-          proposed.set(change.id, {
-            ...conflictSession(original),
-            starts_at: change.start,
-            ends_at: change.end,
-          });
-        }
+          // Compare the final proposed timetable, not just
+          // changed sessions against each other.
+          const conflicts = findTimetableConflicts([...proposed.values()]);
 
-        // Compare the final proposed timetable, not just
-        // changed sessions against each other.
-        const conflicts = findTimetableConflicts([...proposed.values()]);
+          const changedIds = new Set(ids);
 
-        const changedIds = new Set(ids);
+          const relevantConflicts = conflicts.filter(
+            (conflict) =>
+              changedIds.has(conflict.session_id) ||
+              changedIds.has(conflict.with_session_id),
+          );
 
-        const relevantConflicts = conflicts.filter(
-          (conflict) =>
-            changedIds.has(conflict.session_id) ||
-            changedIds.has(conflict.with_session_id),
-        );
+          if (relevantConflicts.length > 0) {
+            throw scheduleConflict();
+          }
 
-        if (relevantConflicts.length > 0) {
-          throw scheduleConflict();
-        }
-
-        // No changes are persisted before all validation succeeds.
-        for (const change of requested) {
+          // No changes are persisted before all validation succeeds.
+          // A class cannot have two sessions with the same start, even for a
+          // moment, and MySQL checks that row by row. So a swap (or a longer
+          // cycle) would fail halfway. First park every changed row on its own
+          // start time in the year 1000, which no real session uses, then write
+          // the final times. All rows are locked, so nobody sees the parked rows.
+          const parkIds = requested.map((change) => change.id);
           await manager.query(
-            `
+            `UPDATE class_sessions
+           SET starts_at = DATE_ADD('1000-01-01 00:00:00.000', INTERVAL id SECOND)
+           WHERE id IN (${parkIds.map(() => '?').join(', ')})`,
+            parkIds,
+          );
+
+          for (const change of requested) {
+            await manager.query(
+              `
               UPDATE class_sessions
               SET starts_at = ?,
                   late_after = ?,
                   ends_at = ?
               WHERE id = ?
             `,
-            [
-              mysqlUtc(change.start),
-              mysqlUtc(change.late),
-              mysqlUtc(change.end),
-              change.id,
-            ],
-          );
-        }
+              [
+                mysqlUtc(change.start),
+                mysqlUtc(change.late),
+                mysqlUtc(change.end),
+                change.id,
+              ],
+            );
+          }
 
-        const placeholders = requested.map(() => '?').join(', ');
+          const placeholders = requested.map(() => '?').join(', ');
 
-        const updated = await manager.query<SessionRow[]>(
-          `
+          const updated = await manager.query<SessionRow[]>(
+            `
             ${SESSION_SQL}
             WHERE s.id IN (${placeholders})
             ORDER BY s.starts_at ASC, s.id ASC
           `,
-          ids,
-        );
+            ids,
+          );
 
-        return {
-          data: updated.map(toSessionDto),
-        };
-      },
-    );
+          return {
+            data: updated.map(toSessionDto),
+          };
+        },
+      );
+    } catch (error) {
+      // Moving onto the start time of a cancelled session of the same class.
+      if (isDuplicateKey(error)) throw sessionExists();
+      throw error;
+    }
   }
 }

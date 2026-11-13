@@ -66,13 +66,14 @@ Shared handler owned by the check-in workflow (`#10`) and extended with lecturer
         "term": "2026-S2",
         "lecturer": {
           "id": 2,
-          "name": "Lecturer Demo"
+          "name": "Lecturer One"
         },
         "room_label": "EN402"
       },
       "starts_at": "2026-10-29T01:00:00.000Z",
       "late_after": "2026-10-29T01:15:00.000Z",
       "ends_at": "2026-10-29T03:00:00.000Z",
+      "state": "scheduled",
       "availability": "in_progress",
       "my_attendance": {
         "class_session_id": 30,
@@ -130,7 +131,7 @@ Returns the detail of a single class session, including `check_in: { allowed, re
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     },
@@ -244,9 +245,7 @@ Example `422 Unprocessable Entity` (`LOCATION_INACCURATE`):
   "error": {
     "code": "LOCATION_INACCURATE",
     "message": "Your location is not accurate enough. Please retry.",
-    "fields": {
-      "accuracy_m": "Move to an area with a stronger location signal and retry."
-    }
+    "fields": {}
   }
 }
 ```
@@ -305,7 +304,7 @@ Returns the read-only attendance roster for a single class session ordered by `s
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     },
@@ -370,7 +369,7 @@ Returns the authenticated student's personal attendance history ordered by `clas
         "term": "2026-S2",
         "lecturer": {
           "id": 2,
-          "name": "Lecturer Demo"
+          "name": "Lecturer One"
         },
         "room_label": "EN402"
       },
@@ -430,7 +429,7 @@ Returns the classes a student can choose in the attendance-history class filter.
       "term": "2026-S2",
       "lecturer": {
         "id": 2,
-        "name": "Lecturer Demo"
+        "name": "Lecturer One"
       },
       "room_label": "EN402"
     }

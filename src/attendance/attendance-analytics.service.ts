@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
+import { MALAYSIA_OFFSET_HOURS } from '../common/malaysia-day';
 import { DATABASE } from '../database/database.constants';
 import { fail, type AttendanceCaller } from './attendance.rules';
 import {
-  MALAYSIA_OFFSET_HOURS,
   buildAnalytics,
   parseAnalyticsQuery,
   type AnalyticsQuery,

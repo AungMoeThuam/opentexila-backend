@@ -7,11 +7,22 @@ import { TimetableModule } from '../dist/timetable/timetable.module.js';
 // GET /class-sessions takes Malaysia days (ADR 0001) as YYYY-MM-DD.
 test('timetable date filter: Malaysia days, and 422 for dates out of range', async (t) => {
   const queries: [string, any[]][] = [];
+  // Sessions the fake table holds; the fake query applies the overlap rule
+  // (ends_at > from AND starts_at < to) to the bound parameters.
+  let table: any[] = [];
+  const mysql = (date: Date) =>
+    date.toISOString().slice(0, 23).replace('T', ' ');
+  const inRange = (params: any[]) =>
+    table.filter(
+      (row) =>
+        mysql(row.ends_at) > params[0] && mysql(row.starts_at) < params[1],
+    );
   const query = async (text: string, params: any[] = []) => {
     queries.push([text, params]);
     const head = text.replace(/\s+/g, ' ').trim();
-    if (head.startsWith('SELECT COUNT(*) AS total')) return [{ total: '0' }];
-    if (head.includes('LIMIT')) return [];
+    if (head.startsWith('SELECT COUNT(*) AS total'))
+      return [{ total: String(inRange(params).length) }];
+    if (head.includes('LIMIT')) return inRange(params);
     throw new Error(`Unexpected SQL: ${head}`);
   };
   const app = await startAttendanceApp(
@@ -75,7 +86,7 @@ test('timetable date filter: Malaysia days, and 422 for dates out of range', asy
         ],
         [
           'from=1000-01-01&to=9998-12-31',
-          '0999-12-31 16:00:00.000',
+          '1000-01-01 00:00:00.000',
           '9998-12-31 16:00:00.000',
         ],
       ]) {
@@ -93,17 +104,37 @@ test('timetable date filter: Malaysia days, and 422 for dates out of range', asy
     },
   );
 
-  await t.test(
-    'a session that starts at 23:59 Malaysia time is on that day',
-    async () => {
-      // 23:59 on the 20th is 15:59Z. The window for the 20th ends at 16:00Z, and
-      // the overlap rule is strict at the end, so the session is inside it.
-      queries.length = 0;
-      await get('from=2026-11-20&to=2026-11-20');
-      const list = queries.find(([text]) => text.includes('LIMIT'))!;
-      const end = new Date(`${list[1][1].replace(' ', 'T')}Z`).getTime();
-      assert.ok(Date.parse('2026-11-20T15:59:00Z') < end);
-      assert.ok(Date.parse('2026-11-20T16:00:00Z') >= end);
-    },
-  );
+  await t.test('sessions land on the Malaysia days they touch', async () => {
+    const session = (id: number, starts: string, ends: string) => ({
+      id,
+      class_id: 7,
+      lecturer_id: 2,
+      course_code: 'COS30043',
+      course_name: 'Interface Design',
+      section: 'A',
+      lecturer_name: 'Lecturer One',
+      room_label: 'EN402',
+      starts_at: new Date(starts),
+      late_after: new Date(starts),
+      ends_at: new Date(ends),
+      state: 'scheduled',
+    });
+    table = [
+      // 01:00 on 20 Nov Malaysia time: the issue's own example.
+      session(1, '2026-11-19T17:00:00.000Z', '2026-11-19T18:00:00.000Z'),
+      // 23:59 to 00:00: on the 20th only, since a session ending at midnight does not touch the next day.
+      session(2, '2026-11-20T15:59:00.000Z', '2026-11-20T16:00:00.000Z'),
+      // 00:00 on 21 Nov Malaysia time starts the next day.
+      session(3, '2026-11-20T16:00:00.000Z', '2026-11-20T17:00:00.000Z'),
+      // 23:30 on 20 Nov to 00:30 on 21 Nov: on both days.
+      session(4, '2026-11-20T15:30:00.000Z', '2026-11-20T16:30:00.000Z'),
+    ];
+    const ids = async (search: string) => {
+      const body = await (await get(search)).json();
+      return body.data.map((row: any) => row.id).sort();
+    };
+    assert.deepEqual(await ids('from=2026-11-20&to=2026-11-20'), [1, 2, 4]);
+    assert.deepEqual(await ids('from=2026-11-19&to=2026-11-19'), []);
+    assert.deepEqual(await ids('from=2026-11-21&to=2026-11-21'), [3, 4]);
+  });
 });

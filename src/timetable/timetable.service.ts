@@ -6,7 +6,12 @@ import {
   notFound,
   validationError,
 } from '../common/api-exception';
-import { malaysiaDayStart, parseMalaysiaDay } from '../common/malaysia-day';
+import {
+  malaysiaDayEnd,
+  malaysiaDayMessage,
+  malaysiaDayStart,
+  parseMalaysiaDay,
+} from '../common/malaysia-day';
 import { DATABASE } from '../database/database.constants';
 import {
   findTimetableConflicts,
@@ -178,22 +183,16 @@ export class TimetableService {
     const to = parseMalaysiaDay(query.to);
 
     if (from === undefined || to === undefined || from > to) {
-      throw validationError({
-        ...(from === undefined && {
-          from: 'Provide a valid date from 1000-01-01 to 9998-12-31.',
-        }),
-        ...(to === undefined && {
-          to: 'Provide a valid date from 1000-01-01 to 9998-12-31.',
-        }),
-        ...(from !== undefined &&
-          to !== undefined && {
-            to: 'The end date must not be before the start date.',
-          }),
-      });
+      const fields: Record<string, string> = {};
+      if (from === undefined) fields.from = malaysiaDayMessage('from');
+      if (to === undefined) fields.to = malaysiaDayMessage('to');
+      else if (from !== undefined && from > to)
+        fields.to = 'The end date must not be before the start date.';
+      throw validationError(fields);
     }
 
     const start = malaysiaDayStart(from);
-    const endExclusive = malaysiaDayStart(to, 1);
+    const endExclusive = malaysiaDayEnd(to);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 100;

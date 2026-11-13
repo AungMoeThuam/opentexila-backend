@@ -17,7 +17,7 @@ Files: `docker-compose.prod.yml`, `deploy/Caddyfile`, `.env.production.example`,
 
 ## Before you start
 
-1. A server with Docker and the Compose plugin. A small Linux server is enough (for example an AWS EC2 `t3.small`, 2 GB memory, 20 GB disk).
+1. A server with Docker and the Compose plugin. A small Linux server is enough (for example an AWS EC2 `t3.small` with 2 GB of memory, or a `t3.micro` with 1 GB plus swap, and a 20 GB disk).
 2. A domain name. Add an **A record** that points to the server's public IP address. On EC2, use an Elastic IP, so the address does not change.
 3. Open ports **80** and **443** to the internet (the security group on EC2). Port 80 is needed for the certificate check. Open port 22 only for your own IP.
 4. The `backend` and `frontend` repositories next to each other on the server, for example:
@@ -26,6 +26,18 @@ Files: `docker-compose.prod.yml`, `deploy/Caddyfile`, `.env.production.example`,
 ~/opentexila/backend
 ~/opentexila/frontend
 ```
+
+### Small server (1 GB of memory)
+
+Add swap first, or the image build can run out of memory. Use 4 GB on a `t3.micro`:
+
+```bash
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Build one image at a time: `docker compose --env-file .env.production -f docker-compose.prod.yml build api` and then `... build web`, before `up -d`.
 
 ## Steps
 

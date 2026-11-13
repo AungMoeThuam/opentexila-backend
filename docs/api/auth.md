@@ -119,7 +119,7 @@ Login is limited to 10 attempts/minute per IP and normalized email; password cha
 
 ## Admin account administration
 
-There is no public registration. Only an admin creates accounts, and the user must change the temporary password at first sign-in. Both endpoints use the same guard as the other admin features (`AttendanceGuard` with `@Roles('admin')`), so they also apply the JWT/demo-session checks, CSRF in demo mode, and `PASSWORD_CHANGE_REQUIRED`. Responses use `Cache-Control: no-store`. Passwords are never returned, logged or trimmed.
+There is no public registration. Only an admin creates accounts, and the user must change the temporary password at first sign-in. Both endpoints use the same guard as the other admin features (`AttendanceGuard` with `@Roles('admin')`), so they also apply the JWT/demo-session checks, CSRF in demo mode, and `PASSWORD_CHANGE_REQUIRED`. **Known issue:** in JWT mode these admin routes currently return `503 AUTH_UNAVAILABLE`, because their module does not import `AuthModule` (so `AttendanceGuard` has no `JwtAuthGuard`). They work in demo (`DEV_AUTH_ENABLED=true`) mode only until that is fixed. Responses use `Cache-Control: no-store`. Passwords are never returned, logged or trimmed.
 
 ### `GET /admin/users`
 

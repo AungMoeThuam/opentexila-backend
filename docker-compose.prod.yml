@@ -38,6 +38,10 @@ services:
       - --default-time-zone=+00:00
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
+      # Small-server settings (1 GB of memory): the demo has very little data.
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --max-connections=30
     volumes:
       - opentexila_prod_mysql:/var/lib/mysql
     healthcheck:

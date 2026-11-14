@@ -199,6 +199,9 @@ function classKey(classIndex: number): string {
 }
 
 export const LIVE_CLASS_KEY = `${LIVE_COURSE.code}-A`;
+// The live class has its own lecturer. Its session never ends, so any lecturer
+// who also teaches other classes would show a time conflict in the timetable.
+export const LIVE_LECTURER_NUMBER = LECTURER_COUNT + 1;
 export const LIVE_STUDENT_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 // A venue that every place on Earth is inside: half of the Earth's
 // circumference is about 20,015,000 m, measured from latitude 0, longitude 0.
@@ -302,6 +305,11 @@ export function buildProductionPlan(now: Date = new Date()): ProductionPlan {
       email: accountEmail('lecturer', n),
       role: 'lecturer',
     });
+  users.push({
+    name: `Lecturer ${titleCase(numberWord(LIVE_LECTURER_NUMBER))}`,
+    email: accountEmail('lecturer', LIVE_LECTURER_NUMBER),
+    role: 'lecturer',
+  });
   for (let n = 1; n <= STUDENT_COUNT; n += 1)
     users.push({
       name: `Student ${titleCase(numberWord(n))}`,
@@ -419,7 +427,7 @@ export function buildProductionPlan(now: Date = new Date()): ProductionPlan {
     courseCode: LIVE_COURSE.code,
     section: 'A',
     term: TERM_NOW,
-    lecturerEmail: accountEmail('lecturer', 1),
+    lecturerEmail: accountEmail('lecturer', LIVE_LECTURER_NUMBER),
     room_label: 'Anywhere (live demo)',
     latitude: '0.000000',
     longitude: '0.000000',
@@ -535,11 +543,43 @@ export function checkPlan(plan: ProductionPlan): {
   }
 
   // Per person: sessions the lecturer or the student sees.
-  const lecturers = plan.users.filter((u) => u.role === 'lecturer');
-  for (const lecturer of lecturers) {
+  const liveLecturer = accountEmail('lecturer', LIVE_LECTURER_NUMBER);
+  for (const lecturer of plan.users.filter((u) => u.role === 'lecturer')) {
     const mine = plan.classes.filter((c) => c.lecturerEmail === lecturer.email);
+    if (lecturer.email === liveLecturer) {
+      // Only the live class, so its long session clashes with nothing.
+      if (mine.length !== 1 || !live(mine[0].key))
+        problems.push(`${lecturer.email}: must teach only the live class`);
+      continue;
+    }
     const rows = mine.reduce((n, c) => n + sessionsOf(c.key).length, 0);
     inRange(`lecturer sessions (${lecturer.email})`, rows);
+  }
+
+  // No lecturer or room is in two places at once (the admin timetable warns
+  // about this and will not save while a clash exists).
+  const owner = new Map(plan.classes.map((c) => [c.key, c.lecturerEmail]));
+  const room = new Map(plan.classes.map((c) => [c.key, c.room_label]));
+  for (const [label, keyOf] of [
+    ['lecturer', owner],
+    ['room', room],
+  ] as const) {
+    const rows = plan.sessions
+      .filter((s) => s.state === 'scheduled')
+      .map((s) => ({
+        who: keyOf.get(s.classKey) as string,
+        from: +s.starts_at,
+        to: +s.ends_at,
+        key: s.classKey,
+      }))
+      .sort((a, b) => a.who.localeCompare(b.who) || a.from - b.from);
+    for (let i = 1; i < rows.length; i += 1)
+      if (rows[i].who === rows[i - 1].who && rows[i].from < rows[i - 1].to) {
+        problems.push(
+          `${label} clash: ${rows[i].who} in ${rows[i - 1].key} and ${rows[i].key}`,
+        );
+        break;
+      }
   }
   for (const student of plan.users.filter((u) => u.role === 'student')) {
     const mine = plan.classes.filter((c) =>

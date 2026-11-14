@@ -18,24 +18,25 @@ No account must change its password at first sign-in.
 | -------- | ------------------------------ | --------------------------------------------------------- |
 | Admin    | Admin                          | `admin@example.com`                                       |
 | Lecturer | Lecturer One to Lecturer Eight | `lecturer-one@example.com` … `lecturer-eight@example.com` |
+| Lecturer | Lecturer Nine (live demo only) | `lecturer-nine@example.com`                               |
 | Student  | Student One to Student Fifty   | `student-one@example.com` … `student-fifty@example.com`   |
 
 The number is spelled out in the email: `student-twenty-one@example.com`, `student-fifty@example.com`.
 
 ## What the data looks like
 
-| Data               | Amount                                                                     |
-| ------------------ | -------------------------------------------------------------------------- |
-| Admin              | 1                                                                          |
-| Lecturers          | 8 (each teaches 3 classes; Lecturer One also teaches the live demo class)  |
-| Students           | 50 (each is in 3 or 4 classes)                                             |
-| Classes            | 25: 24 normal classes and 1 live demo class                                |
-| Terms              | `2026-S2` (21 normal classes and the live class) and `2027-S1` (3 classes) |
-| Sessions           | 339: weekly sessions from 8 weeks ago to 4 weeks ahead                     |
-| Attendance records | about 2,500 (about 1,700 of them are for sessions that already ended)      |
-| Announcements      | 30                                                                         |
+| Data               | Amount                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Admin              | 1                                                                                                  |
+| Lecturers          | 9: Lecturers One to Eight teach 3 classes each, and Lecturer Nine teaches only the live demo class |
+| Students           | 50 (each is in 3 or 4 classes)                                                                     |
+| Classes            | 25: 24 normal classes and 1 live demo class                                                        |
+| Terms              | `2026-S2` (21 normal classes and the live class) and `2027-S1` (3 classes)                         |
+| Sessions           | 339: weekly sessions from 8 weeks ago to 4 weeks ahead                                             |
+| Attendance records | about 2,500 (about 1,700 of them are for sessions that already ended)                              |
+| Announcements      | 30                                                                                                 |
 
-Every list has 2 or 3 pages (20 rows per page): for example the admin classes list (25 rows), the admin user list (59 rows), a lecturer's attendance sessions, and a student's attendance history. The seed checks this before it writes anything.
+Every list has 2 or 3 pages (20 rows per page): for example the admin classes list (25 rows), the admin user list (60 rows), a lecturer's attendance sessions, and a student's attendance history. The seed checks this before it writes anything.
 
 Two classes meet twice a week, and three classes have about 28 students, so you can see long rosters and long session lists.
 
@@ -45,12 +46,12 @@ The normal classes use a real campus location. A person who is not on the campus
 
 - Its room is "Anywhere (live demo)". The check-in area is so large that every place on Earth is inside it. The student's browser must still allow location access.
 - It has one session that is open now and stays open for 75 days. A check-in before the late time is **Present**.
-- Students One to Ten are enrolled. Lecturer One teaches it.
+- Students One to Ten are enrolled. **Lecturer Nine** teaches it. The session never ends, so it has its own lecturer: with any other lecturer it would overlap that lecturer's classes, and the admin timetable would show time conflicts and refuse to save.
 
 Steps for the demo:
 
 1. Sign in as `student-one@example.com`, open **Today's classes** (or Scheduled classes) and open the DEMO101-A session. Select **Check in** and allow location.
-2. In another browser, sign in as `lecturer-one@example.com` and open the attendance records of DEMO101-A. The record changes from Pending to Present.
+2. In another browser, sign in as `lecturer-nine@example.com` and open the attendance records of DEMO101-A. The record changes from Pending to Present.
 3. To run the demo again, reset it (below).
 
 The page must use HTTPS, or location access is blocked by the browser.

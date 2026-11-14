@@ -74,13 +74,18 @@ test('the live demo session is open now and covers any place', () => {
   assert.ok(session && session.starts_at <= NOW && NOW < session.late_after);
   assert.ok(session.records.every((r) => r.status === 'pending'));
   assert.ok(live.studentEmails.includes('student-one@example.com'));
+  // Its session never ends, so the lecturer must teach nothing else.
+  assert.equal(live.lecturerEmail, 'lecturer-nine@example.com');
+  assert.equal(
+    plan.classes.filter((c) => c.lecturerEmail === live.lecturerEmail).length,
+    1,
+  );
 });
 
 test('a lecturer has no overlapping sessions', () => {
   const plan = buildProductionPlan(NOW);
   const owner = new Map(plan.classes.map((c) => [c.key, c.lecturerEmail]));
   const rows = plan.sessions
-    .filter((s) => s.classKey !== LIVE_CLASS_KEY)
     .map((s) => ({
       who: owner.get(s.classKey),
       a: +s.starts_at,
